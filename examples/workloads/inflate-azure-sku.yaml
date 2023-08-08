@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inflate
+spec:
+  selector:
+    matchLabels:
+      app: inflate
+  template:
+    metadata:
+      labels:
+        app: inflate
+    spec:
+      containers:
+      # TODO: switch to pause image from MCR?
+      - image: public.ecr.aws/eks-distro/kubernetes/pause:3.2
+        name: inflate
+        resources:
+          requests:
+            cpu: "1"
+            memory: 256M
+      nodeSelector:
+        karpenter.k8s.azure/sku-family: 'D'
+        karpenter.k8s.azure/sku-version: 'v4'

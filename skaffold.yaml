@@ -1,0 +1,70 @@
+apiVersion: skaffold/v3
+kind: Config
+build:
+  artifacts:
+    - image: controller
+      ko:
+        main: github.com/gpu-vmprovisioner/cmd/controller
+        dependencies:
+          paths:
+            - '**/*.go'
+manifests:
+  helm:
+    releases:
+      - name: karpenter
+        chartPath: charts/karpenter
+        skipBuildDependencies: true
+        namespace: karpenter
+        createNamespace: true
+        setValueTemplates:
+          controller.image.repository: "{{.IMAGE_REPO_controller}}"
+          controller.image.tag: "{{.IMAGE_TAG_controller}}"
+          controller.image.digest: "{{.IMAGE_DIGEST_controller}}"
+        overrides:
+          # these go into the global config map
+          settings:
+            azure:
+              clusterName: fei-test-karpenter
+              clusterEndpoint: https://fei-test-k-fei-test-ff05f5-82f61978.hcp.eastus.azmk8s.io:443
+              kubeletClientTLSBootstrapToken: "dr81a5.9lysmd3kmtkmrcp1" # TODO: get this from the cluster
+              # TODO: autogenerate
+              sshPublicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCgXZfYUXwZGNVOLecSUsJiFINNzJm6k9IrhKwbIwsxGljCj7kLFuWrA+Zec000+gZ3s9J+utNehgniNLE7rN+Inhd7fjTHxrsCWybe9yydJoq7o+qpPr2QNqxCY3rnCf06nDvtcO5+xJmzNphggjjjmi6ap92lWOTFKVN/cFvl53/ezANIP9CL0hEuCNQvU88geVt2KrRkAA/+6Eds1/rUMnwOSpQYt5tRDkXiDpgjF/X72CatvVoY4H8ePKOlDRm+Bbyq+SdpiaWJZ1Mnvl3gas+9Lm38uVHEZHMueI035I5b5EseKAeEv3WTzXuKRBfp3zp6pOhHMyQHdYAU/VbytvB09/8AE2tcRPk+Ad5d045nuxNGah6Q40Vgvqm/Dr9c917F2JnoH9EE203OyOL0LF+HbU1NCGJEP2jq7OhLRMbasIIWbWBsMbkVd70lXf6prkQTRm9VJhjU3SQChtI9BMt+TUC1PukasoZD3PuxXzIkdazHs7VDFw5/433j768= fguo@gf-laptop azureuser"
+              networkPlugin: "kubenet" # TODO: get this from the cluster
+              networkPolicy: ""
+          replicas: 1 # for better debugging experience
+          controller:
+            # The maximum amount of time with no new ending pods that if exceeded ends the current batching window. If pods arrive
+            # faster than this time, the batching window will be extended up to the maxDuration. If they arrive slower, the pods
+            # will be batched separately.
+            batchIdleDuration: 1s # 60s is a good value for large runs (500+ nodes)
+            # The maximum length of a batch window. The longer this is, the more pods we can consider for provisioning at one
+            # time which usually results in fewer but larger nodes.
+            batchMaxDuration: 10s # 60s is a good value for large runs (500+ nodes)
+            env:
+              - name: ARM_SUBSCRIPTION_ID
+                value: ff05f55d-22b5-44a7-b704-f9a8efd493ed
+              - name: LOCATION
+                value: eastus
+              - name: ARM_USE_MANAGED_IDENTITY_EXTENSION
+                value: "true"
+              - name: ARM_USER_ASSIGNED_IDENTITY_ID
+                value: "6d688af9-df9f-49f9-bb7a-b6479213e533"
+              - name: AZURE_NODE_RESOURCE_GROUP
+                value: MC_fei-test_fei-test-karpenter_eastus
+              # TODO: move to settins
+              - name: AZURE_SUBNET_ID # the id of subnet to create network interfaces on
+                value: /subscriptions/ff05f55d-22b5-44a7-b704-f9a8efd493ed/resourceGroups/MC_fei-test_fei-test-karpenter_eastus/providers/Microsoft.Network/virtualNetworks/aks-vnet-11439930/subnets/aks-subnet
+              - name: LEADER_ELECT # disable leader election for better debugging experience
+                value: "false"
+                # disable HTTP/2 to reduce ARM throttling on large-scale tests;
+                # with this in place write (and read) QPS can be increased too
+                #- name: GODEBUG
+                #  value: http2client=0
+            resources:
+              requests:
+                cpu: 200m
+              limits:
+                cpu: 500m
+            logLevel: debug
+deploy:
+  helm: {}

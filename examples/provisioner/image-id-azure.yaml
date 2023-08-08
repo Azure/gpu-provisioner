@@ -1,0 +1,60 @@
+# This example provisioner will provision general purpose instances
+apiVersion: karpenter.sh/v1alpha5
+kind: Provisioner
+metadata:
+  name: default
+spec:
+  # weight: 50
+
+  consolidation:
+    enabled: false
+  
+  # ttlSecondsAfterEmpty: 30
+  # ttlSecondsUntilExpired: 86400   # one day
+
+  limits:
+    resources:
+      cpu: 10
+
+  requirements:
+  # D series with premium storage
+  - key: karpenter.k8s.azure/sku-family
+    operator: In
+    values: [D]
+  - key: karpenter.k8s.azure/sku-storage-premium-capable
+    operator: In
+    values: ['true']
+
+  # exclude very large SKUs (32+ vCPU)
+  - key: karpenter.k8s.azure/sku-cpu
+    operator: Lt
+    values: ["33"]
+
+  # allow spot
+  #- key: kubernetes.sh/capacity-type
+  #  operator: In
+  #  values: [spot,regular]
+
+  # currently provisioning nodes with EnableAcceleratedNetworking:true, so need SKUs capable of that
+  - key: karpenter.k8s.azure/sku-networking-accelerated
+    operator: In
+    values: ['true']
+
+  # Have Azure Cloud Provider treat Karpenter-provisioned nodes as unmanaged
+  # labels:
+  #  kubernetes.azure.com/managed: 'false'
+
+  # startupTaints:
+  # # Normally set by kubelet if external CCM, affects node controller(s)
+  # - key: node.cloudprovider.kubernetes.io/uninitialized
+  #  effect: NoSchedule
+
+  providerRef:
+    name: default
+---
+apiVersion: karpenter.k8s.azure/v1alpha1
+kind: NodeTemplate
+metadata:
+  name: default
+spec:
+  imageID: /CommunityGalleries/akstestgallery-ab568100-7a05-4b31-9f7d-3aede6df4420/images/2204Gen2/versions/1.1686127203.20213
