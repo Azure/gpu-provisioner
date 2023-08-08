@@ -45,7 +45,37 @@ var (
 	// "ignoredErrorSKUs" holds the SKUs that cannot be parsed using the current method.
 	// These SKUs are be excluded from error logging.
 	ignoredErrorSKUs = map[string]struct{}{
-		"M416s_8_v2": {},
+		"M416s_8_v2":    {},
+		"DC16ads_cc_v5": {},
+		"DC16as_cc_v5":  {},
+		"DC32ads_cc_v5": {},
+		"DC32as_cc_v5":  {},
+		"DC48ads_cc_v5": {},
+		"DC48as_cc_v5":  {},
+		"DC4ads_cc_v5":  {},
+		"DC4as_cc_v5":   {},
+		"DC64ads_cc_v5": {},
+		"DC64as_cc_v5":  {},
+		"DC8ads_cc_v5":  {},
+		"DC8as_cc_v5":   {},
+		"DC96ads_cc_v5": {},
+		"DC96as_cc_v5":  {},
+		"EC16ads_cc_v5": {},
+		"EC16as_cc_v5":  {},
+		"EC20ads_cc_v5": {},
+		"EC20as_cc_v5":  {},
+		"EC32ads_cc_v5": {},
+		"EC32as_cc_v5":  {},
+		"EC48ads_cc_v5": {},
+		"EC48as_cc_v5":  {},
+		"EC4ads_cc_v5":  {},
+		"EC4as_cc_v5":   {},
+		"EC64ads_cc_v5": {},
+		"EC64as_cc_v5":  {},
+		"EC8ads_cc_v5":  {},
+		"EC8as_cc_v5":   {},
+		"EC96ads_cc_v5": {},
+		"EC96as_cc_v5":  {},
 	}
 )
 
