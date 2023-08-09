@@ -17,9 +17,9 @@ package main
 import (
 	"github.com/samber/lo"
 
-	"github.com/Azure/karpenter/pkg/cloudprovider"
-	"github.com/Azure/karpenter/pkg/operator"
-	"github.com/Azure/karpenter/pkg/webhooks"
+	"github.com/gpu-vmprovisioner/pkg/cloudprovider"
+	"github.com/gpu-vmprovisioner/pkg/operator"
+	"github.com/gpu-vmprovisioner/pkg/webhooks"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider/metrics"
 	corecontrollers "github.com/aws/karpenter-core/pkg/controllers"

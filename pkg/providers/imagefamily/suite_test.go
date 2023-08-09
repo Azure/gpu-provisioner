@@ -22,8 +22,8 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
-	"github.com/Azure/karpenter/pkg/providers/imagefamily"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/samber/lo"
 )

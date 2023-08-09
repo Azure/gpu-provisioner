@@ -32,7 +32,7 @@ import (
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	"github.com/aws/karpenter-core/pkg/utils/resources"
 )
@@ -156,6 +156,7 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 	if err != nil {
 		if _, ok := ignoredErrorSKUs[*sku.Size]; !ok {
 			//TODO: uncomment after improving parsing
+			logging.FromContext(ctx).Errorf("ignoredErrorSKUs %v", ignoredErrorSKUs)
 			logging.FromContext(ctx).Errorf("parsing VM size %s, %v", *sku.Size, err)
 		}
 		return requirements

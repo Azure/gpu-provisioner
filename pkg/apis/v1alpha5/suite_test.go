@@ -25,8 +25,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	. "knative.dev/pkg/logging/testing"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
-	apisv1alpha5 "github.com/Azure/karpenter/pkg/apis/v1alpha5"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	apisv1alpha5 "github.com/gpu-vmprovisioner/pkg/apis/v1alpha5"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/scheduling"

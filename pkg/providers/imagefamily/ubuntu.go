@@ -17,8 +17,8 @@ package imagefamily
 import (
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/Azure/karpenter/pkg/providers/imagefamily/bootstrap"
-	"github.com/Azure/karpenter/pkg/providers/launchtemplate/parameters"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily/bootstrap"
+	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate/parameters"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 )

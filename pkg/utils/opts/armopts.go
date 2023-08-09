@@ -20,7 +20,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/karpenter/pkg/auth"
+	"github.com/gpu-vmprovisioner/pkg/auth"
 )
 
 func DefaultArmOpts() *arm.ClientOptions {

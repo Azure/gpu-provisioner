@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Azure/karpenter/pkg/providers/pricing/client"
+	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
 	"github.com/aws/karpenter-core/pkg/utils/pretty"
 	"github.com/samber/lo"
 	"knative.dev/pkg/logging"

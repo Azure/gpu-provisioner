@@ -26,17 +26,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/logging"
 
-	"github.com/Azure/karpenter/pkg/cache"
-	"github.com/Azure/karpenter/pkg/providers/instancetype"
-	"github.com/Azure/karpenter/pkg/providers/launchtemplate"
-	"github.com/Azure/karpenter/pkg/utils"
+	"github.com/gpu-vmprovisioner/pkg/cache"
+	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
+	"github.com/gpu-vmprovisioner/pkg/utils"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	corecloudprovider "github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 
-	"github.com/Azure/karpenter/pkg/apis/settings"
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis/settings"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"

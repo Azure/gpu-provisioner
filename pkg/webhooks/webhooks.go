@@ -25,8 +25,8 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/defaulting"
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
-	"github.com/Azure/karpenter/pkg/apis/v1alpha5"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha5"
 
 	corev1alpha5 "github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 )

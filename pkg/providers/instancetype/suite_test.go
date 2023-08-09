@@ -36,11 +36,11 @@ import (
 	coretest "github.com/aws/karpenter-core/pkg/test"
 	. "github.com/aws/karpenter-core/pkg/test/expectations"
 
-	"github.com/Azure/karpenter/pkg/apis"
-	"github.com/Azure/karpenter/pkg/apis/settings"
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
-	"github.com/Azure/karpenter/pkg/cloudprovider"
-	"github.com/Azure/karpenter/pkg/test"
+	"github.com/gpu-vmprovisioner/pkg/apis"
+	"github.com/gpu-vmprovisioner/pkg/apis/settings"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/cloudprovider"
+	"github.com/gpu-vmprovisioner/pkg/test"
 )
 
 var ctx context.Context

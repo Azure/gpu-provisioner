@@ -26,14 +26,14 @@ import (
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/ptr"
 
-	"github.com/Azure/karpenter/pkg/apis/settings"
-	"github.com/Azure/karpenter/pkg/auth"
-	azurecache "github.com/Azure/karpenter/pkg/cache"
-	"github.com/Azure/karpenter/pkg/providers/imagefamily"
-	"github.com/Azure/karpenter/pkg/providers/instance"
-	"github.com/Azure/karpenter/pkg/providers/instancetype"
-	"github.com/Azure/karpenter/pkg/providers/launchtemplate"
-	"github.com/Azure/karpenter/pkg/providers/pricing"
+	"github.com/gpu-vmprovisioner/pkg/apis/settings"
+	"github.com/gpu-vmprovisioner/pkg/auth"
+	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
+	"github.com/gpu-vmprovisioner/pkg/providers/instance"
+	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
+	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
 	"github.com/aws/karpenter-core/pkg/operator"
 )
 

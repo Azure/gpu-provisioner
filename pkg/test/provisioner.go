@@ -19,7 +19,7 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha5"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha5"
 	corev1alpha5 "github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/test"
 )

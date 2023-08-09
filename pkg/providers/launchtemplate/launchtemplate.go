@@ -19,13 +19,13 @@ import (
 	"strings"
 
 	"github.com/Azure/go-autorest/autorest/to"
-	"github.com/Azure/karpenter/pkg/providers/imagefamily"
-	"github.com/Azure/karpenter/pkg/providers/launchtemplate/parameters"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
+	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate/parameters"
 
 	"github.com/samber/lo"
 
-	"github.com/Azure/karpenter/pkg/apis/settings"
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis/settings"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 

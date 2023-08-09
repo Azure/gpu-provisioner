@@ -17,13 +17,13 @@ package test
 import (
 	"context"
 
-	azurecache "github.com/Azure/karpenter/pkg/cache"
-	"github.com/Azure/karpenter/pkg/fake"
-	"github.com/Azure/karpenter/pkg/providers/imagefamily"
-	"github.com/Azure/karpenter/pkg/providers/instance"
-	"github.com/Azure/karpenter/pkg/providers/instancetype"
-	"github.com/Azure/karpenter/pkg/providers/launchtemplate"
-	"github.com/Azure/karpenter/pkg/providers/pricing"
+	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
+	"github.com/gpu-vmprovisioner/pkg/fake"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
+	"github.com/gpu-vmprovisioner/pkg/providers/instance"
+	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
+	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
 	"github.com/patrickmn/go-cache"
 	"knative.dev/pkg/ptr"
 

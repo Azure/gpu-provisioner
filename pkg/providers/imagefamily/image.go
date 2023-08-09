@@ -18,7 +18,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/utils/pretty"
 	"github.com/patrickmn/go-cache"

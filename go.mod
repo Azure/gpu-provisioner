@@ -13,12 +13,9 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.29
 	github.com/Azure/go-autorest/autorest/adal v0.9.23
 	github.com/Azure/go-autorest/autorest/to v0.4.0
-	github.com/Azure/karpenter v0.0.0-00010101000000-000000000000
 	github.com/Azure/skewer v0.0.16
 	github.com/Masterminds/semver v1.5.0
 	github.com/Pallinder/go-randomdata v1.2.0
-	github.com/aws/aws-sdk-go v1.44.294
-	github.com/aws/karpenter v0.29.1-0.20230713202104-1f01374972d1
 	github.com/aws/karpenter-core v0.29.2
 	github.com/go-playground/validator/v10 v10.13.0
 	github.com/imdario/mergo v0.3.16
@@ -39,8 +36,6 @@ require (
 	sigs.k8s.io/cloud-provider-azure v1.25.4
 	sigs.k8s.io/controller-runtime v0.13.1
 )
-
-replace github.com/Azure/karpenter => ./
 
 require (
 	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20200907061046-05415f1de66d // indirect
@@ -88,7 +83,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
@@ -100,7 +94,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

@@ -15,7 +15,7 @@ limitations under the License.
 package parameters
 
 import (
-	"github.com/Azure/karpenter/pkg/providers/imagefamily/bootstrap"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily/bootstrap"
 )
 
 // StaticParameters define the static launch template parameters

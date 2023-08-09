@@ -20,9 +20,9 @@ import (
 	core "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
-	"github.com/Azure/karpenter/pkg/providers/imagefamily/bootstrap"
-	template "github.com/Azure/karpenter/pkg/providers/launchtemplate/parameters"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily/bootstrap"
+	template "github.com/gpu-vmprovisioner/pkg/providers/launchtemplate/parameters"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 )

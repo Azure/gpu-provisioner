@@ -23,7 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	. "knative.dev/pkg/logging/testing"
 
-	"github.com/Azure/karpenter/pkg/apis/settings"
+	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 )
 
 var ctx context.Context

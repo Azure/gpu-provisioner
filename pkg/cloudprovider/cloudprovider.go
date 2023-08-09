@@ -33,13 +33,13 @@ import (
 	// nolint SA1019 - deprecated package
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 
-	"github.com/Azure/karpenter/pkg/apis"
-	"github.com/Azure/karpenter/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/apis"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
-	"github.com/Azure/karpenter/pkg/providers/imagefamily"
-	"github.com/Azure/karpenter/pkg/providers/instance"
-	"github.com/Azure/karpenter/pkg/providers/instancetype"
-	"github.com/Azure/karpenter/pkg/utils"
+	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
+	"github.com/gpu-vmprovisioner/pkg/providers/instance"
+	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 
 	coreapis "github.com/aws/karpenter-core/pkg/apis"

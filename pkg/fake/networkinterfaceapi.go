@@ -22,7 +22,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/Azure/go-autorest/autorest/to"
-	"github.com/Azure/karpenter/pkg/providers/instance"
+	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 )
 
 type NetworkInterfaceCreateOrUpdateInput struct {
