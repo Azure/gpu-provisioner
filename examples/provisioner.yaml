@@ -6,24 +6,21 @@ metadata:
 spec:
   # weight: 50
 
-  # consolidation:
-  #  enabled: true
-
-  ttlSecondsAfterEmpty: 3600
+  consolidation:
+    enabled: false
+  
+  # ttlSecondsAfterEmpty: 30
   # ttlSecondsUntilExpired: 86400   # one day
 
   limits:
     resources:
-      cpu: 1000 # for 500 Vms
+      cpu: 10
 
   requirements:
   # D series with premium storage
   - key: karpenter.k8s.azure/sku-family
     operator: In
     values: [D]
-  - key: karpenter.k8s.azure/sku-version
-    operator: In
-    values: ['v2','v3']
   - key: karpenter.k8s.azure/sku-storage-premium-capable
     operator: In
     values: ['true']
@@ -31,23 +28,17 @@ spec:
   # exclude very large SKUs (32+ vCPU)
   - key: karpenter.k8s.azure/sku-cpu
     operator: Lt
-    values: ["3"]
+    values: ["33"]
 
   # allow spot
-  - key: kubernetes.sh/capacity-type
-    operator: In
-    values: [spot,regular]
+  #- key: kubernetes.sh/capacity-type
+  #  operator: In
+  #  values: [spot,regular]
 
-   # currently provisioning nodes with EnableAcceleratedNetworking:true, so need SKUs capable of that
+  # currently provisioning nodes with EnableAcceleratedNetworking:true, so need SKUs capable of that
   - key: karpenter.k8s.azure/sku-networking-accelerated
     operator: In
     values: ['true']
 
   providerRef:
     name: default
----
-apiVersion: karpenter.k8s.azure/v1alpha1
-kind: NodeTemplate
-metadata:
-  name: default
-spec: {}

@@ -1,0 +1,6 @@
+---
+apiVersion: karpenter.k8s.azure/v1alpha1
+kind: NodeTemplate
+metadata:
+  name: default
+spec:
