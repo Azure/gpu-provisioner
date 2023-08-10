@@ -33,8 +33,8 @@ import (
 
 func NewWebhooks() []knativeinjection.ControllerConstructor {
 	return []knativeinjection.ControllerConstructor{
-		NewCRDDefaultingWebhook,
-		NewCRDValidationWebhook,
+		//		NewCRDDefaultingWebhook,
+		//		NewCRDValidationWebhook,
 	}
 }
 

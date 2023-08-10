@@ -22,7 +22,6 @@ import (
 	"knative.dev/pkg/controller"
 	knativeinjection "knative.dev/pkg/injection"
 	"knative.dev/pkg/logging"
-	"knative.dev/pkg/webhook/certificates"
 	"knative.dev/pkg/webhook/configmaps"
 	"knative.dev/pkg/webhook/resourcesemantics"
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
@@ -32,8 +31,8 @@ import (
 
 func NewWebhooks() []knativeinjection.ControllerConstructor {
 	return []knativeinjection.ControllerConstructor{
-		certificates.NewController,
-		NewCRDValidationWebhook,
+		//		certificates.NewController,
+		//		NewCRDValidationWebhook,
 		NewConfigValidationWebhook,
 	}
 }
