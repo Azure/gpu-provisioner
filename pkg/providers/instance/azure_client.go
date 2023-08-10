@@ -23,12 +23,17 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/gpu-vmprovisioner/pkg/auth"
 	armopts "github.com/gpu-vmprovisioner/pkg/utils/opts"
 	klog "k8s.io/klog/v2"
 )
+
+type AgentPoolsAPI interface {
+	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, parameters armcontainerservice.AgentPool, options *armcontainerservice.AgentPoolsClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error)
+}
 
 type VirtualMachinesAPI interface {
 	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, vmName string, parameters armcompute.VirtualMachine, options *armcompute.VirtualMachinesClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcompute.VirtualMachinesClientCreateOrUpdateResponse], error)
@@ -45,6 +50,7 @@ type NetworkInterfacesAPI interface {
 }
 
 type AZClient struct {
+	agentPoolsClient               AgentPoolsAPI
 	virtualMachinesClient          VirtualMachinesAPI
 	virtualMachinesExtensionClient VirtualMachineExtensionsAPI
 	networkInterfacesClient        NetworkInterfacesAPI
@@ -53,12 +59,14 @@ type AZClient struct {
 }
 
 func NewAZClientFromAPI(
+	agentPoolsClient AgentPoolsAPI,
 	virtualMachinesClient VirtualMachinesAPI,
 	virtualMachinesExtensionClient VirtualMachineExtensionsAPI,
 	interfacesClient NetworkInterfacesAPI,
 	skuClient skewer.ResourceClient,
 ) *AZClient {
 	return &AZClient{
+		agentPoolsClient:               agentPoolsClient,
 		virtualMachinesClient:          virtualMachinesClient,
 		virtualMachinesExtensionClient: virtualMachinesExtensionClient,
 		networkInterfacesClient:        interfacesClient,
@@ -99,6 +107,13 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	}
 
 	opts := armopts.DefaultArmOpts()
+
+	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
+	if err != nil {
+		return nil, err
+	}
+	klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
+
 	extClient, err := armcompute.NewVirtualMachineExtensionsClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
 		return nil, err
@@ -121,6 +136,7 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
 
 	return &AZClient{
+		agentPoolsClient:               agentPoolClient,
 		networkInterfacesClient:        interfacesClient,
 		virtualMachinesClient:          virtualMachinesClient,
 		virtualMachinesExtensionClient: extClient,

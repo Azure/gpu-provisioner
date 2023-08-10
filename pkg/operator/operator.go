@@ -26,6 +26,7 @@ import (
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/ptr"
 
+	"github.com/aws/karpenter-core/pkg/operator"
 	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/auth"
 	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
@@ -34,7 +35,6 @@ import (
 	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
 	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
 	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
-	"github.com/aws/karpenter-core/pkg/operator"
 )
 
 // Operator is injected into the AWS CloudProvider's factories
@@ -80,8 +80,9 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		azConfig.TenantID,
 		azConfig.SubscriptionID,
 		azConfig.UserAssignedIdentityID,
-		azConfig.NodeResourceGroup,
+		azConfig.ResourceGroup,
 		azConfig.Location,
+		azConfig.ClusterName,
 	)
 	instanceTypeProvider := instancetype.NewProvider(
 		azConfig.Location,
@@ -97,8 +98,9 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		launchTemplateProvider,
 		unavailableOfferingsCache,
 		azConfig.Location,
-		azConfig.NodeResourceGroup,
+		azConfig.ResourceGroup,
 		azConfig.SubnetID,
+		azConfig.ClusterName,
 	)
 
 	return ctx, &Operator{

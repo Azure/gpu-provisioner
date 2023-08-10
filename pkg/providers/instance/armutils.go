@@ -19,9 +19,21 @@ import (
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 )
 
+func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string, ap armcontainerservice.AgentPool) (*armcontainerservice.AgentPool, error) {
+	poller, err := client.BeginCreateOrUpdate(ctx, rg, clusterName, apName, ap, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := poller.PollUntilDone(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &res.AgentPool, nil
+}
 func createVirtualMachine(ctx context.Context, client VirtualMachinesAPI, rg, vmName string, vm armcompute.VirtualMachine) (*armcompute.VirtualMachine, error) {
 	poller, err := client.BeginCreateOrUpdate(ctx, rg, vmName, vm, nil)
 	if err != nil {

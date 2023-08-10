@@ -10,12 +10,12 @@ ifeq ($(CODESPACES),true)
   AZURE_RESOURCE_GROUP=$(CODESPACE_NAME)
   AZURE_ACR_NAME=$(subst -,,$(CODESPACE_NAME))
 else
-  AZURE_RESOURCE_GROUP=fei-test
-  AZURE_ACR_NAME=karpenter
+  AZURE_RESOURCE_GROUP=heba-gpu-test
+  AZURE_ACR_NAME=gpuaptest
 endif
 
-AZURE_CLUSTER_NAME=fei-test-karpenter
-AZURE_RESOURCE_GROUP_MC=MC_fei-test_fei-test-karpenter_eastus
+AZURE_CLUSTER_NAME=heba-gpu-ap
+AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
 az-all:      az-login az-mkaks      az-perm az-patch-skaffold-kubenet az-build az-run az-run-sample ## Provision the infra (ACR,AKS); build and deploy Karpenter; deploy sample Provisioner and workload
 az-all-savm: az-login az-mkaks-savm az-perm az-patch-skaffold-azure   az-build az-run az-run-sample ## Provision the infra (ACR,AKS); build and deploy Karpenter; deploy sample Provisioner and workload - StandaloneVirtualMachines
@@ -30,17 +30,17 @@ az-mkrg: ## Create resource group
 az-mkacr: az-mkrg ## Create test ACR
 	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Basic --admin-enabled -o none
 	az acr login  --name $(AZURE_ACR_NAME)
-	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/karpenter
+	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
 az-mkaks: az-mkacr ## Create test AKS cluster (with --vm-set-type AvailabilitySet for compatibility with standalone VMs)
 	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
-		--enable-managed-identity --node-count 1 --generate-ssh-keys --vm-set-type AvailabilitySet -o none
+		--enable-managed-identity --node-count 1 --generate-ssh-keys --vm-set-type VirtualMachineScaleSets -o none
 	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
 
 az-mkaks-savm: az-mkrg ## Create experimental cluster with standalone VMs (+ ACR)
 	az deployment group create --resource-group $(AZURE_RESOURCE_GROUP) --template-file hack/azure/aks-savm.bicep --parameters aksname=$(AZURE_CLUSTER_NAME) acrname=$(AZURE_ACR_NAME)
 	az aks get-credentials     --resource-group $(AZURE_RESOURCE_GROUP) --name $(AZURE_CLUSTER_NAME)
-	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/karpenter
+	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
 
 az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
@@ -59,7 +59,9 @@ az-patch-skaffold: 	## Update Azure client env vars and settings in skaffold con
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="ARM_SUBSCRIPTION_ID"))           .value = "$(AZURE_SUBSCRIPTION_ID)"'   skaffold.yaml
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="LOCATION"))                      .value = "$(AZURE_LOCATION)"'          skaffold.yaml
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="ARM_USER_ASSIGNED_IDENTITY_ID")) .value = "$(AZURE_CLIENT_ID)"'         skaffold.yaml
+	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="ARM_RESOURCE_GROUP"))            .value = "$(AZURE_RESOURCE_GROUP)"'    skaffold.yaml
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="AZURE_NODE_RESOURCE_GROUP"))     .value = "$(AZURE_RESOURCE_GROUP_MC)"' skaffold.yaml
+	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="AZURE_CLUSTER_NAME"))            .value = "$(AZURE_CLUSTER_NAME)"'      skaffold.yaml
 	yq -i  '.manifests.helm.releases[0].overrides.settings.azure.clusterName =                                                "$(AZURE_CLUSTER_NAME)"'      skaffold.yaml
 	yq -i  '.manifests.helm.releases[0].overrides.settings.azure.clusterEndpoint =                                            "$(CLUSTER_ENDPOINT)"'        skaffold.yaml
 	yq -i  '.manifests.helm.releases[0].overrides.settings.azure.networkPlugin =                                              "azure"'                      skaffold.yaml
@@ -84,7 +86,8 @@ az-rmvmss-vms: ## Delete all VMs in VMSS Flex (use with care!)
 
 az-perm: ## Create role assignments to let Karpenter manage VMs and Network
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP_MC) --role "Virtual Machine Contributor" 
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP_MC) --role "Virtual Machine Contributor"
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP)    --role "Virtual Machine Contributor"
 	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP_MC) --role "Network Contributor"
 	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP)    --role "Network Contributor" # in some case we create vnet here
 	@echo Consider "make az-patch-skaffold"!

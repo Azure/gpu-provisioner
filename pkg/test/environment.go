@@ -58,6 +58,7 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 	testSettings := Settings()
 
 	// API
+	agentPoolsAPI := &fake.AgentPoolsAPI{}
 	virtualMachinesAPI := &fake.VirtualMachinesAPI{}
 	virtualMachinesExtensionsAPI := &fake.VirtualMachineExtensionsAPI{}
 	networkInterfacesAPI := &fake.NetworkInterfacesAPI{}
@@ -84,8 +85,10 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 		"test-userAssignedIdentity",
 		"test-resourceGroup",
 		"test-location",
+		"aks-test",
 	)
 	azClient := instance.NewAZClientFromAPI(
+		agentPoolsAPI,
 		virtualMachinesAPI,
 		virtualMachinesExtensionsAPI,
 		networkInterfacesAPI,

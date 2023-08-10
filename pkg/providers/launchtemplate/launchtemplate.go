@@ -51,12 +51,13 @@ type Provider struct {
 	userAssignedIdentityID string
 	resourceGroup          string
 	location               string
+	clusterName            string
 }
 
 // TODO: add caching of launch templates
 
 func NewProvider(_ context.Context, imageFamily *imagefamily.Resolver, caBundle *string, clusterEndpoint string,
-	tenantID, subscriptionID, userAssignedIdentityID, resourceGroup, location string,
+	tenantID, subscriptionID, userAssignedIdentityID, resourceGroup, location, clusterName string,
 ) *Provider {
 	l := &Provider{
 		imageFamily:            imageFamily,
@@ -67,6 +68,7 @@ func NewProvider(_ context.Context, imageFamily *imagefamily.Resolver, caBundle 
 		userAssignedIdentityID: userAssignedIdentityID,
 		resourceGroup:          resourceGroup,
 		location:               location,
+		clusterName:            clusterName,
 	}
 	return l
 }
