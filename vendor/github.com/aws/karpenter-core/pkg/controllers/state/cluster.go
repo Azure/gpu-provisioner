@@ -41,6 +41,8 @@ import (
 	"github.com/aws/karpenter-core/pkg/scheduling"
 	podutils "github.com/aws/karpenter-core/pkg/utils/pod"
 	"github.com/aws/karpenter-core/pkg/utils/sets"
+
+	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
 )
 
 // Cluster maintains cluster state that is often needed but expensive to compute.
@@ -74,7 +76,7 @@ func NewCluster(clk clock.Clock, client client.Client, cp cloudprovider.CloudPro
 	}
 }
 
-// Synced validates that the Machines and the Nodes that are stored in the apiserver
+// Synced validates that the Machines and the Nodes that ar/e stored in the apiserver
 // have the same representation in the cluster state. This is to ensure that our view
 // of the cluster is as close to correct as it can be when we begin to perform operations
 // utilizing the cluster state as our source of truth
@@ -431,10 +433,11 @@ func (c *Cluster) populateStartupTaints(ctx context.Context, n *StateNode) error
 	if !n.Owned() {
 		return nil
 	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
+	//	}
+	provisioner := staticprovisioner.Sp
 	n.startupTaints = provisioner.Spec.StartupTaints
 	return nil
 }
@@ -443,10 +446,11 @@ func (c *Cluster) populateInflight(ctx context.Context, n *StateNode) error {
 	if !n.Owned() {
 		return nil
 	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
+	//	}
+	provisioner := staticprovisioner.Sp
 	instanceTypes, err := c.cloudProvider.GetInstanceTypes(ctx, provisioner)
 	if err != nil {
 		return err
