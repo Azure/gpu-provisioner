@@ -19,13 +19,11 @@ import (
 
 	"github.com/gpu-vmprovisioner/pkg/cloudprovider"
 	"github.com/gpu-vmprovisioner/pkg/operator"
-	"github.com/gpu-vmprovisioner/pkg/webhooks"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider/metrics"
 	corecontrollers "github.com/aws/karpenter-core/pkg/controllers"
 	"github.com/aws/karpenter-core/pkg/controllers/state"
 	coreoperator "github.com/aws/karpenter-core/pkg/operator"
-	corewebhooks "github.com/aws/karpenter-core/pkg/webhooks"
 )
 
 func main() {
@@ -50,7 +48,7 @@ func main() {
 			op.EventRecorder,
 			cloudProvider,
 		)...).
-		WithWebhooks(ctx, corewebhooks.NewWebhooks()...).
+		//	WithWebhooks(ctx, corewebhooks.NewWebhooks()...).
 		/*
 			WithControllers(ctx, controllers.NewControllers(
 				ctx,
@@ -61,6 +59,6 @@ func main() {
 				op.PricingProvider,
 			)...).
 		*/
-		WithWebhooks(ctx, webhooks.NewWebhooks()...).
+		//	WithWebhooks(ctx, webhooks.NewWebhooks()...).
 		Start(ctx)
 }
