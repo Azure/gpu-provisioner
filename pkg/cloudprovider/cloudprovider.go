@@ -21,10 +21,8 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/types"
 	"knative.dev/pkg/logging"
@@ -49,6 +47,8 @@ import (
 	"github.com/aws/karpenter-core/pkg/utils/functional"
 	"github.com/aws/karpenter-core/pkg/utils/resources"
 	"sigs.k8s.io/cloud-provider-azure/pkg/provider"
+
+	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
 )
 
 func init() {
@@ -168,10 +168,11 @@ func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) e
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {
 	// Not needed when GetInstanceTypes removes provisioner dependency
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: machine.Labels[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return false, client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
-	}
+	//provisioner := &v1alpha5.Provisioner{}
+	//if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: machine.Labels[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//	return false, client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
+	//}
+	provisioner := staticprovisioner.Sp
 	if provisioner.Spec.ProviderRef == nil {
 		return false, nil
 	}
@@ -227,14 +228,15 @@ func (c *CloudProvider) resolveNodeTemplate(ctx context.Context, raw []byte, obj
 }
 
 func (c *CloudProvider) resolveInstanceTypes(ctx context.Context, machine *v1alpha5.Machine) ([]*cloudprovider.InstanceType, error) {
-	provisionerName, ok := machine.Labels[v1alpha5.ProvisionerNameLabelKey]
-	if !ok {
-		return nil, fmt.Errorf("finding provisioner owner")
-	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: provisionerName}, provisioner); err != nil {
-		return nil, fmt.Errorf("getting provisioner owner, %w", err)
-	}
+	//provisionerName, ok := machine.Labels[v1alpha5.ProvisionerNameLabelKey]
+	//if !ok {
+	//	return nil, fmt.Errorf("finding provisioner owner")
+	//}
+	//provisioner := &v1alpha5.Provisioner{}
+	//if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: provisionerName}, provisioner); err != nil {
+	//	return nil, fmt.Errorf("getting provisioner owner, %w", err)
+	//}
+	provisioner := staticprovisioner.Sp
 	instanceTypes, err := c.GetInstanceTypes(ctx, provisioner)
 	if err != nil {
 		return nil, fmt.Errorf("getting instance types, %w", err)
@@ -263,14 +265,15 @@ func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, ins
 }
 
 func (c *CloudProvider) resolveProvisionerFromInstance(ctx context.Context, instance *armcompute.VirtualMachine) (*v1alpha5.Provisioner, error) {
-	provisioner := &v1alpha5.Provisioner{}
-	provisionerName, ok := instance.Tags[v1alpha5.ProvisionerNameLabelKey]
-	if !ok {
-		return nil, errors.NewNotFound(schema.GroupResource{Group: v1alpha5.Group, Resource: "Provisioner"}, "")
-	}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: *provisionerName}, provisioner); err != nil {
-		return nil, err
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	provisionerName, ok := instance.Tags[v1alpha5.ProvisionerNameLabelKey]
+	//	if !ok {
+	//		return nil, errors.NewNotFound(schema.GroupResource{Group: v1alpha5.Group, Resource: "Provisioner"}, "")
+	//	}
+	//	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: *provisionerName}, provisioner); err != nil {
+	//		return nil, err
+	//	}
+	provisioner := staticprovisioner.Sp
 	return provisioner, nil
 }
 
