@@ -135,10 +135,10 @@ func (c *Controller) Builder(ctx context.Context, m manager.Manager) corecontrol
 			),
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
-		Watches(
-			&source.Kind{Type: &v1alpha5.Provisioner{}},
-			machineutil.ProvisionerEventHandler(ctx, c.kubeClient),
-		).
+		//		Watches(
+		//			&source.Kind{Type: &v1alpha5.Provisioner{}},
+		//			machineutil.ProvisionerEventHandler(ctx, c.kubeClient),
+		//		).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},
 			machineutil.NodeEventHandler(ctx, c.kubeClient),
