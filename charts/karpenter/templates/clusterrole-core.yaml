@@ -29,8 +29,11 @@ metadata:
   {{- end }}
 rules:
   # Read
+  - apiGroups: ["karpenter.k8s.azure"]
+    resources: ["nodetemplates"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["karpenter.sh"]
-    resources: ["provisioners", "provisioners/status", "machines", "machines/status"]
+    resources: ["machines", "machines/status"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods", "nodes", "persistentvolumes", "persistentvolumeclaims", "replicationcontrollers", "namespaces"]
@@ -48,8 +51,11 @@ rules:
     resources: [ "poddisruptionbudgets" ]
     verbs: [ "get", "list", "watch" ]
   # Write
+  - apiGroups: ["karpenter.k8s.azure"]
+    resources: ["nodetemplates/status"]
+    verbs: ["patch", "update"]
   - apiGroups: ["karpenter.sh"]
-    resources: ["provisioners/status", "machines", "machines/status"]
+    resources: ["machines", "machines/status"]
     verbs: ["create", "delete", "update", "patch"]
   - apiGroups: [""]
     resources: ["events"]
