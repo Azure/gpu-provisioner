@@ -32,7 +32,7 @@ var (
 
 	// TODO: Double check that we don't need to support "Low"
 	// TODO: Consider renaming to PrioritySpot/Regular
-	// TODO: Q: These might actually be values karpenter-core knows about,
+	// TODO: Q: These might actually be values gpu-provisioner-core knows about,
 	// may not be able to use Regular instead of On-demand
 	PrioritySpot             = string(compute.Spot)
 	PriorityRegular          = string(compute.Regular)

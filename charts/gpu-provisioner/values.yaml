@@ -4,7 +4,7 @@ nameOverride: ""
 fullnameOverride: ""
 # -- Additional labels to add into metadata.
 additionalLabels: {}
-# app: karpenter
+# app: gpu-provisioner
 
 # -- Additional annotations to add into metadata.
 additionalAnnotations: {}
@@ -155,7 +155,7 @@ webhook:
 logLevel: debug
 # -- Global log encoding
 logEncoding: console
-# -- Global Settings to configure Karpenter
+# -- Global Settings to configure gpu-provisioner
 settings:
   # -- The maximum length of a batch window. The longer this is, the more pods we can consider for provisioning at one
   # time which usually results in fewer but larger nodes.

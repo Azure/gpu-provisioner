@@ -4,7 +4,7 @@ metadata:
   name: config-logging
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "karpenter.labels" . | nindent 4 }}
+    {{- include "gpu-provisioner.labels" . | nindent 4 }}
   {{- with .Values.additionalAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -21,8 +21,8 @@ data:
         "initial": 100,
         "thereafter": 100
       },
-      "outputPaths": [{{ include "karpenter.controller.outputPathsList" . }}],
-      "errorOutputPaths": [{{ include "karpenter.controller.errorOutputPathsList" . }}],
+      "outputPaths": [{{ include "gpu-provisioner.controller.outputPathsList" . }}],
+      "errorOutputPaths": [{{ include "gpu-provisioner.controller.errorOutputPathsList" . }}],
       "encoding": "{{ .Values.logEncoding }}",
       "encoderConfig": {
         "timeKey": "time",

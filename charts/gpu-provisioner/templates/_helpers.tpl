@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "karpenter.name" -}}
+{{- define "gpu-provisioner.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "karpenter.fullname" -}}
+{{- define "gpu-provisioner.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "karpenter.chart" -}}
+{{- define "gpu-provisioner.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "karpenter.labels" -}}
-helm.sh/chart: {{ include "karpenter.chart" . }}
-{{ include "karpenter.selectorLabels" . }}
+{{- define "gpu-provisioner.labels" -}}
+helm.sh/chart: {{ include "gpu-provisioner.chart" . }}
+{{ include "gpu-provisioner.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -48,26 +48,26 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "karpenter.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "karpenter.name" . }}
+{{- define "gpu-provisioner.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "gpu-provisioner.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "karpenter.serviceAccountName" -}}
+{{- define "gpu-provisioner.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "karpenter.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "gpu-provisioner.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
 
 {{/*
-Karpenter image to use
+gpu-provisioner image to use
 */}}
-{{- define "karpenter.controller.image" -}}
+{{- define "gpu-provisioner.controller.image" -}}
 {{- if .Values.controller.image.digest }}
 {{- printf "%s:%s@%s" .Values.controller.image.repository  (default (printf "v%s" .Chart.AppVersion) .Values.controller.image.tag) .Values.controller.image.digest }}
 {{- else }}
@@ -77,7 +77,7 @@ Karpenter image to use
 
 
 {{/* Get PodDisruptionBudget API Version */}}
-{{- define "karpenter.pdb.apiVersion" -}}
+{{- define "gpu-provisioner.pdb.apiVersion" -}}
 {{- if and (.Capabilities.APIVersions.Has "policy/v1") (semverCompare ">= 1.21-0" .Capabilities.KubeVersion.Version) -}}
 {{- print "policy/v1" -}}
 {{- else -}}
@@ -91,9 +91,9 @@ This template will add a labelSelector using matchLabels to the object reference
 The matchLabels are created with the selectorLabels template.
 This works because Helm treats dictionaries as mutable objects and allows passing them by reference.
 */}}
-{{- define "karpenter.patchLabelSelector" -}}
+{{- define "gpu-provisioner.patchLabelSelector" -}}
 {{- if not (hasKey ._target "labelSelector") }}
-{{- $selectorLabels := (include "karpenter.selectorLabels" .) | fromYaml }}
+{{- $selectorLabels := (include "gpu-provisioner.selectorLabels" .) | fromYaml }}
 {{- $_ := set ._target "labelSelector" (dict "matchLabels" $selectorLabels) }}
 {{- end }}
 {{- end }}
@@ -103,15 +103,15 @@ Patch pod affinity
 This template uses the patchLabelSelector template to add a labelSelector to pod affinity objects if there is no labelSelector specified.
 This works because Helm treats dictionaries as mutable objects and allows passing them by reference.
 */}}
-{{- define "karpenter.patchPodAffinity" -}}
+{{- define "gpu-provisioner.patchPodAffinity" -}}
 {{- if (hasKey ._podAffinity "requiredDuringSchedulingIgnoredDuringExecution") }}
 {{- range $term := ._podAffinity.requiredDuringSchedulingIgnoredDuringExecution }}
-{{- include "karpenter.patchLabelSelector" (merge (dict "_target" $term) $) }}
+{{- include "gpu-provisioner.patchLabelSelector" (merge (dict "_target" $term) $) }}
 {{- end }}
 {{- end }}
 {{- if (hasKey ._podAffinity "preferredDuringSchedulingIgnoredDuringExecution") }}
 {{- range $weightedTerm := ._podAffinity.preferredDuringSchedulingIgnoredDuringExecution }}
-{{- include "karpenter.patchLabelSelector" (merge (dict "_target" $weightedTerm.podAffinityTerm) $) }}
+{{- include "gpu-provisioner.patchLabelSelector" (merge (dict "_target" $weightedTerm.podAffinityTerm) $) }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -121,12 +121,12 @@ Patch affinity
 This template uses patchPodAffinity template to add a labelSelector to podAffinity & podAntiAffinity if one isn't specified.
 This works because Helm treats dictionaries as mutable objects and allows passing them by reference.
 */}}
-{{- define "karpenter.patchAffinity" -}}
+{{- define "gpu-provisioner.patchAffinity" -}}
 {{- if (hasKey .Values.affinity "podAffinity") }}
-{{- include "karpenter.patchPodAffinity" (merge (dict "_podAffinity" .Values.affinity.podAffinity) .) }}
+{{- include "gpu-provisioner.patchPodAffinity" (merge (dict "_podAffinity" .Values.affinity.podAffinity) .) }}
 {{- end }}
 {{- if (hasKey .Values.affinity "podAntiAffinity") }}
-{{- include "karpenter.patchPodAffinity" (merge (dict "_podAffinity" .Values.affinity.podAntiAffinity) .) }}
+{{- include "gpu-provisioner.patchPodAffinity" (merge (dict "_podAffinity" .Values.affinity.podAntiAffinity) .) }}
 {{- end }}
 {{- end }}
 
@@ -135,9 +135,9 @@ Patch topology spread constraints
 This template uses the patchLabelSelector template to add a labelSelector to topologySpreadConstraints if one isn't specified.
 This works because Helm treats dictionaries as mutable objects and allows passing them by reference.
 */}}
-{{- define "karpenter.patchTopologySpreadConstraints" -}}
+{{- define "gpu-provisioner.patchTopologySpreadConstraints" -}}
 {{- range $constraint := .Values.topologySpreadConstraints }}
-{{- include "karpenter.patchLabelSelector" (merge (dict "_target" $constraint) $) }}
+{{- include "gpu-provisioner.patchLabelSelector" (merge (dict "_target" $constraint) $) }}
 {{- end }}
 {{- end }}
 
@@ -171,7 +171,7 @@ Flatten Settings Map using "." syntax
 {{/*
 Flatten the stdout logging outputs from args provided
 */}}
-{{- define "karpenter.controller.outputPathsList" -}}
+{{- define "gpu-provisioner.controller.outputPathsList" -}}
 {{ $paths := list -}}
 {{- range .Values.controller.outputPaths -}}
     {{- $paths = printf "%s" . | quote  | append $paths -}}
@@ -182,7 +182,7 @@ Flatten the stdout logging outputs from args provided
 {{/*
 Flatten the stderr logging outputs from args provided
 */}}
-{{- define "karpenter.controller.errorOutputPathsList" -}}
+{{- define "gpu-provisioner.controller.errorOutputPathsList" -}}
 {{ $paths := list -}}
 {{- range .Values.controller.errorOutputPaths -}}
     {{- $paths = printf "%s" . | quote  | append $paths -}}

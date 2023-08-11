@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	karpenterManagedTagKey = "karpenter.k8s.azure/cluster"
+	karpenterManagedTagKey = "gpu-provisioner.k8s.azure/cluster"
 )
 
 type Template struct {

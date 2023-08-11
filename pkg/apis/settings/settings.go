@@ -65,7 +65,7 @@ type Settings struct {
 }
 
 func (*Settings) ConfigMap() string {
-	return "karpenter-global-settings"
+	return "gpu-provisioner-global-settings"
 }
 
 // Inject creates a Settings from the supplied ConfigMap

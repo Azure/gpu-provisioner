@@ -13,14 +13,8 @@ For full Karpenter documentation please checkout [https://karpenter.sh](https://
 You can follow the detailed installation instruction in the [documentation](https://karpenter.sh/v0.22.0/getting-started/getting-started-with-eksctl/#install) which covers the Karpenter prerequisites and installation options. The outcome of these instructions should result in something like the following command.
 
 ```bash
-helm upgrade --install --namespace karpenter --create-namespace \
-  karpenter oci://public.ecr.aws/karpenter/karpenter \
-  --version v0.22.0 \
-  --set serviceAccount.annotations.eks\.amazonaws\.com/role-arn=${KARPENTER_IAM_ROLE_ARN} \
-  --set settings.aws.clusterName=${CLUSTER_NAME} \
-  --set settings.aws.clusterEndpoint=${CLUSTER_ENDPOINT} \
-  --set settings.aws.defaultInstanceProfile=KarpenterNodeInstanceProfile-${CLUSTER_NAME} \
-  --set settings.aws.interruptionQueueName=${CLUSTER_NAME} \
+helm upgrade --install --namespace gpu-provisioner --create-namespace \
+  gpu-provisioner ./charts/gpu-provisioner
   --wait
 ```
 

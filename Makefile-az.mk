@@ -11,7 +11,7 @@ ifeq ($(CODESPACES),true)
   AZURE_ACR_NAME=$(subst -,,$(CODESPACE_NAME))
 else
   AZURE_RESOURCE_GROUP=heba-gpu-test
-  AZURE_ACR_NAME=gpuaptest
+  AZURE_ACR_NAME=gpuprovisioner
 endif
 
 AZURE_CLUSTER_NAME=heba-gpu-ap

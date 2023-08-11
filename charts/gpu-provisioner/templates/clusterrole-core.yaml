@@ -1,9 +1,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "karpenter.fullname" . }}-core
+  name: {{ include "gpu-provisioner.fullname" . }}-core
   labels:
-    {{- include "karpenter.labels" . | nindent 4 }}
+    {{- include "gpu-provisioner.labels" . | nindent 4 }}
   {{- with .Values.additionalAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -11,18 +11,18 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "karpenter.fullname" . }}-core
+  name: {{ include "gpu-provisioner.fullname" . }}-core
 subjects:
   - kind: ServiceAccount
-    name: {{ template "karpenter.serviceAccountName" . }}
+    name: {{ template "gpu-provisioner.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "karpenter.fullname" . }}-core
+  name: {{ include "gpu-provisioner.fullname" . }}-core
   labels:
-    {{- include "karpenter.labels" . | nindent 4 }}
+    {{- include "gpu-provisioner.labels" . | nindent 4 }}
   {{- with .Values.additionalAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -32,6 +32,9 @@ rules:
   - apiGroups: ["karpenter.k8s.azure"]
     resources: ["nodetemplates"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [ "karpenter.sh" ]
+    resources: [ "provisioners" ]
+    verbs: [ "get", "list", "watch" ]
   - apiGroups: ["karpenter.sh"]
     resources: ["machines", "machines/status"]
     verbs: ["get", "list", "watch"]

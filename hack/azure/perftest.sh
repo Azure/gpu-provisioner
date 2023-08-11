@@ -33,7 +33,7 @@ date
 ENDUP=$(date ${FMT})
 echo Scale up: "https://dataexplorer.azure.com/dashboards/${DASHBOARD}?p-_startTime=${START}&p-_endTime=${ENDUP}&p-_cluster_id=${CLUSTER_ID}&p-_bin_size=v-20s"
 ENDUPKUBECTL=$(date --iso-8601=seconds)
-kubectl logs deployment/karpenter -n karpenter --since-time="${STARTKUBECTL}" > "${logk}"
+kubectl logs deployment/gpu-provisioner -n gpu-provisioner --since-time="${STARTKUBECTL}" > "${logk}"
 
 # scale down
 sleep 30
@@ -45,7 +45,7 @@ ENDDOWN=$(date ${FMT})
 date
 
 # review
-kubectl logs deployment/karpenter -n karpenter --since-time="${ENDUPKUBECTL}" >> "${logk}"
+kubectl logs deployment/gpu-provisioner -n gpu-provisioner --since-time="${ENDUPKUBECTL}" >> "${logk}"
 az resource list -o table --tag=karpenter.sh_provisioner-name=default
 # az resource wait --deleted --timeout 300 --tag=karpenter.sh_provisioner-name=default - can't wait on tags :(
 

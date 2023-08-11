@@ -1,22 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config(){
-  GITHUB_ACCOUNT="aws"
-  AWS_ACCOUNT_ID="071440425669"
-  ECR_GALLERY_NAME="karpenter"
-  RELEASE_REPO=${RELEASE_REPO:-public.ecr.aws/${ECR_GALLERY_NAME}/}
-  RELEASE_REPO_GH=${RELEASE_REPO_GH:-ghcr.io/${GITHUB_ACCOUNT}/karpenter}
-
-  PRIVATE_PULL_THROUGH_HOST="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
-  SNS_TOPIC_ARN="arn:aws:sns:us-east-1:${AWS_ACCOUNT_ID}:KarpenterReleases"
-  CURRENT_MAJOR_VERSION="0"
-  RELEASE_PLATFORM="--platform=linux/amd64,linux/arm64"
-
-  RELEASE_TYPE_STABLE="stable"
-  RELEASE_TYPE_SNAPSHOT="snapshot"
-}
-
 release() {
   RELEASE_VERSION=$1
   echo "Release Type: $(releaseType "${RELEASE_VERSION}")
@@ -49,9 +33,9 @@ authenticatePrivateRepo() {
 buildImages() {
     CONTROLLER_DIGEST=$(GOFLAGS=${GOFLAGS} KO_DOCKER_REPO=${RELEASE_REPO} ko publish -B -t ${RELEASE_VERSION} ${RELEASE_PLATFORM} ./cmd/controller)
     HELM_CHART_VERSION=$(helmChartVersion $RELEASE_VERSION)
-    yq e -i ".controller.image = \"${CONTROLLER_DIGEST}\"" charts/karpenter/values.yaml
-    yq e -i ".appVersion = \"${RELEASE_VERSION#v}\"" charts/karpenter/Chart.yaml
-    yq e -i ".version = \"${HELM_CHART_VERSION#v}\"" charts/karpenter/Chart.yaml
+    yq e -i ".controller.image = \"${CONTROLLER_DIGEST}\"" charts/gpu-provisioner/values.yaml
+    yq e -i ".appVersion = \"${RELEASE_VERSION#v}\"" charts/gpu-provisioner/Chart.yaml
+    yq e -i ".version = \"${HELM_CHART_VERSION#v}\"" charts/gpu-provisioner/Chart.yaml
 }
 
 releaseType(){
@@ -114,8 +98,8 @@ publishHelmChart() {
 
     cd charts
     helm dependency update "karpenter"
-    helm lint karpenter
-    helm package karpenter --version $HELM_CHART_VERSION
+    helm lint gpu-provisioner
+    helm package gpu-provisioner --version $HELM_CHART_VERSION
     helm push "${HELM_CHART_FILE_NAME}" "oci://${RELEASE_REPO}"
     rm "${HELM_CHART_FILE_NAME}"
     cd ..
