@@ -20,10 +20,10 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
-	"github.com/gpu-vmprovisioner/pkg/cache"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
+	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/gpu-vmprovisioner/pkg/cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -80,7 +80,7 @@ func TestGetPriorityCapacityAndInstanceType(t *testing.T) {
 		"westus-2",
 		"MC_xxxxx_yyyy-region",
 		"/subscriptions/0000000-0000-0000-0000-0000000000/resourceGroups/fake-resource-group-name/providers/Microsoft.Network/virtualNetworks/karpenter/subnets/nodesubnet",
-	)
+		"cluster-name")
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			instanceType, priority, zone := provider.pickSkuSizePriorityAndZone(c.machine, c.instanceTypes)

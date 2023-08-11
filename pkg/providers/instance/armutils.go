@@ -34,6 +34,21 @@ func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 	}
 	return &res.AgentPool, nil
 }
+
+func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) error {
+	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
+	if err != nil {
+		return err
+	}
+	_, err = poller.PollUntilDone(ctx, nil)
+	if err != nil {
+		if sdkerrors.IsNotFoundErr(err) {
+			return nil
+		}
+	}
+	return err
+}
+
 func createVirtualMachine(ctx context.Context, client VirtualMachinesAPI, rg, vmName string, vm armcompute.VirtualMachine) (*armcompute.VirtualMachine, error) {
 	poller, err := client.BeginCreateOrUpdate(ctx, rg, vmName, vm, nil)
 	if err != nil {

@@ -1,23 +1,26 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: gpu-nvidia
+  labels:
+    app: samples-tf-mnist-demo
+  name: samples-tf-mnist-demo
 spec:
-  replicas: 0
-  selector:
-    matchLabels:
-      app: gpu-nvidia
   template:
     metadata:
       labels:
-        app: gpu-nvidia
+        app: samples-tf-mnist-demo
     spec:
       containers:
-        - image: public.ecr.aws/eks-distro/kubernetes/pause:3.2
-          name: gpu-nvidia
+        - name: samples-tf-mnist-demo
+          image: mcr.microsoft.com/azuredocs/samples-tf-mnist-demo:gpu
+          args: ["--max_steps", "500"]
+          imagePullPolicy: IfNotPresent
           resources:
             limits:
-              nvidia.com/gpu: "1"
-            requests:
-              cpu: "1"
-              memory: 256M
+              nvidia.com/gpu: 1
+      restartPolicy: OnFailure
+      tolerations:
+        - key: "sku"
+          operator: "Equal"
+          value: "gpu"
+          effect: "NoSchedule"

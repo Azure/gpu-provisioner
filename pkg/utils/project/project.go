@@ -14,6 +14,6 @@ limitations under the License.
 
 package project
 
-// Version is the karpenter app version injected during compilation
+// Version is the gpu-provisioner app version injected during compilation
 // when using the Makefile
 var Version = "unspecified"

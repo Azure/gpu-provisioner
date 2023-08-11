@@ -19,7 +19,6 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
-
 	"strings"
 	"text/template"
 
@@ -440,7 +439,7 @@ func (a AKS) applyOptions(nbv *NodeBootstrapVariables) {
 	// TODO: revisit name for Karpenter agent pool
 	// note: ccp-webhook crashes on encountering nodepool label referencing unknown nodepool (in validateNodeLabelUpdateOrAddRequests when findLabelsForAgentPool is nil)
 	const karpenterAgentPoolName = "nodepool1"
-	getAgentbakerGeneratedLabels(a.ResourceGroup, karpenterAgentPoolName, kubeletLabels) // custom name for karpenter agent pool for node labeling purposes
+	getAgentbakerGeneratedLabels(a.ResourceGroup, karpenterAgentPoolName, kubeletLabels) // custom name for gpu-provisioner agent pool for node labeling purposes
 	nbv.KubeletNodeLabels = strings.Join(lo.MapToSlice(kubeletLabels, func(k, v string) string {
 		return fmt.Sprintf("%s=%s", k, v)
 	}), ",")

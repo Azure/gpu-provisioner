@@ -11,10 +11,10 @@ build:
 manifests:
   helm:
     releases:
-      - name: karpenter
-        chartPath: charts/karpenter
+      - name: gpu-provisioner
+        chartPath: charts/gpu-provisioner
         skipBuildDependencies: true
-        namespace: karpenter
+        namespace: gpu-provisioner
         createNamespace: true
         setValueTemplates:
           controller.image.repository: "{{.IMAGE_REPO_controller}}"

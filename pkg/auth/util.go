@@ -40,5 +40,5 @@ func decodePkcs12(pkcs []byte, password string) (*x509.Certificate, *rsa.Private
 }
 
 func GetUserAgentExtension() string {
-	return fmt.Sprintf("karpenter-aks/v%s", project.Version)
+	return fmt.Sprintf("gpu-provisioner-aks/v%s", project.Version)
 }
