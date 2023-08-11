@@ -22,6 +22,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 )
@@ -54,6 +55,15 @@ type VirtualMachinesBehavior struct {
 
 // assert that the fake implements the interface
 var _ instance.VirtualMachinesAPI = (*VirtualMachinesAPI)(nil)
+
+type AgentPoolsAPI struct {
+	// TODO
+}
+
+func (a AgentPoolsAPI) BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, parameters armcontainerservice.AgentPool, options *armcontainerservice.AgentPoolsClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 type VirtualMachinesAPI struct {
 	// TODO: document the implications of embedding vs. not embedding the interface here

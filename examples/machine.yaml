@@ -1,7 +1,7 @@
 apiVersion: karpenter.sh/v1alpha5
 kind: Machine
 metadata:
-  name: test-machine
+  name: heba-gpu-ap
   labels:
     karpenter.sh/provisioner-name: default
 spec:
@@ -48,18 +48,11 @@ spec:
     - Standard_DS13_v2
     - Standard_DS3_v2
     - Standard_DS4_v2
-  - key: karpenter.k8s.azure/sku-family
-    operator: In
-    values:
-    - D
+    - Standard_NC6
   - key: karpenter.sh/provisioner-name
     operator: In
     values:
     - default
-  - key: karpenter.k8s.azure/sku-cpu
-    operator: Lt
-    values:
-    - "33"
   - key: kubernetes.io/arch
     operator: In
     values:
@@ -68,10 +61,6 @@ spec:
     operator: In
     values:
     - "true"
-  - key: karpenter.sh/capacity-type
-    operator: In
-    values:
-    - Regular
   - key: kubernetes.io/os
     operator: In
     values:

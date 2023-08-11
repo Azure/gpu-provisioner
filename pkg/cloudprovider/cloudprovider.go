@@ -83,12 +83,12 @@ func New(instanceTypeProvider *instancetype.Provider, instanceProvider *instance
 
 // Create a node given the constraints.
 func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (*v1alpha5.Machine, error) {
-	nodeTemplate, err := c.resolveNodeTemplate(ctx, []byte(machine.
-		Annotations[v1alpha5.ProviderCompatabilityAnnotationKey]), machine.
-		Spec.MachineTemplateRef)
-	if err != nil {
-		return nil, fmt.Errorf("resolving node template, %w", err)
-	}
+	//nodeTemplate, err := c.resolveNodeTemplate(ctx, []byte(machine.
+	//	Annotations[v1alpha5.ProviderCompatabilityAnnotationKey]), machine.
+	//	Spec.MachineTemplateRef)
+	//if err != nil {
+	//	return nil, fmt.Errorf("resolving node template, %w", err)
+	//}
 	instanceTypes, err := c.resolveInstanceTypes(ctx, machine)
 	if err != nil {
 		return nil, fmt.Errorf("resolving instance types, %w", err)
@@ -96,7 +96,7 @@ func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (
 	if len(instanceTypes) == 0 {
 		return nil, fmt.Errorf("all requested instance types were unavailable during launch")
 	}
-	instance, err := c.instanceProvider.Create(ctx, nodeTemplate, machine, instanceTypes)
+	instance, err := c.instanceProvider.Create(ctx, machine, instanceTypes)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
@@ -147,6 +147,10 @@ func (c *CloudProvider) LivenessProbe(req *http.Request) error {
 // GetInstanceTypes returns all available InstanceTypes
 func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
 	var rawProvider []byte
+	provisioner = staticprovisioner.Sp
+	if provisioner.Spec.ProviderRef == nil {
+		return nil, nil
+	}
 	if provisioner.Spec.Provider != nil {
 		rawProvider = provisioner.Spec.Provider.Raw
 	}

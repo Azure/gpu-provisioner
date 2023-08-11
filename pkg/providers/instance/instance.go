@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 
@@ -35,7 +37,6 @@ import (
 	corecloudprovider "github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 
-	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
@@ -51,6 +52,7 @@ type Provider struct {
 	launchTemplateProvider *launchtemplate.Provider
 	resourceGroup          string
 	subnetID               string
+	clusterName            string
 	unavailableOfferings   *cache.UnavailableOfferings
 }
 
@@ -63,6 +65,7 @@ func NewProvider(
 	location string,
 	resourceGroup string,
 	subnetID string,
+	clusterName string,
 ) *Provider {
 	return &Provider{
 		azClient:               azClient,
@@ -71,16 +74,17 @@ func NewProvider(
 		location:               location,
 		resourceGroup:          resourceGroup,
 		subnetID:               subnetID,
+		clusterName:            clusterName,
 		unavailableOfferings:   offeringsCache,
 	}
 }
 
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
-func (p *Provider) Create(ctx context.Context, nodeTemplate *v1alpha1.NodeTemplate, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*armcompute.VirtualMachine, error) {
+func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*armcompute.VirtualMachine, error) {
 	// TODO: filterInstanceTypes
 	instanceTypes = orderInstanceTypesByPrice(instanceTypes, scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...))
-	id, err := p.launchInstance(ctx, nodeTemplate, machine, instanceTypes)
+	id, err := p.launchInstance(ctx, p.clusterName, machine, instanceTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +234,21 @@ func (p *Provider) createNetworkInterface(ctx context.Context, nicName string, l
 	return *res.ID, nil
 }
 
+func newAgentPoolObject(vmSize string) armcontainerservice.AgentPool {
+	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
+	return armcontainerservice.AgentPool{
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			NodeTaints:        []*string{to.Ptr("sku=gpu:NoSchedule")},
+			Type:              to.Ptr(scaleSetsType),
+			VMSize:            to.Ptr(vmSize), //Standard_NC6
+			EnableAutoScaling: to.Ptr(true),
+			Count:             to.Ptr(int32(1)),
+			MinCount:          to.Ptr(int32(1)),
+			MaxCount:          to.Ptr(int32(3)),
+		},
+	}
+}
+
 func newVMObject(
 	vmName, nicReference, vmSize, zone, capacityType string,
 	location string,
@@ -290,6 +309,15 @@ func newVMObject(
 		Zones: []*string{&zone},
 	}
 }
+func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.AgentPool, apName, clusterName string) error {
+	result, err := createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, clusterName, ap)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Creating virtual machine %q failed: %v", apName, err)
+		return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
+	}
+	logging.FromContext(ctx).Debugf("Created agent pool %s", *result.ID)
+	return nil
+}
 
 func (p *Provider) createVirtualMachine(ctx context.Context, vm armcompute.VirtualMachine, vmName, _ string) error {
 	result, err := createVirtualMachine(ctx, p.azClient.virtualMachinesClient, p.resourceGroup, vmName, vm)
@@ -302,72 +330,58 @@ func (p *Provider) createVirtualMachine(ctx context.Context, vm armcompute.Virtu
 }
 
 func (p *Provider) launchInstance(
-	ctx context.Context, nodeTemplate *v1alpha1.NodeTemplate, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*string, error) {
+	ctx context.Context, clusterName string, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*string, error) {
 	//AWS:
 	// capacityType := p.getCapacityType(machine, instanceTypes)
 	// launchTemplateConfigs, err := p.getLaunchTemplateConfigs(ctx, nodeTemplate, machine, instanceTypes, capacityType)
-	instanceType, capacityType, zone := p.pickSkuSizePriorityAndZone(machine, instanceTypes)
-	if instanceType == nil {
-		return nil, fmt.Errorf("no instance types available")
-	}
-	launchTemplate, err := p.getLaunchTemplate(ctx, nodeTemplate, machine, instanceType, capacityType)
-	if err != nil {
-		return nil, fmt.Errorf("getting launch template: %w", err)
-	}
+	//instanceType, capacityType, zone := p.pickSkuSizePriorityAndZone(machine, instanceTypes)
+	//if instanceType == nil {
+	//	return nil, fmt.Errorf("no instance types available")
+	//}
+	//launchTemplate, err := p.getLaunchTemplate(ctx, nodeTemplate, machine, instanceType, capacityType)
+	//if err != nil {
+	//	return nil, fmt.Errorf("getting launch template: %w", err)
+	//}
 
-	vmName := generateVMName(machine.Name)
+	apName := strings.ReplaceAll(machine.Name, "-", "")
+	//vmName := generateVMName(machine.Name)
 
 	// create network interface
-	nicName := vmName
-	nicReference, err := p.createNetworkInterface(ctx, vmName, launchTemplate)
+	//nicName := vmName
+	//nicReference, err := p.createNetworkInterface(ctx, vmName, launchTemplate)
+	//if err != nil {
+	//	return nil, err
+	//}
+	vmSize := "standard_nc6s_v3"
+	//vmSize := instanceType.Name
+
+	//sshPublicKey := settings.FromContext(ctx).SSHPublicKey
+	ap := newAgentPoolObject(vmSize)
+
+	logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
+	// Uses AZ Client to create a new agent pool using the agentpool object we prepared earlier
+	err := p.createAgentPool(ctx, ap, apName, clusterName)
 	if err != nil {
 		return nil, err
 	}
-	vmSize := instanceType.Name
 
-	sshPublicKey := settings.FromContext(ctx).SSHPublicKey
-	vm := newVMObject(vmName, nicReference, vmSize, zone, capacityType, p.location, sshPublicKey)
-
-	// the following should enable ephemeral os disk for instance types that support it
-	// TODO: this (as many other settings) should come from elsewhere
-	ephemeralOSDiskRequirements := scheduling.NewRequirements(scheduling.NewRequirement(v1alpha1.LabelSKUEphemeralOSDiskSupported, v1.NodeSelectorOpIn, "true"))
-	if err = instanceType.Requirements.Compatible(ephemeralOSDiskRequirements); err == nil {
-		osDisk := vm.Properties.StorageProfile.OSDisk
-		osDisk.DiffDiskSettings = &armcompute.DiffDiskSettings{
-			Option: to.Ptr(armcompute.DiffDiskOptionsLocal),
-			// Placement: compute.ResourceDisk,
-		}
-		osDisk.Caching = to.Ptr(armcompute.CachingTypesReadOnly)
-		osDisk.DiskSizeGB = to.Ptr[int32](42)
-	}
-
-	if capacityType == v1alpha1.PrioritySpot {
-		// TODO: review EvicitonPolicy; consider supporting MaxPrice
-		vm.Properties.BillingProfile = &armcompute.BillingProfile{
-			MaxPrice: to.Ptr(float64(-1)),
-		}
-	}
-
-	// apply launch template configuration
-	p.applyTemplate(&vm, launchTemplate)
-
-	logging.FromContext(ctx).Debugf("Creating virtual machine %s (%s)", vmName, vmSize)
-	// Uses AZ Client to create a new virtual machine using the vm object we prepared earlier
-	err = p.createVirtualMachine(ctx, vm, vmName, nicName)
-	if err != nil {
-		if sdkerrors.SubscriptionQuotaHasBeenReached(err) {
-			p.unavailableOfferings.MarkUnavailable(ctx, "SubscriptionLevelQuotaReached", instanceType.Name, zone, capacityType)
-		}
-		return nil, err
-	}
+	//logging.FromContext(ctx).Debugf("Creating virtual machine %s (%s)", vmName, vmSize)
+	//// Uses AZ Client to create a new virtual machine using the vm object we prepared earlier
+	//err = p.createVirtualMachine(ctx, vm, vmName, nicName)
+	//if err != nil {
+	//	if sdkerrors.SubscriptionQuotaHasBeenReached(err) {
+	//		p.unavailableOfferings.MarkUnavailable(ctx, "SubscriptionLevelQuotaReached", instanceType.Name, zone, capacityType)
+	//	}
+	//	return nil, err
+	//}
 
 	// billing extension
 	// TODO: consider making this async (with provisioner not having to wait)
-	err = p.createBillingExtension(ctx, vmName, nicName)
-	if err != nil {
-		return nil, err
-	}
-	return &vmName, nil
+	//err = p.createBillingExtension(ctx, vmName, "")
+	//if err != nil {
+	//	return nil, err
+	//}
+	return &apName, nil
 }
 
 func (p *Provider) applyTemplateToNic(nic *armnetwork.Interface, template *launchtemplate.Template) {

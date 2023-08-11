@@ -13,8 +13,7 @@ After cloning the repo from `https://github.com/Azure/karpenter`,
 
 ```
 for each in $(find pkg/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-vmprovisioner/g" -i $each;done;
-for each in $(find cmd/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-v
-mprovisioner/g" -i $each;done;
+for each in $(find cmd/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-vmprovisioner/g" -i $each;done;
 ```
 ### Edit the `go.mod`
 

@@ -49,9 +49,13 @@ manifests:
                 value: "true"
               - name: ARM_USER_ASSIGNED_IDENTITY_ID
                 value: 
+              - name: AZURE_CLUSTER_NAME
+                value: 
               - name: AZURE_NODE_RESOURCE_GROUP
                 value: 
-              # TODO: move to settins
+              - name: ARM_RESOURCE_GROUP
+                value: 
+              # TODO: move to settings
               - name: AZURE_SUBNET_ID # the id of subnet to create network interfaces on
                 value: 
               - name: LEADER_ELECT # disable leader election for better debugging experience
