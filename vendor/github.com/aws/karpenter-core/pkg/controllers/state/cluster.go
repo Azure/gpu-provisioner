@@ -76,7 +76,7 @@ func NewCluster(clk clock.Clock, client client.Client, cp cloudprovider.CloudPro
 	}
 }
 
-// Synced validates that the Machines and the Nodes that ar/e stored in the apiserver
+// Synced validates that the Machines and the Nodes that are stored in the apiserver
 // have the same representation in the cluster state. This is to ensure that our view
 // of the cluster is as close to correct as it can be when we begin to perform operations
 // utilizing the cluster state as our source of truth
