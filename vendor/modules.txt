@@ -152,7 +152,6 @@ github.com/aws/karpenter-core/pkg/operator/options
 github.com/aws/karpenter-core/pkg/operator/scheme
 github.com/aws/karpenter-core/pkg/scheduling
 github.com/aws/karpenter-core/pkg/test
-github.com/aws/karpenter-core/pkg/test/expectations
 github.com/aws/karpenter-core/pkg/utils/env
 github.com/aws/karpenter-core/pkg/utils/functional
 github.com/aws/karpenter-core/pkg/utils/machine

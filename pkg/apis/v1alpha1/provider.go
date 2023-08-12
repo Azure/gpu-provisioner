@@ -32,15 +32,3 @@ type Azure struct {
 	// +optional
 	Tags map[string]string `json:"tags,omitempty"`
 }
-
-func DeserializeProvider(raw []byte) (*Azure, error) {
-	a := &Azure{}
-	_, gvk, err := codec.UniversalDeserializer().Decode(raw, nil, a)
-	if err != nil {
-		return nil, err
-	}
-	if gvk != nil {
-		a.SetGroupVersionKind(*gvk)
-	}
-	return a, nil
-}

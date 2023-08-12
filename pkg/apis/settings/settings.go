@@ -21,7 +21,6 @@ import (
 	"hash/fnv"
 	"math/rand"
 	"net/url"
-	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/multierr"
@@ -157,36 +156,6 @@ func AsTypedString[T ~string](key string, target *T) configmap.ParseFunc {
 	return func(data map[string]string) error {
 		if raw, ok := data[key]; ok {
 			*target = T(raw)
-		}
-		return nil
-	}
-}
-
-// AsMap parses any value with the prefix key into a map with suffixes as keys and values as values in the target map.
-// e.g. {"aws.tags.tag1":"value1"} gets parsed into the map Tags as {"tag1": "value1"}
-func AsMap(key string, target *map[string]string) configmap.ParseFunc {
-	return func(data map[string]string) error {
-		m := map[string]string{}
-
-		// Unwind the values into structured keys
-		for k, v := range data {
-			if strings.HasPrefix(k, key+".") {
-				m[k[len(key+"."):]] = v
-			}
-		}
-		*target = m
-		return nil
-	}
-}
-
-// FromMap takes values from a map and rewinds the values into map[string]string values where the key
-// contains the prefix key and the value is the map value.
-// e.g. {"tag1": "value1"} becomes {"aws.tags.tag1": "value1"} when passed the key "aws.tags"
-func FromMap(data map[string]string) func(key string, target *map[string]string) error {
-	return func(key string, target *map[string]string) error {
-		// Rewind the values into implicit JSON "." syntax
-		for k, v := range data {
-			(*target)[fmt.Sprintf("%s.%s", key, k)] = v
 		}
 		return nil
 	}
