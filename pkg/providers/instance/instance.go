@@ -191,23 +191,6 @@ func (p *Provider) launchInstance(
 	if err != nil {
 		return nil, err
 	}
-
-	//logging.FromContext(ctx).Debugf("Creating virtual machine %s (%s)", vmName, vmSize)
-	//// Uses AZ Client to create a new virtual machine using the vm object we prepared earlier
-	//err = p.createVirtualMachine(ctx, vm, vmName, nicName)
-	//if err != nil {
-	//	if sdkerrors.SubscriptionQuotaHasBeenReached(err) {
-	//		p.unavailableOfferings.MarkUnavailable(ctx, "SubscriptionLevelQuotaReached", instanceType.Name, zone, capacityType)
-	//	}
-	//	return nil, err
-	//}
-
-	// billing extension
-	// TODO: consider making this async (with provisioner not having to wait)
-	//err = p.createBillingExtension(ctx, vmName, "")
-	//if err != nil {
-	//	return nil, err
-	//}
 	return &apName, nil
 }
 
