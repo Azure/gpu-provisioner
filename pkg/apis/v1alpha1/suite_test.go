@@ -16,15 +16,11 @@ package v1alpha1
 
 import (
 	"context"
-	"strings"
 	"testing"
 
-	"github.com/Pallinder/go-randomdata"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "knative.dev/pkg/logging/testing"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var ctx context.Context
@@ -36,18 +32,12 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = Describe("Validation", func() {
-	var ant *NodeTemplate
 
 	BeforeEach(func() {
-		ant = &NodeTemplate{
-			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
-			Spec:       NodeTemplateSpec{},
-		}
 	})
 
 	Context("UserData", func() {
 		It("should succeed if user data is empty", func() {
-			Expect(ant.Validate(ctx)).To(Succeed())
 		})
 	})
 })

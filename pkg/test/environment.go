@@ -17,26 +17,20 @@ package test
 import (
 	"context"
 
+	coretest "github.com/aws/karpenter-core/pkg/test"
 	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
 	"github.com/gpu-vmprovisioner/pkg/fake"
-	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
 	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
-	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
 	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
 	"github.com/patrickmn/go-cache"
-	"knative.dev/pkg/ptr"
-
-	coretest "github.com/aws/karpenter-core/pkg/test"
 )
 
 type Environment struct {
 	// API
-	VirtualMachinesAPI          *fake.VirtualMachinesAPI
-	VirtualMachineExtensionsAPI *fake.VirtualMachineExtensionsAPI
-	NetworkInterfacesAPI        *fake.NetworkInterfacesAPI
-	ResourceSKUsAPI             *fake.ResourceSKUsAPI
-	PricingAPI                  *fake.PricingAPI
+	NetworkInterfacesAPI *fake.NetworkInterfacesAPI
+	ResourceSKUsAPI      *fake.ResourceSKUsAPI
+	PricingAPI           *fake.PricingAPI
 
 	// Cache
 	KubernetesVersionCache    *cache.Cache
@@ -44,23 +38,16 @@ type Environment struct {
 	UnavailableOfferingsCache *azurecache.UnavailableOfferings
 
 	// Providers
-	InstanceTypesProvider  *instancetype.Provider
-	InstanceProvider       *instance.Provider
-	PricingProvider        *pricing.Provider
-	ImageProvider          *imagefamily.Provider
-	ImageResolver          *imagefamily.Resolver
-	LaunchTemplateProvider *launchtemplate.Provider
+	InstanceTypesProvider *instancetype.Provider
+	InstanceProvider      *instance.Provider
+	PricingProvider       *pricing.Provider
 }
 
 // using "" for region
 
 func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment {
-	testSettings := Settings()
-
 	// API
 	agentPoolsAPI := &fake.AgentPoolsAPI{}
-	virtualMachinesAPI := &fake.VirtualMachinesAPI{}
-	virtualMachinesExtensionsAPI := &fake.VirtualMachineExtensionsAPI{}
 	networkInterfacesAPI := &fake.NetworkInterfacesAPI{}
 	pricingAPI := &fake.PricingAPI{}
 	resourceSKUsAPI := &fake.ResourceSKUsAPI{}
@@ -72,45 +59,26 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 
 	// Providers
 	pricingProvider := pricing.NewProvider(ctx, pricingAPI, "", make(chan struct{}))
-	imageFamilyProvider := imagefamily.NewProvider(env.KubernetesInterface, kubernetesVersionCache)
-	imageFamilyResolver := imagefamily.New(env.Client, imageFamilyProvider)
 	instanceTypesProvider := instancetype.NewProvider("", instanceTypeCache, resourceSKUsAPI, pricingProvider, unavailableOfferingsCache)
-	launchTemplateProvider := launchtemplate.NewProvider(
-		ctx,
-		imageFamilyResolver,
-		ptr.String("ca-bundle"),
-		testSettings.ClusterEndpoint,
-		"test-tenant",
-		"test-subscription",
-		"test-userAssignedIdentity",
-		"test-resourceGroup",
-		"test-location",
-		"aks-test",
-	)
 	azClient := instance.NewAZClientFromAPI(
 		agentPoolsAPI,
-		virtualMachinesAPI,
-		virtualMachinesExtensionsAPI,
 		networkInterfacesAPI,
 		resourceSKUsAPI,
 	)
 	instanceProvider := instance.NewProvider(
-		ctx,
 		azClient,
 		instanceTypesProvider,
-		launchTemplateProvider,
 		unavailableOfferingsCache,
 		"testregion", // region
 		"",           // resourceGroup
 		"",           // subnet
+		"",           // clusterName
 	)
 
 	return &Environment{
-		VirtualMachinesAPI:          virtualMachinesAPI,
-		VirtualMachineExtensionsAPI: virtualMachinesExtensionsAPI,
-		NetworkInterfacesAPI:        networkInterfacesAPI,
-		ResourceSKUsAPI:             resourceSKUsAPI,
-		PricingAPI:                  pricingAPI,
+		NetworkInterfacesAPI: networkInterfacesAPI,
+		ResourceSKUsAPI:      resourceSKUsAPI,
+		PricingAPI:           pricingAPI,
 
 		KubernetesVersionCache:    kubernetesVersionCache,
 		InstanceTypeCache:         instanceTypeCache,
@@ -118,15 +86,10 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 		InstanceTypesProvider:     instanceTypesProvider,
 		InstanceProvider:          instanceProvider,
 		PricingProvider:           pricingProvider,
-		ImageProvider:             imageFamilyProvider,
-		ImageResolver:             imageFamilyResolver,
-		LaunchTemplateProvider:    launchTemplateProvider,
 	}
 }
 
 func (env *Environment) Reset() {
-	env.VirtualMachinesAPI.Reset()
-	env.VirtualMachineExtensionsAPI.Reset()
 	env.NetworkInterfacesAPI.Reset()
 	env.ResourceSKUsAPI.Reset()
 	env.PricingAPI.Reset()

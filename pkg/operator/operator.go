@@ -20,20 +20,16 @@ import (
 	"fmt"
 
 	"github.com/patrickmn/go-cache"
-	"github.com/samber/lo"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/ptr"
 
 	"github.com/aws/karpenter-core/pkg/operator"
-	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/auth"
 	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
-	"github.com/gpu-vmprovisioner/pkg/providers/imagefamily"
 	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
-	"github.com/gpu-vmprovisioner/pkg/providers/launchtemplate"
 	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
 )
 
@@ -43,12 +39,9 @@ type Operator struct {
 
 	UnavailableOfferingsCache *azurecache.UnavailableOfferings
 
-	ImageProvider          *imagefamily.Provider
-	ImageResolver          *imagefamily.Resolver
-	LaunchTemplateProvider *launchtemplate.Provider
-	PricingProvider        *pricing.Provider
-	InstanceTypesProvider  *instancetype.Provider
-	InstanceProvider       *instance.Provider
+	PricingProvider       *pricing.Provider
+	InstanceTypesProvider *instancetype.Provider
+	InstanceProvider      *instance.Provider
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -70,20 +63,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		operator.Elected(),
 	)
 
-	imageProvider := imagefamily.NewProvider(operator.KubernetesInterface, cache.New(azurecache.KubernetesVersionTTL, azurecache.DefaultCleanupInterval))
-	imageResolver := imagefamily.New(operator.GetClient(), imageProvider)
-	launchTemplateProvider := launchtemplate.NewProvider(
-		ctx,
-		imageResolver,
-		lo.Must(getCABundle(operator.GetConfig())),
-		settings.FromContext(ctx).ClusterEndpoint,
-		azConfig.TenantID,
-		azConfig.SubscriptionID,
-		azConfig.UserAssignedIdentityID,
-		azConfig.ResourceGroup,
-		azConfig.Location,
-		azConfig.ClusterName,
-	)
 	instanceTypeProvider := instancetype.NewProvider(
 		azConfig.Location,
 		cache.New(instancetype.InstanceTypesCacheTTL, azurecache.DefaultCleanupInterval),
@@ -92,10 +71,8 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		unavailableOfferingsCache,
 	)
 	instanceProvider := instance.NewProvider(
-		ctx,
 		azClient,
 		instanceTypeProvider,
-		launchTemplateProvider,
 		unavailableOfferingsCache,
 		azConfig.Location,
 		azConfig.ResourceGroup,
@@ -106,9 +83,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	return ctx, &Operator{
 		Operator:                  operator,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
-		ImageProvider:             imageProvider,
-		ImageResolver:             imageResolver,
-		LaunchTemplateProvider:    launchTemplateProvider,
 		PricingProvider:           pricingProvider,
 		InstanceTypesProvider:     instanceTypeProvider,
 		InstanceProvider:          instanceProvider,

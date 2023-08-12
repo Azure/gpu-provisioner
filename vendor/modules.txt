@@ -8,12 +8,6 @@ contrib.go.opencensus.io/exporter/prometheus
 ## explicit
 github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-12-01/compute
 github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2021-12-01/compute
-github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-03-01/compute
-github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2021-10-01/containerservice
-github.com/Azure/azure-sdk-for-go/services/network/mgmt/2021-08-01/network
-github.com/Azure/azure-sdk-for-go/services/privatedns/mgmt/2018-09-01/privatedns
-github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2017-05-10/resources
-github.com/Azure/azure-sdk-for-go/services/storage/mgmt/2021-09-01/storage
 github.com/Azure/azure-sdk-for-go/version
 # github.com/Azure/azure-sdk-for-go-extensions v0.1.1
 ## explicit; go 1.19
@@ -77,9 +71,6 @@ github.com/Azure/go-autorest/autorest/adal
 # github.com/Azure/go-autorest/autorest/date v0.3.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/autorest/date
-# github.com/Azure/go-autorest/autorest/mocks v0.4.2
-## explicit; go 1.15
-github.com/Azure/go-autorest/autorest/mocks
 # github.com/Azure/go-autorest/autorest/to v0.4.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/autorest/to
@@ -118,9 +109,6 @@ github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/options
 github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/shared
 github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/version
 github.com/AzureAD/microsoft-authentication-library-for-go/apps/public
-# github.com/Masterminds/semver v1.5.0
-## explicit
-github.com/Masterminds/semver
 # github.com/Pallinder/go-randomdata v1.2.0
 ## explicit
 github.com/Pallinder/go-randomdata
@@ -207,6 +195,8 @@ github.com/deckarep/golang-set
 ## explicit; go 1.13
 github.com/emicklei/go-restful/v3
 github.com/emicklei/go-restful/v3/log
+# github.com/evanphx/json-patch v5.6.0+incompatible
+## explicit
 # github.com/evanphx/json-patch/v5 v5.6.0
 ## explicit; go 1.12
 github.com/evanphx/json-patch/v5
@@ -263,9 +253,6 @@ github.com/golang-jwt/jwt/v4
 # github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 ## explicit
 github.com/golang/groupcache/lru
-# github.com/golang/mock v1.6.0
-## explicit; go 1.11
-github.com/golang/mock/gomock
 # github.com/golang/protobuf v1.5.3
 ## explicit; go 1.9
 github.com/golang/protobuf/jsonpb
@@ -323,7 +310,7 @@ github.com/kelseyhightower/envconfig
 ## explicit; go 1.11
 github.com/kylelemons/godebug/diff
 github.com/kylelemons/godebug/pretty
-# github.com/leodido/go-urn v1.2.3
+# github.com/leodido/go-urn v1.2.4
 ## explicit; go 1.16
 github.com/leodido/go-urn
 # github.com/mailru/easyjson v0.7.7
@@ -993,24 +980,11 @@ k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
 # k8s.io/cloud-provider v0.25.4
 ## explicit; go 1.19
-k8s.io/cloud-provider
 k8s.io/cloud-provider/api
-k8s.io/cloud-provider/node/helpers
-k8s.io/cloud-provider/service/helpers
-k8s.io/cloud-provider/volume
-k8s.io/cloud-provider/volume/errors
-k8s.io/cloud-provider/volume/helpers
 # k8s.io/component-base v0.25.4
 ## explicit; go 1.19
 k8s.io/component-base/config
 k8s.io/component-base/config/v1alpha1
-k8s.io/component-base/metrics
-k8s.io/component-base/metrics/legacyregistry
-k8s.io/component-base/metrics/prometheusextension
-k8s.io/component-base/version
-# k8s.io/component-helpers v0.25.4
-## explicit; go 1.19
-k8s.io/component-helpers/node/util
 # k8s.io/csi-translation-lib v0.25.4
 ## explicit; go 1.19
 k8s.io/csi-translation-lib
@@ -1093,57 +1067,6 @@ knative.dev/pkg/webhook/json
 knative.dev/pkg/webhook/resourcesemantics
 knative.dev/pkg/webhook/resourcesemantics/defaulting
 knative.dev/pkg/webhook/resourcesemantics/validation
-# sigs.k8s.io/cloud-provider-azure v1.25.4
-## explicit; go 1.18
-sigs.k8s.io/cloud-provider-azure/pkg/auth
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/armclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/blobclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/containerserviceclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/deploymentclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/diskclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/diskclient/mockdiskclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/fileclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/interfaceclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/interfaceclient/mockinterfaceclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/loadbalancerclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/loadbalancerclient/mockloadbalancerclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privatednsclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privatednszonegroupclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privateendpointclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privatelinkserviceclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privatelinkserviceclient/mockprivatelinkserviceclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/publicipclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/publicipclient/mockpublicipclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/routeclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/routeclient/mockrouteclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/routetableclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/routetableclient/mockroutetableclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/securitygroupclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/securitygroupclient/mocksecuritygroupclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/snapshotclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/snapshotclient/mocksnapshotclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/storageaccountclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/subnetclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/subnetclient/mocksubnetclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/virtualnetworklinksclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmasclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmclient/mockvmclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmsizeclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmssclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmssclient/mockvmssclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmssvmclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmssvmclient/mockvmssvmclient
-sigs.k8s.io/cloud-provider-azure/pkg/azureclients/zoneclient
-sigs.k8s.io/cloud-provider-azure/pkg/cache
-sigs.k8s.io/cloud-provider-azure/pkg/consts
-sigs.k8s.io/cloud-provider-azure/pkg/metrics
-sigs.k8s.io/cloud-provider-azure/pkg/nodemanager
-sigs.k8s.io/cloud-provider-azure/pkg/provider
-sigs.k8s.io/cloud-provider-azure/pkg/provider/virtualmachine
-sigs.k8s.io/cloud-provider-azure/pkg/retry
-sigs.k8s.io/cloud-provider-azure/pkg/version
 # sigs.k8s.io/controller-runtime v0.13.1
 ## explicit; go 1.17
 sigs.k8s.io/controller-runtime

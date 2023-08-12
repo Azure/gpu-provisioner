@@ -25,7 +25,6 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/defaulting"
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha5"
 
 	corev1alpha5 "github.com/aws/karpenter-core/pkg/apis/v1alpha5"
@@ -59,6 +58,5 @@ func NewCRDValidationWebhook(ctx context.Context, _ configmap.Watcher) *controll
 }
 
 var Resources = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
-	v1alpha1.SchemeGroupVersion.WithKind("NodeTemplate"):    &v1alpha1.NodeTemplate{},
 	corev1alpha5.SchemeGroupVersion.WithKind("Provisioner"): &v1alpha5.Provisioner{},
 }

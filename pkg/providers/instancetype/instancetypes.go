@@ -66,7 +66,7 @@ func NewProvider(region string, cache *cache.Cache, resourceSkusClient skewer.Re
 
 // Get all instance type options
 func (p *Provider) List(
-	ctx context.Context, kc *v1alpha5.KubeletConfiguration, _ *v1alpha1.NodeTemplate) ([]*cloudprovider.InstanceType, error) {
+	ctx context.Context, kc *v1alpha5.KubeletConfiguration) ([]*cloudprovider.InstanceType, error) {
 	p.Lock()
 	defer p.Unlock()
 	// Get SKUs from Azure

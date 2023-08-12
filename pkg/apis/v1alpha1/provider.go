@@ -28,8 +28,6 @@ type Azure struct {
 	// +optional
 	ImageID *string `json:"imageID,omitempty"`
 	// ImageFamily is the image family that instances use.
-	// +optional
-	ImageFamily *string `json:"imageFamily,omitempty"`
 	// Tags to be applied on Azure resources like instances.
 	// +optional
 	Tags map[string]string `json:"tags,omitempty"`

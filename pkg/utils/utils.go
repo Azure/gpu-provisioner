@@ -21,17 +21,17 @@ import (
 
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
 // associated with a node
-func ParseInstanceID(providerID string) (string, error) {
+func ParseInstanceID(providerID string) (*string, error) {
 	// standalone VMs have providerID in the format: azure:///subscriptions/<subscriptionID>/resourceGroups/<resourceGroup>/providers/Microsoft.Compute/virtualMachines/<instanceID>
 	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.Compute/virtualMachines/(?P<InstanceID>.*)`)
 	matches := r.FindStringSubmatch(providerID)
 	if matches == nil {
-		return "", fmt.Errorf("parsing instance id %s", providerID)
+		return nil, fmt.Errorf("parsing instance id %s", providerID)
 	}
 	for i, name := range r.SubexpNames() {
 		if name == "InstanceID" {
-			return matches[i], nil
+			return &matches[i], nil
 		}
 	}
-	return "", fmt.Errorf("parsing instance id %s", providerID)
+	return nil, fmt.Errorf("parsing instance id %s", providerID)
 }
