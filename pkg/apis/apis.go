@@ -18,18 +18,15 @@ package apis
 import (
 	_ "embed"
 
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/aws/karpenter-core/pkg/operator/scheme"
 
 	"github.com/samber/lo"
 
+	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
-	"github.com/aws/karpenter-core/pkg/apis"
-	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
-	"github.com/aws/karpenter-core/pkg/utils/functional"
 )
 
 var (
@@ -43,11 +40,6 @@ var (
 )
 
 //go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
-var (
-	//go:embed crds/karpenter.k8s.azure_nodetemplates.yaml
-	NodeTemplateCRD []byte
-	CRDs            = append(apis.CRDs, lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](NodeTemplateCRD)))
-)
 
 func init() {
 	lo.Must0(AddToScheme(scheme.Scheme))

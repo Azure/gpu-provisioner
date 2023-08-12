@@ -32,7 +32,6 @@ func main() {
 		op.InstanceTypesProvider,
 		op.InstanceProvider,
 		op.GetClient(),
-		op.ImageProvider,
 	)
 
 	lo.Must0(op.AddHealthzCheck("cloud-provider", azureCloudProvider.LivenessProbe))
@@ -48,17 +47,5 @@ func main() {
 			op.EventRecorder,
 			cloudProvider,
 		)...).
-		//	WithWebhooks(ctx, corewebhooks.NewWebhooks()...).
-		/*
-			WithControllers(ctx, controllers.NewControllers(
-				ctx,
-				op.Clock,
-				op.GetClient(),
-				op.EventRecorder,
-				op.UnavailableOfferingsCache,
-				op.PricingProvider,
-			)...).
-		*/
-		//	WithWebhooks(ctx, webhooks.NewWebhooks()...).
 		Start(ctx)
 }

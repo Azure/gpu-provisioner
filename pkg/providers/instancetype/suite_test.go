@@ -36,7 +36,7 @@ import (
 	coretest "github.com/aws/karpenter-core/pkg/test"
 	. "github.com/aws/karpenter-core/pkg/test/expectations"
 
-	"github.com/gpu-vmprovisioner/pkg/apis"
+	"github.com/aws/karpenter-core/pkg/apis"
 	"github.com/gpu-vmprovisioner/pkg/apis/settings"
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 	"github.com/gpu-vmprovisioner/pkg/cloudprovider"
@@ -68,7 +68,7 @@ var _ = BeforeSuite(func() {
 	azureEnv = test.NewEnvironment(ctx, env)
 
 	fakeClock = &clock.FakeClock{}
-	cloudProvider = cloudprovider.New(azureEnv.InstanceTypesProvider, azureEnv.InstanceProvider, env.Client, azureEnv.ImageProvider)
+	cloudProvider = cloudprovider.New(azureEnv.InstanceTypesProvider, azureEnv.InstanceProvider, env.Client)
 	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
 	prov = provisioning.NewProvisioner(env.Client, env.KubernetesInterface.CoreV1(), events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster)
 })

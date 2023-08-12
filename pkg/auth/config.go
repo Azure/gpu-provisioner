@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-
 	"strconv"
 	"strings"
 	"time"
@@ -216,11 +215,6 @@ func (cfg *Config) TrimSpace() {
 // TODO: remove nolint on gocyclo. Added for now in order to pass "make verify" in azure/poc
 // nolint: gocyclo
 func (cfg *Config) validate() error {
-	// does not actually have to be specified in this context, NodeResourceGroup is used instead (for VMs)
-	// if cfg.ResourceGroup == "" {
-	//	return fmt.Errorf("resource group not set")
-	// }
-
 	if cfg.VMType == vmTypeAKS {
 		// Cluster name is a mandatory param to proceed.
 		if cfg.ClusterName == "" {

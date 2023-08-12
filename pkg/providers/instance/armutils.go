@@ -18,7 +18,6 @@ import (
 	"context"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 )
@@ -47,45 +46,6 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 		}
 	}
 	return err
-}
-
-func createVirtualMachine(ctx context.Context, client VirtualMachinesAPI, rg, vmName string, vm armcompute.VirtualMachine) (*armcompute.VirtualMachine, error) {
-	poller, err := client.BeginCreateOrUpdate(ctx, rg, vmName, vm, nil)
-	if err != nil {
-		return nil, err
-	}
-	res, err := poller.PollUntilDone(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &res.VirtualMachine, nil
-}
-
-func deleteVirtualMachine(ctx context.Context, client VirtualMachinesAPI, rg, vmName string) error {
-	poller, err := client.BeginDelete(ctx, rg, vmName, nil)
-	if err != nil {
-		return err
-	}
-	_, err = poller.PollUntilDone(ctx, nil)
-	if err != nil {
-		if sdkerrors.IsNotFoundErr(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-func createVirtualMachineExtension(ctx context.Context, client VirtualMachineExtensionsAPI, rg, vmName, extensionName string, vmExt armcompute.VirtualMachineExtension) (*armcompute.VirtualMachineExtension, error) {
-	poller, err := client.BeginCreateOrUpdate(ctx, rg, vmName, extensionName, vmExt, nil)
-	if err != nil {
-		return nil, err
-	}
-	res, err := poller.PollUntilDone(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &res.VirtualMachineExtension, nil
 }
 
 func createNic(ctx context.Context, client NetworkInterfacesAPI, rg, nicName string, nic armnetwork.Interface) (*armnetwork.Interface, error) {

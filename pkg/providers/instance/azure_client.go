@@ -22,7 +22,6 @@ import (
 	"github.com/Azure/skewer"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -37,42 +36,26 @@ type AgentPoolsAPI interface {
 	BeginDelete(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *armcontainerservice.AgentPoolsClientBeginDeleteOptions) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error)
 }
 
-type VirtualMachinesAPI interface {
-	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, vmName string, parameters armcompute.VirtualMachine, options *armcompute.VirtualMachinesClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcompute.VirtualMachinesClientCreateOrUpdateResponse], error)
-	Get(ctx context.Context, resourceGroupName string, vmName string, options *armcompute.VirtualMachinesClientGetOptions) (armcompute.VirtualMachinesClientGetResponse, error)
-	BeginDelete(ctx context.Context, resourceGroupName string, vmName string, options *armcompute.VirtualMachinesClientBeginDeleteOptions) (*runtime.Poller[armcompute.VirtualMachinesClientDeleteResponse], error)
-}
-
-type VirtualMachineExtensionsAPI interface {
-	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, vmName string, vmExtensionName string, extensionParameters armcompute.VirtualMachineExtension, options *armcompute.VirtualMachineExtensionsClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcompute.VirtualMachineExtensionsClientCreateOrUpdateResponse], error)
-}
-
 type NetworkInterfacesAPI interface {
 	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, networkInterfaceName string, parameters armnetwork.Interface, options *armnetwork.InterfacesClientBeginCreateOrUpdateOptions) (*runtime.Poller[armnetwork.InterfacesClientCreateOrUpdateResponse], error)
 }
 
 type AZClient struct {
-	agentPoolsClient               AgentPoolsAPI
-	virtualMachinesClient          VirtualMachinesAPI
-	virtualMachinesExtensionClient VirtualMachineExtensionsAPI
-	networkInterfacesClient        NetworkInterfacesAPI
+	agentPoolsClient        AgentPoolsAPI
+	networkInterfacesClient NetworkInterfacesAPI
 	// SKU CLIENT is still using track 1 because skewer does not support the track 2 path. We need to refactor this once skewer supports track 2
 	SKUClient skewer.ResourceClient
 }
 
 func NewAZClientFromAPI(
 	agentPoolsClient AgentPoolsAPI,
-	virtualMachinesClient VirtualMachinesAPI,
-	virtualMachinesExtensionClient VirtualMachineExtensionsAPI,
 	interfacesClient NetworkInterfacesAPI,
 	skuClient skewer.ResourceClient,
 ) *AZClient {
 	return &AZClient{
-		agentPoolsClient:               agentPoolsClient,
-		virtualMachinesClient:          virtualMachinesClient,
-		virtualMachinesExtensionClient: virtualMachinesExtensionClient,
-		networkInterfacesClient:        interfacesClient,
-		SKUClient:                      skuClient,
+		agentPoolsClient:        agentPoolsClient,
+		networkInterfacesClient: interfacesClient,
+		SKUClient:               skuClient,
 	}
 }
 
@@ -115,21 +98,11 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		return nil, err
 	}
 	klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
-
-	extClient, err := armcompute.NewVirtualMachineExtensionsClient(cfg.SubscriptionID, cred, opts)
-	if err != nil {
-		return nil, err
-	}
 	interfacesClient, err := armnetwork.NewInterfacesClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
 		return nil, err
 	}
 	klog.V(5).Infof("Created network interface client %v using token credential", interfacesClient)
-	virtualMachinesClient, err := armcompute.NewVirtualMachinesClient(cfg.SubscriptionID, cred, opts)
-	if err != nil {
-		return nil, err
-	}
-	klog.V(5).Infof("Created virtual machines client %v, using a token credential", virtualMachinesClient)
 
 	// TODO: this one is not enabled for rate limiting / throttling ...
 	// TODO Move this over to track 2 when skewer is migrated
@@ -138,10 +111,8 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
 
 	return &AZClient{
-		agentPoolsClient:               agentPoolClient,
-		networkInterfacesClient:        interfacesClient,
-		virtualMachinesClient:          virtualMachinesClient,
-		virtualMachinesExtensionClient: extClient,
-		SKUClient:                      skuClient,
+		agentPoolsClient:        agentPoolClient,
+		networkInterfacesClient: interfacesClient,
+		SKUClient:               skuClient,
 	}, nil
 }
