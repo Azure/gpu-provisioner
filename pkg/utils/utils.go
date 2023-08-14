@@ -35,3 +35,20 @@ func ParseInstanceID(providerID string) (*string, error) {
 	}
 	return nil, fmt.Errorf("parsing instance id %s", providerID)
 }
+
+// ParseAgentPoolNameFromID parses the id stored on the instance ID
+func ParseAgentPoolNameFromID(id string) (*string, error) {
+	//agentPool ID format: azure:///subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
+	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>).*`)
+	matches := r.FindStringSubmatch(id)
+	if matches == nil {
+		return nil, fmt.Errorf("parsing instance id %s", id)
+	}
+
+	for i, name := range r.SubexpNames() {
+		if name == "AgentPoolName" {
+			return &matches[i], nil
+		}
+	}
+	return nil, fmt.Errorf("parsing instance id %s", id)
+}

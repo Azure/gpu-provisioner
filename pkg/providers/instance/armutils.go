@@ -16,10 +16,10 @@ package instance
 
 import (
 	"context"
+	"log"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 )
 
 func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string, ap armcontainerservice.AgentPool) (*armcontainerservice.AgentPool, error) {
@@ -48,15 +48,27 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 	return err
 }
 
-func createNic(ctx context.Context, client NetworkInterfacesAPI, rg, nicName string, nic armnetwork.Interface) (*armnetwork.Interface, error) {
-	poller, err := client.BeginCreateOrUpdate(ctx, rg, nicName, nic, nil)
+func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
+	resp, err := client.Get(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := poller.PollUntilDone(ctx, nil)
 
-	if err != nil {
-		return nil, err
+	return &resp.AgentPool, nil
+}
+
+func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName string) ([]*armcontainerservice.AgentPool, error) {
+	var apList []*armcontainerservice.AgentPool
+	pager := client.NewListPager(rg, clusterName, nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			log.Fatalf("failed to advance page: %v", err)
+			return nil, err
+		}
+		for _, v := range page.Value {
+			apList = append(apList, v)
+		}
 	}
-	return &res.Interface, nil
+	return apList, nil
 }
