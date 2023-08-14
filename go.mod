@@ -24,11 +24,11 @@ require (
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/multierr v1.11.0
 	golang.org/x/crypto v0.11.0
-	k8s.io/api v0.27.1
-	k8s.io/apimachinery v0.27.1
+	k8s.io/api v0.25.4
+	k8s.io/apimachinery v0.25.4
 	k8s.io/klog/v2 v2.100.1
 	knative.dev/pkg v0.0.0-20230502134655-db8a35330281
-	sigs.k8s.io/cloud-provider-azure v1.27.7
+	sigs.k8s.io/cloud-provider-azure v1.25.4
 	sigs.k8s.io/controller-runtime v0.13.1
 )
 
@@ -83,7 +83,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/leodido/go-urn v1.2.4 // indirect
+	github.com/leodido/go-urn v1.2.3 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
@@ -106,7 +106,7 @@ require (
 	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/net v0.12.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
-	golang.org/x/sync v0.3.0 // indirect
+	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/term v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
@@ -122,9 +122,10 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.25.4 // indirect
-	k8s.io/client-go v0.27.1 // indirect
-	k8s.io/cloud-provider v0.27.1 // indirect
-	k8s.io/component-base v0.27.1 // indirect
+	k8s.io/client-go v0.25.4 // indirect
+	k8s.io/cloud-provider v0.25.4 // indirect
+	k8s.io/component-base v0.25.4 // indirect
+	k8s.io/component-helpers v0.25.4 // indirect
 	k8s.io/csi-translation-lib v0.25.4 // indirect
 	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
 	k8s.io/utils v0.0.0-20230209194617-a36077c30491 // indirect
