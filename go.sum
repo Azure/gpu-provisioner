@@ -150,6 +150,7 @@ github.com/envoyproxy/go-control-plane v0.9.9-0.20210512163311-63b5d3c536b0/go.m
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/evanphx/json-patch v0.5.2/go.mod h1:ZWS5hhDbVDyob71nXKNL0+PWn6ToqBHMikGIFbs31qQ=
 github.com/evanphx/json-patch v5.6.0+incompatible h1:jBYDEEiFBPxA0v50tFdvOzQQTCvpL6mnFh5mB2/l16U=
+github.com/evanphx/json-patch v5.6.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/evanphx/json-patch/v5 v5.6.0 h1:b91NhWfaz02IuVxO9faSllyAtNXHMPkC5J8sJCLunww=
 github.com/evanphx/json-patch/v5 v5.6.0/go.mod h1:G79N1coSVB93tBe7j6PhzjmR3/2VvlbKOFpnXhI9Bw4=
 github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
@@ -212,7 +213,6 @@ github.com/golang/mock v1.4.1/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt
 github.com/golang/mock v1.4.3/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt3cw=
 github.com/golang/mock v1.4.4/go.mod h1:l3mdAwkq5BuhzHwde/uurv3sEJeZMXNpwsxVWU71h+4=
 github.com/golang/mock v1.5.0/go.mod h1:CWnOUgYIOo4TcNZ0wHX3YZCqsaM1I1Jvs6v3mP3KVu8=
-github.com/golang/mock v1.6.0 h1:ErTB+efbowRARo13NNdxyJji2egdxLGQhRaY+DUumQc=
 github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
@@ -902,8 +902,6 @@ k8s.io/cloud-provider v0.25.4 h1:juIfru1jVX6BlDWcJ18sv6aWxMSMmcjWf2HNXUtnkiI=
 k8s.io/cloud-provider v0.25.4/go.mod h1:L018fvnYxHrJP93UNSu8ODZYd/HCukliBzzNsV4TqC0=
 k8s.io/component-base v0.25.4 h1:n1bjg9Yt+G1C0WnIDJmg2fo6wbEU1UGMRiQSjmj7hNQ=
 k8s.io/component-base v0.25.4/go.mod h1:nnZJU8OP13PJEm6/p5V2ztgX2oyteIaAGKGMYb2L2cY=
-k8s.io/component-helpers v0.25.4 h1:FIwp5ZzjaA7p0lekHQM28E7qTd9Aetx5O9e7r4n2Kqo=
-k8s.io/component-helpers v0.25.4/go.mod h1:X4KJ8SsJ/onWcDQkRhcE2WRG/iNMufCl7RsNSYtguJg=
 k8s.io/csi-translation-lib v0.25.4 h1:y8+C2sVIkA9K3Q8yofMc8DJzHUyKdFXlHk563nR1Kgc=
 k8s.io/csi-translation-lib v0.25.4/go.mod h1:T8l3i4NTGQ0xgXiBHEr4euaO1kw59sNrH57Fa6SXBCY=
 k8s.io/klog/v2 v2.100.1 h1:7WCHKK6K8fNhTqfBhISHQ97KrnJNFZMcQvKp7gP/tmg=
@@ -917,8 +915,6 @@ knative.dev/pkg v0.0.0-20230502134655-db8a35330281/go.mod h1:2qWPP9Gjh9Q7ETti+WR
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=
-sigs.k8s.io/cloud-provider-azure v1.25.4 h1:k4o/eTBDMKvD3E3cef7LjVacTV2b0AAqQChokEkyUpw=
-sigs.k8s.io/cloud-provider-azure v1.25.4/go.mod h1:1g5AIY4eh/xyCjaPDztIx9I4KuUnAw+Ff7YmCTVolIE=
 sigs.k8s.io/controller-runtime v0.13.1 h1:tUsRCSJVM1QQOOeViGeX3GMT3dQF1eePPw6sEE3xSlg=
 sigs.k8s.io/controller-runtime v0.13.1/go.mod h1:Zbz+el8Yg31jubvAEyglRZGdLAjplZl+PgtYNI6WNTI=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd h1:EDPBXCAspyGV4jQlpZSudPeMmr1bNJefnuqLsRAsHZo=
