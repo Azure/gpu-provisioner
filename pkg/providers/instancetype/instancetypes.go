@@ -64,7 +64,7 @@ func NewProvider(region string, cache *cache.Cache, resourceSkusClient skewer.Re
 	}
 }
 
-// Get all instance type options
+//List Get all instance type options
 func (p *Provider) List(
 	ctx context.Context, kc *v1alpha5.KubeletConfiguration) ([]*cloudprovider.InstanceType, error) {
 	p.Lock()
@@ -81,7 +81,7 @@ func (p *Provider) List(
 	var result []*cloudprovider.InstanceType
 	for _, sku := range skus {
 		instanceTypeZones := instanceTypeZones(sku, p.region)
-		instanceType := NewInstanceType(ctx, sku, kc, p.region, p.createOfferings(sku, instanceTypeZones))
+		instanceType := NewInstanceType(ctx, sku, kc, p.region, p.createOfferings(ctx, sku, instanceTypeZones))
 		if len(instanceType.Offerings) == 0 {
 			continue
 		}
@@ -107,7 +107,7 @@ func instanceTypeZones(sku *skewer.SKU, region string) sets.String {
 	})...)
 }
 
-func (p *Provider) createOfferings(sku *skewer.SKU, zones sets.String) []cloudprovider.Offering {
+func (p *Provider) createOfferings(ctx context.Context, sku *skewer.SKU, zones sets.String) []cloudprovider.Offering {
 	// TODO: AWS provider filters out offerings with recently unavailable capacity
 	// TODO: currently assumes each SKU can be either spot or regular (on-demand) (likely wrong? In price sheets I see SKUs with no spot prices ...)
 	spotRatio := .20 // just a guess at savings
@@ -146,7 +146,7 @@ func (p *Provider) getInstanceTypes(ctx context.Context) (map[string]*skewer.SKU
 		}
 	}
 
-	logging.FromContext(ctx).Debugf("Discovered %d SKUs", len(instanceTypes))
+	logging.FromContext(ctx).Debugf("Discovered %d SKUs for region %s", len(instanceTypes), p.region)
 	p.cache.SetDefault(InstanceTypesCacheKey, instanceTypes)
 	return instanceTypes, nil
 }

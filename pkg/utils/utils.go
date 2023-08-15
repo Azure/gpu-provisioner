@@ -52,3 +52,20 @@ func ParseAgentPoolNameFromID(id string) (*string, error) {
 	}
 	return nil, fmt.Errorf("parsing instance id %s", id)
 }
+
+// ParseResourceGroupFromID parses the id stored on the instance ID
+func ParseResourceGroupFromID(id string) (*string, error) {
+	//Azure ID format: azure:///subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
+	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/(?P<ResourceGroupName>).*/providers/Microsoft.ContainerService/managedClusters/.*`)
+	matches := r.SubexpNames()
+	if matches == nil {
+		return nil, fmt.Errorf("cannot match id %s", id)
+	}
+
+	for i, name := range r.SubexpNames() {
+		if name == "ResourceGroupName" {
+			return &matches[i], nil
+		}
+	}
+	return nil, fmt.Errorf("parsing id %s", id)
+}

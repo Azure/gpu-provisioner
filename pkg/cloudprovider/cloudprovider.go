@@ -119,8 +119,8 @@ func (c *CloudProvider) LivenessProbe(req *http.Request) error {
 
 // GetInstanceTypes returns all available InstanceTypes
 func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
-	provisioner = staticprovisioner.Sp
 	if provisioner.Spec.ProviderRef == nil {
+		logging.FromContext(ctx).Debug("Provider reference is nil")
 		return nil, nil
 	}
 

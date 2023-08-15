@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
 	"github.com/aws/karpenter-core/pkg/utils/pretty"
+	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
 	"github.com/samber/lo"
 	"knative.dev/pkg/logging"
 )
@@ -52,7 +52,7 @@ type Err struct {
 	lastUpdateTime time.Time
 }
 
-// NewPricingAPI returns a pricing API
+// NewAPI returns a pricing API
 func NewAPI() client.PricingAPI {
 	return client.New()
 }
