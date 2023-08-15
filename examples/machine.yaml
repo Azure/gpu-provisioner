@@ -1,17 +1,17 @@
 apiVersion: karpenter.sh/v1alpha5
 kind: Machine
 metadata:
-  name: heba-gpu-ap
+  name: heba-gpu-test
   labels:
     karpenter.sh/provisioner-name: default
 spec:
+  taints:
+    - key: "sku"
+      value: "gpu"
+      effect: "NoSchedule"
   machineTemplateRef:
     name: default
   requirements:
-  - key: karpenter.k8s.azure/sku-storage-premium-capable
-    operator: In
-    values:
-    - "true"
   - key: node.kubernetes.io/instance-type
     operator: In
     values:
@@ -60,6 +60,13 @@ spec:
     - Standard_NC12s_v3
     - Standard_NC24s_v3
     - Standard_NC24rs_v3
+    - Standard_NC12
+    - Standard_NC16as_T4_v3
+    - Standard_NC24
+    - Standard_NC24r
+    - Standard_NC4as_T4_v3
+    - Standard_NC64as_T4_v3
+    - Standard_NC8as_T4_v3
     - Standard_ND6s
     - Standard_ND12s
     - Standard_ND24s
@@ -75,10 +82,6 @@ spec:
     operator: In
     values:
     - amd64
-  - key: karpenter.k8s.azure/sku-networking-accelerated
-    operator: In
-    values:
-    - "true"
   - key: kubernetes.io/os
     operator: In
     values:
@@ -88,4 +91,5 @@ spec:
       cpu: 2310m
       memory: 725280Ki
       pods: "7"
+
 status:

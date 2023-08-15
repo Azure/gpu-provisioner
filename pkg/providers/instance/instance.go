@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 
@@ -37,7 +38,6 @@ import (
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 )
 
 type Provider struct {
@@ -73,93 +73,63 @@ func NewProvider(
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
-	// TODO: filterInstanceTypes
 	instanceTypes = orderInstanceTypesByPrice(instanceTypes, scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...))
-	id, err := p.launchInstance(ctx, p.clusterName, machine, instanceTypes)
+	ap, err := p.launchInstance(ctx, p.clusterName, machine, instanceTypes)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Instance{
-		ID: id,
+		ID:       ap.ID,
+		Type:     ap.Type,
+		SubnetID: ap.Properties.VnetSubnetID,
+		Tags:     ap.Properties.Tags,
 	}, err
 
 }
 
-func (p *Provider) Get(ctx context.Context, id *string) (*Instance, error) {
+func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
+	apObj, err := p.getAgentPool(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	return &Instance{
-		ID: id,
+		ID:       apObj.ID,
+		Type:     apObj.Type,
+		SubnetID: apObj.Properties.VnetSubnetID,
+		Tags:     apObj.Properties.Tags,
 	}, nil
 }
 
-func (p *Provider) List(_ context.Context) ([]*Instance, error) {
-	// Use the machine name data to determine which instances match this machine
-	return nil, fmt.Errorf("not implemented")
+func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
+	apList, err := p.listAgentPools(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var instanceList []*Instance
+	for _, ap := range apList {
+		instanceList = append(instanceList, &Instance{
+			ID:       ap.ID,
+			Type:     ap.Type,
+			SubnetID: ap.Properties.VnetSubnetID,
+			Tags:     ap.Properties.Tags,
+		})
+	}
+	return instanceList, nil
 }
 
 func (p *Provider) Delete(ctx context.Context, id string) error {
-	return nil
+	return p.deleteAgentPool(ctx, id)
 }
 
-func (p *Provider) newNetworkInterfaceForVM(vmName string) armnetwork.Interface {
-	return armnetwork.Interface{
-		Location: to.Ptr(p.location),
-		Properties: &armnetwork.InterfacePropertiesFormat{
-			IPConfigurations: []*armnetwork.InterfaceIPConfiguration{
-				{
-					Name: &vmName,
-					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-						Primary:                   to.Ptr(true),
-						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-						Subnet: &armnetwork.Subnet{
-							ID: &p.subnetID,
-						},
-					},
-				},
-				// TODO: For Azure CNI, need to generate number of IP configs matching the max number of Pods?
-				{
-					Name: to.Ptr("ip1"),
-					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-						Subnet: &armnetwork.Subnet{
-							ID: &p.subnetID,
-						},
-					},
-				},
-				{
-					Name: to.Ptr("ip2"),
-					Properties: &armnetwork.InterfaceIPConfigurationPropertiesFormat{
-						PrivateIPAllocationMethod: to.Ptr(armnetwork.IPAllocationMethodDynamic),
-						Subnet: &armnetwork.Subnet{
-							ID: &p.subnetID,
-						},
-					},
-				},
-			},
-			EnableAcceleratedNetworking: to.Ptr(true),
-			EnableIPForwarding:          to.Ptr(true),
-		},
-	}
-}
-
-func (p *Provider) createNetworkInterface(ctx context.Context, nicName string) (string, error) {
-	nic := p.newNetworkInterfaceForVM(nicName)
-	logging.FromContext(ctx).Debugf("Creating network interface %s", nicName)
-	res, err := createNic(ctx, p.azClient.networkInterfacesClient, p.resourceGroup, nicName, nic)
-	if err != nil {
-		return "", err
-	}
-	logging.FromContext(ctx).Debugf("Successfully created network interface: %v", *res.ID)
-	return *res.ID, nil
-}
-
-func newAgentPoolObject(vmSize string) armcontainerservice.AgentPool {
+func newAgentPoolObject(vmSize string, taints []*string) armcontainerservice.AgentPool {
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-			NodeTaints:        []*string{to.Ptr("sku=gpu:NoSchedule")},
+			NodeTaints:        taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
 			Type:              to.Ptr(scaleSetsType),
-			VMSize:            to.Ptr(vmSize), //Standard_NC6
+			VMSize:            to.Ptr(vmSize),
 			EnableAutoScaling: to.Ptr(true),
 			Count:             to.Ptr(int32(1)),
 			MinCount:          to.Ptr(int32(1)),
@@ -168,30 +138,68 @@ func newAgentPoolObject(vmSize string) armcontainerservice.AgentPool {
 	}
 }
 
-func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.AgentPool, apName, clusterName string) error {
+func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.AgentPool, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
 	result, err := createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, clusterName, ap)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Creating virtual machine %q failed: %v", apName, err)
-		return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
+		return nil, fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
 	}
 	logging.FromContext(ctx).Debugf("Created agent pool %s", *result.ID)
-	return nil
+	return result, nil
 }
-func (p *Provider) launchInstance(
-	ctx context.Context, clusterName string, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*string, error) {
-	apName := strings.ReplaceAll("apgputest", "-", "")
-	vmSize := "standard_nc12s_v3" //"standard_nc6s_v3"
 
-	//sshPublicKey := settings.FromContext(ctx).SSHPublicKey
-	ap := newAgentPoolObject(vmSize)
+func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerservice.AgentPool, error) {
+	apName, err := utils.ParseAgentPoolNameFromID(id)
+	if err != nil {
+		return nil, fmt.Errorf("getting agentpool name, %w", err)
+	}
+	result, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Creating agentpool %q failed: %v", apName, err)
+		return nil, fmt.Errorf("agentPool.Get for %q failed: %w", &apName, err)
+	}
+	return result, err
+}
+
+func (p *Provider) deleteAgentPool(ctx context.Context, id string) error {
+	apName, err := utils.ParseAgentPoolNameFromID(id)
+	if err != nil {
+		return fmt.Errorf("getting agentpool name, %w", err)
+	}
+	err = deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
+		return fmt.Errorf("agentPool.Delete for %q failed: %w", &apName, err)
+	}
+	return err
+}
+func (p *Provider) listAgentPools(ctx context.Context) ([]*armcontainerservice.AgentPool, error) {
+	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
+		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
+	}
+	return apList, err
+}
+
+func (p *Provider) launchInstance(
+	ctx context.Context, clusterName string, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*armcontainerservice.AgentPool, error) {
+	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
+	vmSize := instanceTypes[0].Name //"standard_nc12s_v3", "standard_nc6s_v3"
+	taints := machine.Spec.Taints
+	var taintsStr []*string
+	for _, t := range taints {
+		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+	}
+	ap := newAgentPoolObject(vmSize, taintsStr)
 
 	logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
 	// Uses AZ Client to create a new agent pool using the agentpool object we prepared earlier
-	err := p.createAgentPool(ctx, ap, apName, clusterName)
+	apObj, err := p.createAgentPool(ctx, ap, apName, clusterName)
 	if err != nil {
 		return nil, err
 	}
-	return &apName, nil
+	return apObj, nil
 }
 
 // getPriorityForInstanceType selects spot if both constraints are flexible and there is an available offering.
