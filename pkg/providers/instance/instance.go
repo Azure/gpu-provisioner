@@ -127,13 +127,12 @@ func newAgentPoolObject(vmSize string, taints []*string) armcontainerservice.Age
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-			NodeTaints:        taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
-			Type:              to.Ptr(scaleSetsType),
-			VMSize:            to.Ptr(vmSize),
-			EnableAutoScaling: to.Ptr(true),
-			Count:             to.Ptr(int32(1)),
-			MinCount:          to.Ptr(int32(1)),
-			MaxCount:          to.Ptr(int32(3)),
+			NodeTaints: taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			Type:       to.Ptr(scaleSetsType),
+			VMSize:     to.Ptr(vmSize),
+			Count:      to.Ptr(int32(1)),
+			MinCount:   to.Ptr(int32(1)),
+			MaxCount:   to.Ptr(int32(3)),
 		},
 	}
 }
