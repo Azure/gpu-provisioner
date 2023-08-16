@@ -28,7 +28,7 @@ func ParseAgentPoolNameFromID(id string) (*string, error) {
 		return nil, fmt.Errorf("parsing instance id %s", id)
 	}
 
-	for i, name := range matches {
+	for i, name := range r.SubexpNames() {
 		if name == "AgentPoolName" {
 			return &matches[i], nil
 		}
