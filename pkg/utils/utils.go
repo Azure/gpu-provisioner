@@ -21,8 +21,8 @@ import (
 
 // ParseAgentPoolNameFromID parses the id stored on the instance ID
 func ParseAgentPoolNameFromID(id string) (*string, error) {
-	//agentPool ID format: azure:///subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
-	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>)`)
+	//agentPool ID format: azure:///subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
+	r := regexp.MustCompile(`azure:///subscriptions/.*/resourcegroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>.*)`)
 	matches := r.FindStringSubmatch(id)
 	if matches == nil {
 		return nil, fmt.Errorf("parsing instance id %s", id)
