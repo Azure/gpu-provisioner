@@ -23,10 +23,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/gpu-vmprovisioner/pkg/utils"
-	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/util/retry"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/logging"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
@@ -89,6 +88,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
+
 	apObj, err := p.getAgentPool(ctx, id)
 	if err != nil {
 		return nil, err
@@ -123,16 +123,15 @@ func (p *Provider) Delete(ctx context.Context, id string) error {
 	return p.deleteAgentPool(ctx, id)
 }
 
-func newAgentPoolObject(vmSize string, taints []*string) armcontainerservice.AgentPool {
+func newAgentPoolObject(vmSize, capacityType string, taints []*string) armcontainerservice.AgentPool {
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-			NodeTaints: taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
-			Type:       to.Ptr(scaleSetsType),
-			VMSize:     to.Ptr(vmSize),
-			Count:      to.Ptr(int32(1)),
-			MinCount:   to.Ptr(int32(1)),
-			MaxCount:   to.Ptr(int32(3)),
+			NodeTaints:       taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			Type:             to.Ptr(scaleSetsType),
+			VMSize:           to.Ptr(vmSize),
+			Count:            to.Ptr(int32(1)), //TODO to pass it
+			ScaleSetPriority: (*armcontainerservice.ScaleSetPriority)(to.Ptr(capacityType)),
 		},
 	}
 }
@@ -148,14 +147,15 @@ func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.A
 }
 
 func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerservice.AgentPool, error) {
-	apName, err := utils.ParseAgentPoolNameFromID(id)
+	providerID := fmt.Sprintf("azure://%s", id)
+	apName, err := utils.ParseAgentPoolNameFromID(providerID)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
 	}
 	result, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Creating agentpool %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.Get for %q failed: %w", &apName, err)
+		return nil, fmt.Errorf("agentPool.Get for %q failed: %w", *apName, err)
 	}
 	return result, err
 }
@@ -167,8 +167,8 @@ func (p *Provider) deleteAgentPool(ctx context.Context, id string) error {
 	}
 	err = deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
 	if err != nil {
-		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
-		return fmt.Errorf("agentPool.Delete for %q failed: %w", &apName, err)
+		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", *apName, err)
+		return fmt.Errorf("agentPool.Delete for %q failed: %w", *apName, err)
 	}
 	return err
 }
@@ -184,17 +184,33 @@ func (p *Provider) listAgentPools(ctx context.Context) ([]*armcontainerservice.A
 func (p *Provider) launchInstance(
 	ctx context.Context, clusterName string, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*armcontainerservice.AgentPool, error) {
 	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
-	vmSize := instanceTypes[0].Name //"standard_nc12s_v3", "standard_nc6s_v3"
-	taints := machine.Spec.Taints
-	var taintsStr []*string
-	for _, t := range taints {
-		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
-	}
-	ap := newAgentPoolObject(vmSize, taintsStr)
 
-	logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
 	// Uses AZ Client to create a new agent pool using the agentpool object we prepared earlier
-	apObj, err := p.createAgentPool(ctx, ap, apName, clusterName)
+	var apObj *armcontainerservice.AgentPool
+	var err error
+	index := 0
+
+	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		index++
+		return (index <= len(instanceTypes)) && (instanceTypes[index] != nil)
+	}, func() error {
+		instanceType := instanceTypes[index]
+		capacityType := p.getPriorityForInstanceType(machine, instanceType)
+		if instanceType == nil {
+			return fmt.Errorf("no instance types available")
+		}
+		vmSize := instanceType.Name
+		taints := machine.Spec.Taints
+		var taintsStr []*string
+		for _, t := range taints {
+			taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+		}
+		ap := newAgentPoolObject(vmSize, capacityType, taintsStr)
+
+		logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
+		apObj, err = p.createAgentPool(ctx, ap, apName, clusterName)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -218,26 +234,6 @@ func (p *Provider) getPriorityForInstanceType(machine *v1alpha5.Machine, instanc
 		}
 	}
 	return v1alpha1.PriorityRegular
-}
-
-// pick the "best" SKU, priority and zone, from InstanceType options (and their offerings) in the request
-func (p *Provider) pickSkuSizePriorityAndZone(machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*corecloudprovider.InstanceType, string, string) {
-	if len(instanceTypes) == 0 {
-		return nil, "", ""
-	}
-	// InstanceType/VM SKU - just pick the first one for now. They are presorted by cheapest offering price (taking node requirements into account)
-	instanceType := instanceTypes[0]
-	// Priority - Provisioner defaults to Regular, so pick Spot if it is explicitly included in requirements (and is offered in at least one zone)
-	priority := p.getPriorityForInstanceType(machine, instanceType)
-	// Zone - ideally random/spread from zones that support given Priority
-	priorityOfferings := lo.Filter(instanceType.Offerings.Available(), func(o corecloudprovider.Offering, _ int) bool { return o.CapacityType == priority })
-	zonesWithPriority := lo.Map(priorityOfferings, func(o corecloudprovider.Offering, _ int) string { return o.Zone })
-	zone := sets.NewString(zonesWithPriority...).UnsortedList()[0] // ~ random pick
-	// Zones in Offerings have <region>-<number> format; the zone returned from here will be used for VM instantiation,
-	// which expects just the zone number, without region
-	zone = string(zone[len(zone)-1])
-
-	return instanceType, priority, zone
 }
 
 func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, requirements scheduling.Requirements) []*corecloudprovider.InstanceType {

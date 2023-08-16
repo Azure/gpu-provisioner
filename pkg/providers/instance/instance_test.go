@@ -79,11 +79,11 @@ func TestGetPriorityCapacityAndInstanceType(t *testing.T) {
 		"cluster-name")
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			instanceType, priority, zone := provider.pickSkuSizePriorityAndZone(c.machine, c.instanceTypes)
+			instanceType := c.instanceTypes[0]
+			priority := provider.getPriorityForInstanceType(c.machine, instanceType)
 			if instanceType != nil {
 				assert.Equal(t, c.expectedInstanceType, instanceType.Name)
 			}
-			assert.Equal(t, c.expectedZone, zone)
 			assert.Equal(t, c.expectedPriority, priority)
 		})
 	}

@@ -104,11 +104,6 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		scheduling.NewRequirement(v1.LabelInstanceTypeStable, v1.NodeSelectorOpIn, sku.GetName()),
 		scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpIn, getArchitecture(sku)),
 		scheduling.NewRequirement(v1.LabelOSStable, v1.NodeSelectorOpIn, string(v1.Linux)),
-		scheduling.NewRequirement(
-			v1.LabelTopologyZone,
-			v1.NodeSelectorOpIn,
-			lo.Map(offerings.Available(),
-				func(o cloudprovider.Offering, _ int) string { return o.Zone })...),
 		scheduling.NewRequirement(v1.LabelTopologyRegion, v1.NodeSelectorOpIn, region),
 
 		// Well Known to Karpenter
@@ -189,7 +184,6 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		}
 	}
 
-	// TODO: Handle zonal availability (IsUltraSSDAvailableInAvailabilityZone).
 	// (How? Would have to introduce requirements at offerring level ...)
 	if IsPremiumIO(sku) {
 		requirements[v1alpha1.LabelSKUStoragePremiumCapable].Insert("true")

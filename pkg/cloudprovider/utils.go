@@ -3,14 +3,12 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/utils/functional"
 	"github.com/aws/karpenter-core/pkg/utils/resources"
 	"github.com/gpu-vmprovisioner/pkg/providers/instance"
-	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -45,15 +43,10 @@ func (c *CloudProvider) instanceToMachine(ctx context.Context, instance *instanc
 
 	machine.CreationTimestamp = metav1.Time{Time: instance.LaunchTime}
 
-	providerID := fmt.Sprintf("azure://%s", lo.FromPtr(instance.ID))
-	// for historical reasons Azure providerID has the resource group name in lower case
-	providerIDLowerRG, err := utils.ParseResourceGroupFromID(providerID)
-	if err == nil && providerIDLowerRG != nil {
-		machine.Status.ProviderID = strings.ToLower(*providerIDLowerRG)
+	if instance != nil && instance.ID != nil {
+		machine.Status.ProviderID = fmt.Sprintf("azure://%s", lo.FromPtr(instance.ID))
 	} else {
-		logging.FromContext(ctx).Warnf("Failed to convert resource group name to lower case %s: %v", providerID, err)
-		// fallback to original providerID
-		machine.Status.ProviderID = providerID
+		logging.FromContext(ctx).Warnf("Provider ID cannot be nil")
 	}
 
 	return machine

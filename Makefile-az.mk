@@ -10,11 +10,11 @@ ifeq ($(CODESPACES),true)
   AZURE_RESOURCE_GROUP=$(CODESPACE_NAME)
   AZURE_ACR_NAME=$(subst -,,$(CODESPACE_NAME))
 else
-  AZURE_RESOURCE_GROUP=heba-gpu-test
+  AZURE_RESOURCE_GROUP=gpu-provisioner-test
   AZURE_ACR_NAME=gpuprovisioner
 endif
 
-AZURE_CLUSTER_NAME=heba-gpu-ap
+AZURE_CLUSTER_NAME=gpu-provisioner-ap
 AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
 az-all:      az-login az-mkaks      az-perm az-patch-skaffold-kubenet az-build az-run az-run-sample ## Provision the infra (ACR,AKS); build and deploy Karpenter; deploy sample Provisioner and workload
@@ -28,7 +28,7 @@ az-mkrg: ## Create resource group
 	az group create --name $(AZURE_RESOURCE_GROUP) --location $(AZURE_LOCATION) -o none
 
 az-mkacr: az-mkrg ## Create test ACR
-	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Basic --admin-enabled -o none
+	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Standard --admin-enabled -o none
 	az acr login  --name $(AZURE_ACR_NAME)
 	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
@@ -86,10 +86,9 @@ az-rmvmss-vms: ## Delete all VMs in VMSS Flex (use with care!)
 
 az-perm: ## Create role assignments to let Karpenter manage VMs and Network
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP_MC) --role "Virtual Machine Contributor"
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP)    --role "Virtual Machine Contributor"
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP_MC) --role "Network Contributor"
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --resource-group $(AZURE_RESOURCE_GROUP)    --role "Network Contributor" # in some case we create vnet here
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) --role "Virtual Machine Contributor"
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    --role "Contributor"
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    --role "Azure Kubernetes Service RBAC Cluster Admin"
 	@echo Consider "make az-patch-skaffold"!
 
 az-perm-acr:
@@ -97,7 +96,7 @@ az-perm-acr:
 	$(eval AZURE_ACR_ID=$(shell    az acr show --name $(AZURE_ACR_NAME)     --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".id"))
 	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope $(AZURE_ACR_ID) --role "AcrPull"
 
-az-build: ## Build the Karpenter controller and webhook images using skaffold build (which uses ko build)
+az-build: ## Build the gpu-provisioner controller and webhook images using skaffold build (which uses ko build)
 	az acr login -n $(AZURE_ACR_NAME)
 	skaffold build
 
@@ -130,12 +129,6 @@ az-mon-deploy: ## Deploy monitoring stack (w/o node-exporter)
 	helm repo update
 
 	kubectl create namespace monitoring || true
-
-	curl -fsSL https://karpenter.sh/"$(KARPENTER_VERSION)"/getting-started/getting-started-with-eksctl/prometheus-values.yaml | tee prometheus-values.yaml
-	helm install --namespace monitoring prometheus prometheus-community/prometheus --values prometheus-values.yaml --set nodeExporter.enabled=false
-
-	curl -fsSL https://karpenter.sh/"$(KARPENTER_VERSION)"/getting-started/getting-started-with-eksctl/grafana-values.yaml | tee grafana-values.yaml
-	helm install --namespace monitoring grafana grafana-charts/grafana --values grafana-values.yaml
 
 az-mon-access: ## Get Grafana admin password and forward port
 	kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode; echo
