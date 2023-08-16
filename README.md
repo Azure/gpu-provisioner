@@ -1,5 +1,5 @@
 # Azure GPU VM Provisioner
-This is a fork of Karpenter machine controller. 
+This is a fork of the `Karpenter` machine controller. 
 
 ## How to clone
 After cloning the repo from `https://github.com/Azure/karpenter`,
@@ -24,10 +24,9 @@ If you already have a working cluster, just run
 ```
 make az-perm
 make az-patch-skaffold-kubenet
-kubectl apply -f charts/gpu-provisioner/crds/karpenter.sh_machines.yaml
-skaffold run
+make az-run
 ```
 You should have a running controller in `gpu-provisioner` namespace.
 
 ## How to test
-After deploying the controller successfully, one can apply the yaml in `/example` to creating a machine CR. A real node will be created and added to the cluster by the controller.
+After deploying the controller successfully, one can apply the yaml in `/example` to create a machine CR. A real node will be created and added to the cluster by the controller.
