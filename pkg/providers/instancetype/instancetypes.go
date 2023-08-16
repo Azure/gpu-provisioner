@@ -21,13 +21,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/samber/lo"
-
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 
 	kcache "github.com/gpu-vmprovisioner/pkg/cache"
 	"github.com/patrickmn/go-cache"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/logging"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
@@ -76,12 +73,10 @@ func (p *Provider) List(
 	}
 
 	// Get Viable offerings
-	/// AWS here gets general zone availability info for all instanceTypes (filtered by subnet) and uses it later
-	/// Azure is going to have zones availability directly from SKU info
+
 	var result []*cloudprovider.InstanceType
 	for _, sku := range skus {
-		instanceTypeZones := instanceTypeZones(sku, p.region)
-		instanceType := NewInstanceType(ctx, sku, kc, p.region, p.createOfferings(ctx, sku, instanceTypeZones))
+		instanceType := NewInstanceType(ctx, sku, kc, p.region, p.createOfferings(ctx, sku))
 		if len(instanceType.Offerings) == 0 {
 			continue
 		}
@@ -97,31 +92,19 @@ func (p *Provider) LivenessProbe(req *http.Request) error {
 	return p.pricingProvider.LivenessProbe(req)
 }
 
-// instanceTypeZones generates the set of all supported zones for a given SKU
-// The strings have to match Zone labels that will be placed on Node
-func instanceTypeZones(sku *skewer.SKU, region string) sets.String {
-	// skewer returns numerical zones, like "1" (as keys in the map);
-	// prefix each zone with "<region>-", to have them match the labels placed on Node (e.g. "westus2-1")
-	return sets.NewString(lo.Map(lo.Keys(sku.AvailabilityZones(region)), func(zone string, _ int) string {
-		return fmt.Sprintf("%s-%s", region, zone)
-	})...)
-}
-
-func (p *Provider) createOfferings(ctx context.Context, sku *skewer.SKU, zones sets.String) []cloudprovider.Offering {
+func (p *Provider) createOfferings(ctx context.Context, sku *skewer.SKU) []cloudprovider.Offering {
 	// TODO: AWS provider filters out offerings with recently unavailable capacity
 	// TODO: currently assumes each SKU can be either spot or regular (on-demand) (likely wrong? In price sheets I see SKUs with no spot prices ...)
 	spotRatio := .20 // just a guess at savings
-	offerings := []cloudprovider.Offering{}
-	for zone := range zones {
-		onDemandPrice, ok := p.pricingProvider.OnDemandPrice(*sku.Name)
-		spotPrice := onDemandPrice * spotRatio
+	var offerings []cloudprovider.Offering
+	onDemandPrice, ok := p.pricingProvider.OnDemandPrice(*sku.Name)
+	spotPrice := onDemandPrice * spotRatio
 
-		if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PrioritySpot) {
-			offerings = append(offerings, cloudprovider.Offering{Zone: zone, CapacityType: v1alpha1.PrioritySpot, Price: spotPrice, Available: ok})
-		}
-		if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PriorityRegular) {
-			offerings = append(offerings, cloudprovider.Offering{Zone: zone, CapacityType: v1alpha1.PriorityRegular, Price: onDemandPrice, Available: ok})
-		}
+	if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PrioritySpot) {
+		offerings = append(offerings, cloudprovider.Offering{Zone: "", CapacityType: v1alpha1.PrioritySpot, Price: spotPrice, Available: ok})
+	}
+	if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PriorityRegular) {
+		offerings = append(offerings, cloudprovider.Offering{Zone: "", CapacityType: v1alpha1.PriorityRegular, Price: onDemandPrice, Available: ok})
 	}
 	return offerings
 }

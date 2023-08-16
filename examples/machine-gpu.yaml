@@ -1,0 +1,62 @@
+apiVersion: karpenter.sh/v1alpha5
+kind: Machine
+metadata:
+  name: machine-gpu-only
+  labels:
+    karpenter.sh/provisioner-name: default
+spec:
+  taints:
+    - key: "sku"
+      value: "gpu"
+      effect: "NoSchedule"
+  machineTemplateRef:
+    name: gpuonlytest
+  requirements:
+  - key: node.kubernetes.io/instance-type
+    operator: In
+    values:
+#    - Standard_NC6
+#    - Standard_NC12
+#    - Standard_NC24
+#    - Standard_NC24r
+#    - Standard_NC6s_v2
+#    - Standard_NC12s_v2
+#    - Standard_NC24s_v2
+#    - Standard_NC24rs_v2
+#    - Standard_NC6s_v3
+    - Standard_NC12s_v3
+#    - Standard_NC24s_v3
+#    - Standard_NC24rs_v3
+#    - Standard_NC12
+#    - Standard_NC16as_T4_v3
+#    - Standard_NC24
+#    - Standard_NC24r
+#    - Standard_NC4as_T4_v3
+#    - Standard_NC64as_T4_v3
+#    - Standard_NC8as_T4_v3
+#    - Standard_ND6s
+#    - Standard_ND12s
+#    - Standard_ND24s
+#    - Standard_ND24rs
+#    - Standard_NV6
+#    - Standard_NV12
+#    - Standard_NV24
+  - key: karpenter.sh/provisioner-name
+    operator: In
+    values:
+    - default
+  - key: kubernetes.io/arch
+    operator: In
+    values:
+    - amd64
+  - key: kubernetes.io/os
+    operator: In
+    values:
+    - linux
+  resources:
+    requests:
+      cpu: 2310m
+      memory: 725280Ki
+      pods: "7"
+
+status:

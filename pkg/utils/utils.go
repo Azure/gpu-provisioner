@@ -19,53 +19,19 @@ import (
 	"regexp"
 )
 
-// ParseInstanceID parses the provider ID stored on the node to get the instance ID
-// associated with a node
-func ParseInstanceID(providerID string) (*string, error) {
-	// standalone VMs have providerID in the format: azure:///subscriptions/<subscriptionID>/resourceGroups/<resourceGroup>/providers/Microsoft.Compute/virtualMachines/<instanceID>
-	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.Compute/virtualMachines/(?P<InstanceID>.*)`)
-	matches := r.FindStringSubmatch(providerID)
-	if matches == nil {
-		return nil, fmt.Errorf("parsing instance id %s", providerID)
-	}
-	for i, name := range r.SubexpNames() {
-		if name == "InstanceID" {
-			return &matches[i], nil
-		}
-	}
-	return nil, fmt.Errorf("parsing instance id %s", providerID)
-}
-
 // ParseAgentPoolNameFromID parses the id stored on the instance ID
 func ParseAgentPoolNameFromID(id string) (*string, error) {
 	//agentPool ID format: azure:///subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
-	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>).*`)
-	matches := r.FindStringSubmatch(id)
+	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>)`)
+	matches := r.FindStringSubmatch("AgentPoolName")
 	if matches == nil {
 		return nil, fmt.Errorf("parsing instance id %s", id)
 	}
 
-	for i, name := range r.SubexpNames() {
+	for i, name := range matches {
 		if name == "AgentPoolName" {
 			return &matches[i], nil
 		}
 	}
 	return nil, fmt.Errorf("parsing instance id %s", id)
-}
-
-// ParseResourceGroupFromID parses the id stored on the instance ID
-func ParseResourceGroupFromID(id string) (*string, error) {
-	//Azure ID format: azure:///subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
-	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/(?P<ResourceGroupName>).*/providers/Microsoft.ContainerService/managedClusters/.*`)
-	matches := r.SubexpNames()
-	if matches == nil {
-		return nil, fmt.Errorf("cannot match id %s", id)
-	}
-
-	for i, name := range r.SubexpNames() {
-		if name == "ResourceGroupName" {
-			return &matches[i], nil
-		}
-	}
-	return nil, fmt.Errorf("parsing id %s", id)
 }

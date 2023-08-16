@@ -20,13 +20,11 @@ import (
 	"net/http"
 
 	v1 "k8s.io/api/core/v1"
-	"knative.dev/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gpu-vmprovisioner/pkg/apis"
 	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
-	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 
 	coreapis "github.com/aws/karpenter-core/pkg/apis"
@@ -96,12 +94,7 @@ func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
 }
 
 func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.Machine, error) {
-	id, err := utils.ParseInstanceID(providerID)
-	if err != nil {
-		return nil, fmt.Errorf("getting instance ID, %w", err)
-	}
-	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("id", id))
-	instance, err := c.instanceProvider.Get(ctx, *id)
+	instance, err := c.instanceProvider.Get(ctx, providerID)
 
 	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
 	if err != nil {
@@ -119,12 +112,8 @@ func (c *CloudProvider) LivenessProbe(req *http.Request) error {
 
 // GetInstanceTypes returns all available InstanceTypes
 func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
-	if provisioner.Spec.ProviderRef == nil {
-		logging.FromContext(ctx).Debug("Provider reference is nil")
-		return nil, nil
-	}
 
-	instanceTypes, err := c.instanceTypeProvider.List(ctx, provisioner.Spec.KubeletConfiguration)
+	instanceTypes, err := c.instanceTypeProvider.List(ctx, staticprovisioner.Sp.Spec.KubeletConfiguration)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +121,11 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alp
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
-	return c.instanceProvider.Delete(ctx, machine.Name)
+	return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
 }
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {
-	provisioner := staticprovisioner.Sp
-	if provisioner.Spec.ProviderRef == nil {
-		return false, nil
-	}
-
-	imageDrifted, err := c.isImageDrifted(ctx, machine, provisioner)
+	imageDrifted, err := c.isImageDrifted(ctx, machine, staticprovisioner.Sp)
 	if err != nil {
 		return false, err
 	}
