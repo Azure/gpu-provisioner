@@ -37,6 +37,9 @@ func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) error {
 	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
 	if err != nil {
+		if sdkerrors.IsNotFoundErr(err) {
+			return nil
+		}
 		return err
 	}
 	_, err = poller.PollUntilDone(ctx, nil)

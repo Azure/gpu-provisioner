@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	LabelAgentPoolName = "gpu-provisioner.sh/agent-pool-name"
+	LabelAgentPoolName = "agentpool" // This is the label used in the node object, it has to be in the machine CR as well.
 	LabelMachineType   = "gpu-provisioner.sh/machine-type"
 )
 
