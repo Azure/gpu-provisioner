@@ -34,7 +34,7 @@ func IsResponseError(err error) *azcore.ResponseError {
 // IsNotFoundErr is used to determine if we are failing to find a resource within azure.
 func IsNotFoundErr(err error) bool {
 	azErr := IsResponseError(err)
-	return azErr != nil && azErr.ErrorCode == ResourceNotFound
+	return azErr != nil && (azErr.ErrorCode == ResourceNotFound || azErr.ErrorCode == NotFound)
 }
 
 // SubscriptionQuotaHasBeenReached tells us if we have exceeded our Quota.
