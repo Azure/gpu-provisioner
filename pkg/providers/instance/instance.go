@@ -23,8 +23,12 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/gpu-vmprovisioner/pkg/utils"
+	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"knative.dev/pkg/logging"
 
@@ -39,11 +43,18 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 )
 
+const (
+	LabelAgentPoolName = "gpu-provisioner.sh/agent-pool-name"
+	LabelMachineType   = "gpu-provisioner.sh/machine-type"
+)
+
 type Provider struct {
 	location             string
 	azClient             *AZClient
+	kubeClient           client.Client
 	instanceTypeProvider *instancetype.Provider
 	resourceGroup        string
+	nodeResourceGroup    string
 	subnetID             string
 	clusterName          string
 	unavailableOfferings *cache.UnavailableOfferings
@@ -51,18 +62,22 @@ type Provider struct {
 
 func NewProvider(
 	azClient *AZClient,
+	kubeClient client.Client,
 	instanceTypeProvider *instancetype.Provider,
 	offeringsCache *cache.UnavailableOfferings,
 	location string,
 	resourceGroup string,
+	nodeResourceGroup string,
 	subnetID string,
 	clusterName string,
 ) *Provider {
 	return &Provider{
 		azClient:             azClient,
+		kubeClient:           kubeClient,
 		instanceTypeProvider: instanceTypeProvider,
 		location:             location,
 		resourceGroup:        resourceGroup,
+		nodeResourceGroup:    nodeResourceGroup,
 		subnetID:             subnetID,
 		clusterName:          clusterName,
 		unavailableOfferings: offeringsCache,
@@ -77,28 +92,43 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 	if err != nil {
 		return nil, err
 	}
+	subID, err := utils.ParseSubIDFromID(lo.FromPtr(ap.ID))
+	if err != nil {
+		return nil, err
+	}
 
-	return &Instance{
-		ID:       ap.ID,
-		Type:     ap.Type,
-		SubnetID: ap.Properties.VnetSubnetID,
-		Tags:     ap.Properties.Tags,
-	}, err
+	node, err := p.getNodeName(ctx, lo.FromPtr(ap.Name))
+	if err != nil {
+		return nil, err
+	}
 
+	return p.fromAgentPoolToInstance(lo.FromPtr(subID), node.Name, ap), err
+}
+
+// GetVMSSNodeProviderID generates the provider ID for a virtual machine scale set.
+func (p *Provider) GetVMSSNodeProviderID(subscriptionID, scaleSetName string) string {
+	return fmt.Sprintf(
+		"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/%s/virtualMachines/0", //vm = 0 as ew have the count always 1
+		subscriptionID,
+		strings.ToLower(p.nodeResourceGroup),
+		scaleSetName,
+	)
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
-
 	apObj, err := p.getAgentPool(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return &Instance{
-		ID:       apObj.ID,
-		Type:     apObj.Type,
-		SubnetID: apObj.Properties.VnetSubnetID,
-		Tags:     apObj.Properties.Tags,
-	}, nil
+	subID, err := utils.ParseSubIDFromID(lo.FromPtr(apObj.ID))
+	if err != nil {
+		return nil, err
+	}
+	vm, err := p.getNodeName(ctx, lo.FromPtr(apObj.Name))
+	if err != nil {
+		return nil, err
+	}
+	return p.fromAgentPoolToInstance(lo.FromPtr(subID), vm.Name, apObj), nil
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
@@ -109,27 +139,54 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 
 	var instanceList []*Instance
 	for _, ap := range apList {
-		instanceList = append(instanceList, &Instance{
-			ID:       ap.ID,
-			Type:     ap.Type,
-			SubnetID: ap.Properties.VnetSubnetID,
-			Tags:     ap.Properties.Tags,
-		})
+		subID, err := utils.ParseSubIDFromID(lo.FromPtr(ap.ID))
+		if err != nil {
+			return nil, err
+		}
+		vm, err := p.getNodeName(ctx, lo.FromPtr(ap.Name))
+		if err != nil {
+			return nil, err
+		}
+		instanceList = append(instanceList, p.fromAgentPoolToInstance(lo.FromPtr(subID), vm.Name, ap))
 	}
 	return instanceList, nil
 }
 
-func (p *Provider) Delete(ctx context.Context, id string) error {
-	return p.deleteAgentPool(ctx, id)
+func (p *Provider) Delete(ctx context.Context, agentPoolName string) error {
+	return p.deleteAgentPool(ctx, agentPoolName)
+}
+
+func (p *Provider) fromAgentPoolToInstance(subscriptionID, nodeName string, apObj *armcontainerservice.AgentPool) *Instance {
+	tokens := strings.SplitAfter(nodeName, "-vmss") // remove the vm index "0000"
+	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
+		return lo.FromPtr(k)
+	})
+	return &Instance{
+		Name:     apObj.Name,
+		ID:       to.Ptr(fmt.Sprint("azure://", p.GetVMSSNodeProviderID(subscriptionID, tokens[0]))),
+		Type:     apObj.Properties.VMSize,
+		SubnetID: apObj.Properties.VnetSubnetID,
+		Tags:     apObj.Properties.Tags,
+		State:    apObj.Properties.ProvisioningState,
+		Labels:   instanceLabels,
+	}
 }
 
 func newAgentPoolObject(vmSize, capacityType string, taints []*string) armcontainerservice.AgentPool {
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
+	labels := map[string]*string{v1alpha5.ProvisionerNameLabelKey: to.Ptr("default")}
+
+	if strings.Contains(vmSize, "Standard_N") {
+		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
+	}
+
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			NodeLabels:       labels,
 			NodeTaints:       taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
 			Type:             to.Ptr(scaleSetsType),
 			VMSize:           to.Ptr(vmSize),
+			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
 			Count:            to.Ptr(int32(1)), //TODO to pass it
 			ScaleSetPriority: (*armcontainerservice.ScaleSetPriority)(to.Ptr(capacityType)),
 		},
@@ -147,8 +204,7 @@ func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.A
 }
 
 func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerservice.AgentPool, error) {
-	providerID := fmt.Sprintf("azure://%s", id)
-	apName, err := utils.ParseAgentPoolNameFromID(providerID)
+	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
 	}
@@ -160,15 +216,11 @@ func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerse
 	return result, err
 }
 
-func (p *Provider) deleteAgentPool(ctx context.Context, id string) error {
-	apName, err := utils.ParseAgentPoolNameFromID(id)
+func (p *Provider) deleteAgentPool(ctx context.Context, agentPoolName string) error {
+	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, agentPoolName, p.clusterName)
 	if err != nil {
-		return fmt.Errorf("getting agentpool name, %w", err)
-	}
-	err = deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", *apName, err)
-		return fmt.Errorf("agentPool.Delete for %q failed: %w", *apName, err)
+		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", agentPoolName, err)
+		return fmt.Errorf("agentPool.Delete for %q failed: %w", agentPoolName, err)
 	}
 	return err
 }
@@ -253,4 +305,23 @@ func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, 
 		return iPrice < jPrice
 	})
 	return instanceTypes
+}
+
+func (p *Provider) getNodeName(ctx context.Context, apName string) (*v1.Node, error) {
+	nodeList := &v1.NodeList{}
+	req, err := labels.NewRequirement("agentpool", selection.Equals, []string{apName})
+	if err != nil {
+		return nil, err
+	}
+	listOpts := &client.ListOptions{
+		LabelSelector: labels.NewSelector().Add(lo.FromPtr(req)),
+	}
+	err = p.kubeClient.List(ctx, nodeList, listOpts)
+	if err != nil {
+		return nil, err
+	}
+	if nodeList == nil || len(nodeList.Items) == 0 {
+		return nil, fmt.Errorf("no node has been found for the agentpool %s", apName)
+	}
+	return &nodeList.Items[0], nil
 }

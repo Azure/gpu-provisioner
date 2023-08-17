@@ -74,6 +74,7 @@ func TestGetPriorityCapacityAndInstanceType(t *testing.T) {
 	}
 	provider := NewProvider(nil, nil, nil,
 		"westus-2",
+		"rg",
 		"MC_xxxxx_yyyy-region",
 		"/subscriptions/0000000-0000-0000-0000-0000000000/resourceGroups/fake-resource-group-name/providers/Microsoft.Network/virtualNetworks/karpenter/subnets/nodesubnet",
 		"cluster-name")

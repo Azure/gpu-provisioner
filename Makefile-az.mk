@@ -68,6 +68,8 @@ az-patch-skaffold: 	## Update Azure client env vars and settings in skaffold con
 	yq -i  '.manifests.helm.releases[0].overrides.settings.azure.kubeletClientTLSBootstrapToken =                             "$(BOOTSTRAP_TOKEN)"'         skaffold.yaml
 	yq -i  '.manifests.helm.releases[0].overrides.settings.azure.sshPublicKey =                                               "$(SSH_PUBLIC_KEY)"'          skaffold.yaml
 
+	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
+
 az-patch-skaffold-kubenet: az-patch-skaffold
 	$(eval AZURE_SUBNET_ID=$(shell az network vnet list --resource-group $(AZURE_RESOURCE_GROUP_MC) | jq  -r ".[0].subnets[0].id"))
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="AZURE_SUBNET_ID"))               .value = "$(AZURE_SUBNET_ID)"'         skaffold.yaml
@@ -122,30 +124,13 @@ az-debug: ## Rebuild, deploy and debug using skaffold debug
 az-cleanup: ## Delete the deployment
 	skaffold delete || true
 
-KARPENTER_VERSION=v0.16.3
-az-mon-deploy: ## Deploy monitoring stack (w/o node-exporter)
-	helm repo add grafana-charts https://grafana.github.io/helm-charts
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-	helm repo update
-
-	kubectl create namespace monitoring || true
-
-az-mon-access: ## Get Grafana admin password and forward port
-	kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode; echo
-	@echo Consider running port forward outside of codespace ...
-	kubectl port-forward --namespace monitoring svc/grafana 3000:80
-
-az-mon-cleanup: ## Delete monitoring stack
-	helm delete --namespace monitoring grafana
-	helm delete --namespace monitoring prometheus
-
 az-mkgohelper: ## Build and configure custom go-helper-image for skaffold
 	cd hack/go-helper-image; docker build . --tag $(AZURE_ACR_NAME).azurecr.io/skaffold-debug-support/go # --platform=linux/arm64
 	az acr login -n $(AZURE_ACR_NAME)
 	docker push $(AZURE_ACR_NAME).azurecr.io/skaffold-debug-support/go
 	skaffold config set --global debug-helpers-registry $(AZURE_ACR_NAME).azurecr.io/skaffold-debug-support	
 
-az-rmnodes-fin: ## Remove Karpenter finalizer from all nodes (use with care!)
+az-rmnodes-fin: ## Remove finalizer from all nodes (use with care!)
 	for node in $$(kubectl get nodes -l karpenter.sh/provisioner-name --output=jsonpath={.items..metadata.name}); do \
 		kubectl patch node $$node -p '{"metadata":{"finalizers":null}}'; \
 	done	

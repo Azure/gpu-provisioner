@@ -1,10 +1,8 @@
 package instance
 
-import "time"
-
 // Instance a struct to isolate weather vm or vmss
 type Instance struct {
-	LaunchTime   time.Time
+	Name         *string // agentPoolName or instance/vmName
 	State        *string
 	ID           *string
 	ImageID      *string
@@ -12,4 +10,5 @@ type Instance struct {
 	CapacityType *string
 	SubnetID     *string
 	Tags         map[string]*string
+	Labels       map[string]string
 }

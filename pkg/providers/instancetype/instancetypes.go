@@ -93,16 +93,10 @@ func (p *Provider) LivenessProbe(req *http.Request) error {
 }
 
 func (p *Provider) createOfferings(ctx context.Context, sku *skewer.SKU) []cloudprovider.Offering {
-	// TODO: AWS provider filters out offerings with recently unavailable capacity
-	// TODO: currently assumes each SKU can be either spot or regular (on-demand) (likely wrong? In price sheets I see SKUs with no spot prices ...)
-	spotRatio := .20 // just a guess at savings
+
 	var offerings []cloudprovider.Offering
 	onDemandPrice, ok := p.pricingProvider.OnDemandPrice(*sku.Name)
-	spotPrice := onDemandPrice * spotRatio
 
-	if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PrioritySpot) {
-		offerings = append(offerings, cloudprovider.Offering{Zone: "", CapacityType: v1alpha1.PrioritySpot, Price: spotPrice, Available: ok})
-	}
 	if !p.unavailableOfferings.IsUnavailable(*sku.Name, p.region, v1alpha1.PriorityRegular) {
 		offerings = append(offerings, cloudprovider.Offering{Zone: "", CapacityType: v1alpha1.PriorityRegular, Price: onDemandPrice, Available: ok})
 	}

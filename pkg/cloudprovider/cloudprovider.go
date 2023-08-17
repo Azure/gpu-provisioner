@@ -68,11 +68,11 @@ func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
 	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
-		return i.Name == *instance.Type // vm size
+		return i.Name == lo.FromPtr(instance.Type) // vm size
 	})
 
 	m := c.instanceToMachine(ctx, instance, instanceType)
-
+	m.Labels = lo.Assign(m.Labels, instance.Labels)
 	return m, nil
 }
 
@@ -121,7 +121,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alp
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
-	return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
+	return c.instanceProvider.Delete(ctx, machine.Labels[instance.LabelAgentPoolName])
 }
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {

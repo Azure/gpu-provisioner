@@ -69,9 +69,20 @@ affinity:
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       nodeSelectorTerms:
-        - matchExpressions:
-            - key: karpenter.sh/provisioner-name
-              operator: DoesNotExist
+      - matchExpressions:
+        - key: kubernetes.azure.com/cluster
+          operator: Exists
+        - key: type
+          operator: NotIn
+          values:
+          - virtual-kubelet
+        - key: kubernetes.io/os
+          operator: In
+          values:
+          - linux
+      - matchExpressions:
+        - key: karpenter.sh/provisioner-name
+          operator: DoesNotExist
   podAntiAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       - topologyKey: "kubernetes.io/hostname"

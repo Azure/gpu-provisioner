@@ -20,6 +20,21 @@ spec:
       labels:
         name: nvidia-device-plugin-ds
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.azure.com/cluster
+                operator: Exists
+              - key: type
+                operator: NotIn
+                values:
+                - virtual-kubelet
+              - key: karpenter.sh/provisioner-name
+                operator: Exists
+              - key: gpu-provisioner.sh/machine-type
+                operator: Exists
       tolerations:
         # Allow this pod to be rescheduled while the node is in "critical add-ons only" mode.
         # This, along with the annotation above marks this pod as a critical add-on.

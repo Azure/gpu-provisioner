@@ -1,7 +1,7 @@
 apiVersion: karpenter.sh/v1alpha5
 kind: Machine
 metadata:
-  name: machine-gpu-only
+  name: machine-gpu-1
   labels:
     karpenter.sh/provisioner-name: default
 spec:
@@ -10,7 +10,7 @@ spec:
       value: "gpu"
       effect: "NoSchedule"
   machineTemplateRef:
-    name: gpuonlytest
+    name: gpuonly1
   requirements:
   - key: node.kubernetes.io/instance-type
     operator: In
@@ -45,6 +45,10 @@ spec:
     operator: In
     values:
     - default
+  - key: gpu-provisioner.sh/machine-type
+    operator: In
+    values:
+    - gpu
   - key: kubernetes.io/arch
     operator: In
     values:
