@@ -44,8 +44,7 @@ import (
 )
 
 const (
-	LabelAgentPoolName = "agentpool" // This is the label used in the node object, it has to be in the machine CR as well.
-	LabelMachineType   = "gpu-provisioner.sh/machine-type"
+	LabelMachineType = "gpu-provisioner.sh/machine-type"
 )
 
 type Provider struct {
@@ -87,8 +86,40 @@ func NewProvider(
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
+	var ap *armcontainerservice.AgentPool
+
 	instanceTypes = orderInstanceTypesByPrice(instanceTypes, scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...))
-	ap, err := p.launchInstance(ctx, p.clusterName, machine, instanceTypes)
+	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
+	index := 0
+
+	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		index++
+		return instanceTypes != nil && index <= len(instanceTypes)
+	}, func() error {
+		instanceType := instanceTypes[index]
+		capacityType := p.getPriorityForInstanceType(machine, instanceType)
+		if instanceType == nil {
+			return fmt.Errorf("no instance types available")
+		}
+		vmSize := instanceType.Name
+		taints := machine.Spec.Taints
+		var taintsStr []*string
+		for _, t := range taints {
+			taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+		}
+		apObj := newAgentPoolObject(vmSize, capacityType, taintsStr)
+
+		logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
+		var err error
+		ap, err = createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName, apObj)
+		if err != nil {
+			logging.FromContext(ctx).Errorf("Creating virtual machine %q failed: %v", apName, err)
+			return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
+		}
+		logging.FromContext(ctx).Debugf("Created agent pool %s", *ap.ID)
+		return nil
+
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +147,14 @@ func (p *Provider) GetVMSSNodeProviderID(subscriptionID, scaleSetName string) st
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
-	apObj, err := p.getAgentPool(ctx, id)
+	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting agentpool name, %w", err)
+	}
+	apObj, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Get agentpool %q failed: %v", apName, err)
+		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
 	}
 	subID, err := utils.ParseSubIDFromID(lo.FromPtr(apObj.ID))
 	if err != nil {
@@ -132,9 +168,10 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
-	apList, err := p.listAgentPools(ctx)
+	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
-		return nil, err
+		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
+		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
 	}
 
 	var instanceList []*Instance
@@ -157,7 +194,12 @@ func (p *Provider) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("getting agentpool name, %w", err)
 	}
-	return p.deleteAgentPool(ctx, apName)
+	err = deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
+		return fmt.Errorf("agentPool.Delete for %q failed: %w", apName, err)
+	}
+	return nil
 }
 
 func (p *Provider) fromAgentPoolToInstance(subscriptionID, nodeName string, apObj *armcontainerservice.AgentPool) *Instance {
@@ -195,82 +237,6 @@ func newAgentPoolObject(vmSize, capacityType string, taints []*string) armcontai
 			ScaleSetPriority: (*armcontainerservice.ScaleSetPriority)(to.Ptr(capacityType)),
 		},
 	}
-}
-
-func (p *Provider) createAgentPool(ctx context.Context, ap armcontainerservice.AgentPool, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
-	result, err := createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, clusterName, ap)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("Creating virtual machine %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
-	}
-	logging.FromContext(ctx).Debugf("Created agent pool %s", *result.ID)
-	return result, nil
-}
-
-func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerservice.AgentPool, error) {
-	apName, err := utils.ParseAgentPoolNameFromID(id)
-	if err != nil {
-		return nil, fmt.Errorf("getting agentpool name, %w", err)
-	}
-	result, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("Creating agentpool %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
-	}
-	return result, err
-}
-
-func (p *Provider) deleteAgentPool(ctx context.Context, agentPoolName string) error {
-	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, agentPoolName, p.clusterName)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", agentPoolName, err)
-		return fmt.Errorf("agentPool.Delete for %q failed: %w", agentPoolName, err)
-	}
-	return err
-}
-func (p *Provider) listAgentPools(ctx context.Context) ([]*armcontainerservice.AgentPool, error) {
-	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
-		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
-	}
-	return apList, err
-}
-
-func (p *Provider) launchInstance(
-	ctx context.Context, clusterName string, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*armcontainerservice.AgentPool, error) {
-	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
-
-	// Uses AZ Client to create a new agent pool using the agentpool object we prepared earlier
-	var apObj *armcontainerservice.AgentPool
-	var err error
-	index := 0
-
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		index++
-		return instanceTypes != nil && index <= len(instanceTypes)
-	}, func() error {
-		instanceType := instanceTypes[index]
-		capacityType := p.getPriorityForInstanceType(machine, instanceType)
-		if instanceType == nil {
-			return fmt.Errorf("no instance types available")
-		}
-		vmSize := instanceType.Name
-		taints := machine.Spec.Taints
-		var taintsStr []*string
-		for _, t := range taints {
-			taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
-		}
-		ap := newAgentPoolObject(vmSize, capacityType, taintsStr)
-
-		logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
-		apObj, err = p.createAgentPool(ctx, ap, apName, clusterName)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return apObj, nil
 }
 
 // getPriorityForInstanceType selects spot if both constraints are flexible and there is an available offering.
