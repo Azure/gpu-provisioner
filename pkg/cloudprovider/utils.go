@@ -37,8 +37,6 @@ func (c *CloudProvider) instanceToMachine(ctx context.Context, instanceObj *inst
 		annotations[v1alpha5.MachineManagedByAnnotationKey] = *v
 	}
 
-	labels[instance.LabelAgentPoolName] = lo.FromPtr(instanceObj.Name)
-
 	machine.Labels = labels
 	machine.Annotations = annotations
 
