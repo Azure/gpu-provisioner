@@ -21,9 +21,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Run go fmt
-        run: |
-          go fmt $(go list ./... | grep -v /vendor/)
       - name: Run go vet
         run: |
           go vet $(go list ./... | grep -v /vendor/)
