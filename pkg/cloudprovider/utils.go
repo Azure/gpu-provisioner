@@ -17,11 +17,11 @@ import (
 
 func (c *CloudProvider) instanceToMachine(ctx context.Context, instanceObj *instance.Instance, instanceType *cloudprovider.InstanceType) *v1alpha5.Machine {
 	machine := &v1alpha5.Machine{}
-	labels := map[string]string{}
+	labels := instanceObj.Labels
 	annotations := map[string]string{}
 
 	if instanceType != nil {
-		labels = utils.GetAllSingleValuedRequirementLabels(instanceType)
+		labels = lo.Assign(labels, utils.GetAllSingleValuedRequirementLabels(instanceType))
 		machine.Status.Capacity = functional.FilterMap(instanceType.Capacity, func(_ v1.ResourceName, v resource.Quantity) bool { return !resources.IsZero(v) })
 		machine.Status.Allocatable = functional.FilterMap(instanceType.Allocatable(), func(_ v1.ResourceName, v resource.Quantity) bool { return !resources.IsZero(v) })
 	}

@@ -121,7 +121,7 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alp
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
-	return c.instanceProvider.Delete(ctx, machine.Labels[instance.LabelAgentPoolName])
+	return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
 }
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {

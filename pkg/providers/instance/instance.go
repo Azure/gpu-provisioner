@@ -152,8 +152,12 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 	return instanceList, nil
 }
 
-func (p *Provider) Delete(ctx context.Context, agentPoolName string) error {
-	return p.deleteAgentPool(ctx, agentPoolName)
+func (p *Provider) Delete(ctx context.Context, id string) error {
+	apName, err := utils.ParseAgentPoolNameFromID(id)
+	if err != nil {
+		return fmt.Errorf("getting agentpool name, %w", err)
+	}
+	return p.deleteAgentPool(ctx, apName)
 }
 
 func (p *Provider) fromAgentPoolToInstance(subscriptionID, nodeName string, apObj *armcontainerservice.AgentPool) *Instance {
@@ -208,10 +212,10 @@ func (p *Provider) getAgentPool(ctx context.Context, id string) (*armcontainerse
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
 	}
-	result, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, *apName, p.clusterName)
+	result, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Creating agentpool %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.Get for %q failed: %w", *apName, err)
+		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
 	}
 	return result, err
 }
@@ -244,7 +248,7 @@ func (p *Provider) launchInstance(
 
 	err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		index++
-		return (index <= len(instanceTypes)) && (instanceTypes[index] != nil)
+		return instanceTypes != nil && index <= len(instanceTypes)
 	}, func() error {
 		instanceType := instanceTypes[index]
 		capacityType := p.getPriorityForInstanceType(machine, instanceType)

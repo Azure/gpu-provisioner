@@ -17,25 +17,31 @@ package utils
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 )
 
 // ParseAgentPoolNameFromID parses the id stored on the instance ID
-func ParseAgentPoolNameFromID(id string) (*string, error) {
-	//agentPool ID format: azure:///subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}
-	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.ContainerService/managedClusters/.*/agentPools/(?P<AgentPoolName>.*)`)
+func ParseAgentPoolNameFromID(id string) (string, error) {
+	///subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/<VMSSName>/virtualMachines/0
+	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.Compute/virtualMachineScaleSets/(?P<VMSSName>.*)/virtualMachines/.*`)
 	matches := r.FindStringSubmatch(id)
 	if matches == nil {
-		return nil, fmt.Errorf("id does not match the regxp for ParseAgentPoolNameFromID %s", id)
+		return "", fmt.Errorf("id does not match the regxp for ParseAgentPoolNameFromID %s", id)
 	}
 
 	for i, name := range r.SubexpNames() {
-		if name == "AgentPoolName" {
-			return &matches[i], nil
+		if name == "VMSSName" {
+			nodeName := matches[i]
+			agentPoolName := strings.Split(nodeName, "-") // agentpool name is the second substring
+			if agentPoolName == nil || len(agentPoolName) == 0 {
+				return "", fmt.Errorf("cannot parse agentpool name for ParseAgentPoolNameFromID %s", id)
+			}
+			return agentPoolName[1], nil
 		}
 	}
-	return nil, fmt.Errorf("error while parsing id %s", id)
+	return "", fmt.Errorf("error while parsing id %s", id)
 }
 
 // ParseSubIDFromID parses the id stored on the instance ID
