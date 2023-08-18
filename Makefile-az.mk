@@ -1,3 +1,11 @@
+# build variables
+BUILD_VERSION_VAR := $(REPO_PATH)/pkg/version.BuildVersion
+BUILD_DATE_VAR := $(REPO_PATH)/pkg/version.BuildDate
+BUILD_DATE := $$(date +%Y-%m-%d-%H:%M)
+GIT_VAR := $(REPO_PATH)/pkg/version.GitCommit
+GIT_HASH := $$(git rev-parse --short HEAD)
+LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_VERSION) -X $(GIT_VAR)=$(GIT_HASH)"
+
 # Azure Container Service - Test
 # AZURE_SUBSCRIPTION_ID=8ecadfc9-d1a3-4ea4-b844-0d9f87e4d7c8
 # Data Plane Developer
@@ -216,3 +224,7 @@ az-kevents: ## Karpenter events
 
 az-node-viewer: ## Watch nodes using eks-node-viewer
 	eks-node-viewer --disable-pricing --node-selector "karpenter.sh/provisioner-name" # --resources cpu,memory
+
+.PHONY: go-build
+go-build:
+	go build -a -ldflags $(LDFLAGS) -o _output/gpu-provisioner ./cmd/controller/main.go
