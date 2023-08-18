@@ -61,7 +61,7 @@ func NewProvider(region string, cache *cache.Cache, resourceSkusClient skewer.Re
 	}
 }
 
-//List Get all instance type options
+// List Get all instance type options
 func (p *Provider) List(
 	ctx context.Context, kc *v1alpha5.KubeletConfiguration) ([]*cloudprovider.InstanceType, error) {
 	p.Lock()
