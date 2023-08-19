@@ -102,12 +102,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 			return fmt.Errorf("no instance types available")
 		}
 		vmSize := instanceType.Name
-		taints := machine.Spec.Taints
-		var taintsStr []*string
-		for _, t := range taints {
-			taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
-		}
-		apObj := newAgentPoolObject(vmSize, capacityType, taintsStr)
+		apObj := newAgentPoolObject(vmSize, capacityType, machine)
 
 		logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
 		var err error
@@ -218,9 +213,17 @@ func (p *Provider) fromAgentPoolToInstance(subscriptionID, nodeName string, apOb
 	}
 }
 
-func newAgentPoolObject(vmSize, capacityType string, taints []*string) armcontainerservice.AgentPool {
+func newAgentPoolObject(vmSize, capacityType string, machine *v1alpha5.Machine) armcontainerservice.AgentPool {
+	taints := machine.Spec.Taints
+	var taintsStr []*string
+	for _, t := range taints {
+		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+	}
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
 	labels := map[string]*string{v1alpha5.ProvisionerNameLabelKey: to.Ptr("default")}
+	for k, v := range machine.Labels {
+		labels[k] = to.Ptr(v)
+	}
 
 	if strings.Contains(vmSize, "Standard_N") {
 		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
@@ -229,7 +232,7 @@ func newAgentPoolObject(vmSize, capacityType string, taints []*string) armcontai
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:       labels,
-			NodeTaints:       taints, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			NodeTaints:       taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
 			Type:             to.Ptr(scaleSetsType),
 			VMSize:           to.Ptr(vmSize),
 			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
