@@ -86,32 +86,32 @@ func NewProvider(
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
-	var ap *armcontainerservice.AgentPool
+	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
+
+	if len(instanceTypes) == 0 {
+		return nil, fmt.Errorf("creating agentpool %q failed: %v", apName, "instanceTypes cannot be nil")
+	}
 
 	instanceTypes = orderInstanceTypesByPrice(instanceTypes, scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...))
-	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
-	index := 0
 
+	index := 0
+	var ap *armcontainerservice.AgentPool
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		index++
-		return instanceTypes != nil && index <= len(instanceTypes)
+		return index <= len(instanceTypes)
 	}, func() error {
 		instanceType := instanceTypes[index]
 		capacityType := p.getPriorityForInstanceType(machine, instanceType)
-		if instanceType == nil {
-			return fmt.Errorf("no instance types available")
-		}
 		vmSize := instanceType.Name
 		apObj := newAgentPoolObject(vmSize, capacityType, machine)
 
-		logging.FromContext(ctx).Debugf("Creating Agent pool %s (%s)", apName, vmSize)
+		logging.FromContext(ctx).Debugf("creating Agent pool %s (%s)", apName, vmSize)
 		var err error
 		ap, err = createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName, apObj)
 		if err != nil {
-			logging.FromContext(ctx).Errorf("Creating virtual machine %q failed: %v", apName, err)
 			return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
 		}
-		logging.FromContext(ctx).Debugf("Created agent pool %s", *ap.ID)
+		logging.FromContext(ctx).Debugf("created agent pool %s", *ap.ID)
 		return nil
 
 	})
