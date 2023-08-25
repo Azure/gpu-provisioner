@@ -20,6 +20,7 @@ func (c *CloudProvider) instanceToMachine(ctx context.Context, instanceObj *inst
 	labels := instanceObj.Labels
 	annotations := map[string]string{}
 
+	machine.Name = lo.FromPtr(instanceObj.Name)
 	if instanceType != nil {
 		labels = lo.Assign(labels, utils.GetAllSingleValuedRequirementLabels(instanceType))
 		machine.Status.Capacity = functional.FilterMap(instanceType.Capacity, func(_ v1.ResourceName, v resource.Quantity) bool { return !resources.IsZero(v) })
