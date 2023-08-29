@@ -18,15 +18,19 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"sort"
 	"strings"
+
+	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"k8s.io/klog/v2"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -86,6 +90,8 @@ func NewProvider(
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
+	klog.InfoS("Instance.Create", "machine", klog.KObj(machine))
+
 	apName := strings.ReplaceAll(machine.Spec.MachineTemplateRef.Name, "-", "")
 
 	if len(instanceTypes) == 0 {
@@ -128,11 +134,13 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 		return nil, err
 	}
 
-	return p.fromAgentPoolToInstance(lo.FromPtr(subID), node.Name, ap), err
+	return p.fromAgentPoolToInstance(lo.FromPtr(subID), node.Name, ap), nil
 }
 
 // GetVMSSNodeProviderID generates the provider ID for a virtual machine scale set.
 func (p *Provider) GetVMSSNodeProviderID(subscriptionID, scaleSetName string) string {
+	klog.InfoS("Instance.GetVMSSNodeProviderID", "subscriptionID", subscriptionID, "scaleSetName", scaleSetName)
+
 	return fmt.Sprintf(
 		"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/%s/virtualMachines/0", //vm = 0 as ew have the count always 1
 		subscriptionID,
@@ -142,6 +150,8 @@ func (p *Provider) GetVMSSNodeProviderID(subscriptionID, scaleSetName string) st
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
+	klog.InfoS("Instance.Get", "id", id)
+
 	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
@@ -163,6 +173,8 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
+	klog.InfoS("Instance.List")
+
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
@@ -170,21 +182,29 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 	}
 
 	var instanceList []*Instance
-	for _, ap := range apList {
-		subID, err := utils.ParseSubIDFromID(lo.FromPtr(ap.ID))
+	for ap := range apList {
+		subID, err := utils.ParseSubIDFromID(lo.FromPtr(apList[ap].ID))
 		if err != nil {
 			return nil, err
 		}
-		vm, err := p.getNodeName(ctx, lo.FromPtr(ap.Name))
+		if subID == nil {
+			return nil, fmt.Errorf("subscribtion ID cannot be nil")
+		}
+		vm, err := p.getNodeName(ctx, lo.FromPtr(apList[ap].Name))
 		if err != nil {
 			return nil, err
 		}
-		instanceList = append(instanceList, p.fromAgentPoolToInstance(lo.FromPtr(subID), vm.Name, ap))
+		if vm == nil {
+			return nil, fmt.Errorf("node cannot be nil")
+		}
+		instanceList = append(instanceList, p.fromAgentPoolToInstance(lo.FromPtr(subID), vm.Name, apList[ap]))
 	}
 	return instanceList, nil
 }
 
 func (p *Provider) Delete(ctx context.Context, id string) error {
+	klog.InfoS("Instance.Delete", "id", id)
+
 	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
 		return fmt.Errorf("getting agentpool name, %w", err)
@@ -281,20 +301,29 @@ func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, 
 }
 
 func (p *Provider) getNodeName(ctx context.Context, apName string) (*v1.Node, error) {
+	klog.InfoS("Instance.getNodeName", "agentpool", apName)
 	nodeList := &v1.NodeList{}
-	req, err := labels.NewRequirement("agentpool", selection.Equals, []string{apName})
+	opt := &client.ListOptions{}
+	opt.LabelSelector = labels.SelectorFromSet(map[string]string{"agentpool": apName, "kubernetes.azure.com/agentpool": apName})
+
+	err := retry.OnError(retry.DefaultRetry, func(err error) bool {
+		return sdkerrors.IsNotFoundErr(err)
+	}, func() error {
+		err := p.kubeClient.List(ctx, nodeList, opt)
+		if err != nil {
+			return err
+		}
+		if nodeList == nil || len(nodeList.Items) == 0 {
+			return &azcore.ResponseError{
+				ErrorCode:  sdkerrors.NotFound,
+				StatusCode: http.StatusNotFound,
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	listOpts := &client.ListOptions{
-		LabelSelector: labels.NewSelector().Add(lo.FromPtr(req)),
-	}
-	err = p.kubeClient.List(ctx, nodeList, listOpts)
-	if err != nil {
-		return nil, err
-	}
-	if nodeList == nil || len(nodeList.Items) == 0 {
-		return nil, fmt.Errorf("no node has been found for the agentpool %s", apName)
-	}
+
 	return &nodeList.Items[0], nil
 }

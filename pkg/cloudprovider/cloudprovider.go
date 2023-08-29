@@ -20,6 +20,7 @@ import (
 	"net/http"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gpu-vmprovisioner/pkg/apis"
@@ -56,6 +57,8 @@ func New(instanceTypeProvider *instancetype.Provider, instanceProvider *instance
 
 // Create a node given the constraints.
 func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (*v1alpha5.Machine, error) {
+	klog.InfoS("Create", "machine", klog.KObj(machine))
+
 	instanceTypes, err := c.resolveInstanceTypes(ctx, machine)
 	if err != nil {
 		return nil, fmt.Errorf("resolving instance types, %w", err)
@@ -77,8 +80,13 @@ func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (
 }
 
 func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
+	klog.InfoS("List")
+
 	var machines []*v1alpha5.Machine
 	instances, err := c.instanceProvider.List(ctx)
+	if err != nil {
+		return nil, err
+	}
 	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
 	if err != nil {
 		return nil, fmt.Errorf("getting instance types, %w", err)
@@ -90,10 +98,12 @@ func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
 		})
 		machines = append(machines, c.instanceToMachine(ctx, instances[index], instanceType))
 	}
-	return machines, err
+	return machines, nil
 }
 
 func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.Machine, error) {
+	klog.InfoS("Get", "providerID", providerID)
+
 	instance, err := c.instanceProvider.Get(ctx, providerID)
 
 	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
@@ -121,10 +131,13 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alp
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
+	klog.InfoS("Delete", "machine", klog.KObj(machine))
 	return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
 }
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {
+	klog.InfoS("IsMachineDrifted", "machine", klog.KObj(machine))
+
 	imageDrifted, err := c.isImageDrifted(ctx, machine, staticprovisioner.Sp)
 	if err != nil {
 		return false, err

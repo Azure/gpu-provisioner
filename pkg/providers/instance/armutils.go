@@ -20,9 +20,12 @@ import (
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"k8s.io/klog/v2"
 )
 
 func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string, ap armcontainerservice.AgentPool) (*armcontainerservice.AgentPool, error) {
+	klog.InfoS("createAgentPool", "agentpool", apName)
+
 	poller, err := client.BeginCreateOrUpdate(ctx, rg, clusterName, apName, ap, nil)
 	if err != nil {
 		return nil, err
@@ -35,6 +38,7 @@ func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 }
 
 func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) error {
+	klog.InfoS("deleteAgentPool", "agentpool", apName)
 	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		if sdkerrors.IsNotFoundErr(err) {
@@ -52,6 +56,8 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 }
 
 func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
+	klog.InfoS("getAgentPool", "agentpool", apName)
+
 	resp, err := client.Get(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		return nil, err
@@ -61,6 +67,8 @@ func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, cluster
 }
 
 func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName string) ([]*armcontainerservice.AgentPool, error) {
+	klog.InfoS("listAgentPools")
+
 	var apList []*armcontainerservice.AgentPool
 	pager := client.NewListPager(rg, clusterName, nil)
 	for pager.More() {
@@ -69,8 +77,8 @@ func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName s
 			log.Fatalf("failed to advance page: %v", err)
 			return nil, err
 		}
-		for _, v := range page.Value {
-			apList = append(apList, v)
+		for i := range page.Value {
+			apList = append(apList, page.Value[i])
 		}
 	}
 	return apList, nil
