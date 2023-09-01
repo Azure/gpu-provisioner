@@ -1,5 +1,5 @@
 # Azure GPU VM Provisioner
-This is a fork of the `Karpenter` machine controller. 
+This is a fork of the `Karpenter` machine controller. It leverage the `machine` CRD introduced by `Karpenter` to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
 
 ## How to clone
 After cloning the repo from `https://github.com/Azure/karpenter`,
