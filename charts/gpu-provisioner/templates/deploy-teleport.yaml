@@ -46,6 +46,12 @@ data:
     modprobe target_core_user
     sudo /opt/acr/tools/overlaybd/enable.sh
 
+    # Adjust for large images
+    sed '9s/4/200,/' -i /etc/overlaybd/overlaybd.json
+    sed '10 i \    \"refillSize\": 52428800' -i /etc/overlaybd/overlaybd.json
+    systemctl restart acr-mirror
+    systemctl restart overlaybd-tcmu
+
     # Enabling mirror for teleportmetricstest
     curl -X PUT 'localhost:8578/config?ns=default&stream_format=overlaybd&enable_containerd=true'
 
