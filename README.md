@@ -1,7 +1,7 @@
 # Azure GPU VM Provisioner
 This is a fork of the `Karpenter` machine controller. It leverage the `machine` CRD introduced by `Karpenter` to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
 It implements the cloud provider interfaces to realize the following abstraction:
-`machine` -> 'agent pool' (with vmss and a hard limit of VM count to 1)
+`machine` -> `AKS agent pool` (with vmss and a hard limit of VM count to 1)
 
 ## How to clone
 After cloning the repo from `https://github.com/Azure/karpenter`,
