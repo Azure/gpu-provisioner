@@ -30,7 +30,6 @@ import (
 	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -303,13 +302,12 @@ func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, 
 func (p *Provider) getNodeName(ctx context.Context, apName string) (*v1.Node, error) {
 	klog.InfoS("Instance.getNodeName", "agentpool", apName)
 	nodeList := &v1.NodeList{}
-	opt := &client.ListOptions{}
-	opt.LabelSelector = labels.SelectorFromSet(map[string]string{"agentpool": apName, "kubernetes.azure.com/agentpool": apName})
+	labelSelector := client.MatchingLabels{"agentpool": apName, "kubernetes.azure.com/agentpool": apName}
 
 	err := retry.OnError(retry.DefaultRetry, func(err error) bool {
 		return sdkerrors.IsNotFoundErr(err)
 	}, func() error {
-		err := p.kubeClient.List(ctx, nodeList, opt)
+		err := p.kubeClient.List(ctx, nodeList, labelSelector)
 		if err != nil {
 			return err
 		}
@@ -325,5 +323,9 @@ func (p *Provider) getNodeName(ctx context.Context, apName string) (*v1.Node, er
 		return nil, err
 	}
 
-	return &nodeList.Items[0], nil
+	if nodeList != nil && len(nodeList.Items) != 0 {
+		return &nodeList.Items[0], nil
+	}
+
+	return &v1.Node{}, nil
 }

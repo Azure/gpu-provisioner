@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nsenter-actions
-  namespace: {{ .Release.Namespace }}
+  namespace:  {{ .Values.namespace }}
   labels:
     {{- include "gpu-provisioner.labels" . | nindent 4 }}
     app: nsenter
@@ -62,7 +62,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: &name teleportinstall
-  namespace: {{ .Release.Namespace }}
+  namespace:  {{ .Values.namespace }}
   labels:
     {{- include "gpu-provisioner.labels" . | nindent 4 }}
     app: *name

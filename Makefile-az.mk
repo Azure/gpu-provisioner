@@ -1,3 +1,7 @@
+# Image URL to use all building/pushing image targets
+IMG_NAME ?= gpu-provisioner
+IMG_TAG ?= 0.1.0
+
 # build variables
 BUILD_VERSION_VAR := $(REPO_PATH)/pkg/version.BuildVersion
 BUILD_DATE_VAR := $(REPO_PATH)/pkg/version.BuildDate
@@ -18,11 +22,11 @@ ifeq ($(CODESPACES),true)
   AZURE_RESOURCE_GROUP=$(CODESPACE_NAME)
   AZURE_ACR_NAME=$(subst -,,$(CODESPACE_NAME))
 else
-  AZURE_RESOURCE_GROUP=gpu-provisioner-test
-  AZURE_ACR_NAME=gpuprovisioner
+  AZURE_RESOURCE_GROUP=llm-test
+  AZURE_ACR_NAME=aimodelsregistry
 endif
 
-AZURE_CLUSTER_NAME=gpu-provisioner-ap
+AZURE_CLUSTER_NAME=new_demo
 AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
 az-all:      az-login az-mkaks      az-perm az-patch-skaffold-kubenet az-build az-run az-run-sample ## Provision the infra (ACR,AKS); build and deploy Karpenter; deploy sample Provisioner and workload
@@ -228,3 +232,27 @@ az-node-viewer: ## Watch nodes using eks-node-viewer
 .PHONY: go-build
 go-build:
 	go build -a -ldflags $(LDFLAGS) -o _output/gpu-provisioner ./cmd/controller/main.go
+
+##@ Docker
+BUILDX_BUILDER_NAME ?= img-builder
+OUTPUT_TYPE ?= type=registry
+QEMU_VERSION ?= 5.2.0-2
+ARCH ?= amd64
+
+.PHONY: docker-buildx
+docker-buildx: ## Build and push docker image for the manager for cross-platform support
+	@if ! docker buildx ls | grep $(BUILDX_BUILDER_NAME); then \
+		docker run --rm --privileged multiarch/qemu-user-static:$(QEMU_VERSION) --reset -p yes; \
+		docker buildx create --name $(BUILDX_BUILDER_NAME) --use; \
+		docker buildx inspect $(BUILDX_BUILDER_NAME) --bootstrap; \
+	fi
+
+.PHONY: docker-build
+docker-build: docker-buildx
+	az acr login  --name $(AZURE_ACR_NAME)
+	docker buildx build \
+		--file ./Dockerfile \
+		--output=$(OUTPUT_TYPE) \
+		--platform="linux/$(ARCH)" \
+		--pull \
+		--tag $(AZURE_ACR_NAME).azurecr.io/$(IMG_NAME):$(IMG_TAG) .

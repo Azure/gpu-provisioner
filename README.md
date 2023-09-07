@@ -24,9 +24,10 @@ A one-for-all command is `make az-all`. You can run individual steps like `az-mk
 
 If you already have a working cluster, just run 
 ```
+make docker-build
 make az-perm
-make az-patch-skaffold-kubenet
-make az-run
+helm install gpu-provisioner /charts/gpu-provisioner
+
 ```
 You should have a running controller in `gpu-provisioner` namespace.
 

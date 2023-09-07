@@ -1,3 +1,4 @@
+namespace: gpu-provisioner
 # -- Overrides the chart's name.
 nameOverride: ""
 # -- Overrides the chart's computed fullname.
@@ -9,7 +10,7 @@ additionalLabels: {}
 # -- Additional annotations to add into metadata.
 additionalAnnotations: {}
 # -- Image pull policy for Docker images.
-imagePullPolicy: IfNotPresent
+imagePullPolicy: Always
 # -- Image pull secrets for Docker images.
 imagePullSecrets: []
 serviceAccount:
@@ -30,7 +31,7 @@ serviceMonitor:
   # -- Endpoint configuration for the ServiceMonitor.
   endpointConfig: {}
 # -- Number of replicas.
-replicas: 2
+replicas: 1
 # -- The number of old ReplicaSets to retain to allow rollback.
 revisionHistoryLimit: 10
 # -- Strategy for updating the pod.
@@ -108,30 +109,41 @@ extraVolumes: []
 controller:
   image:
     # -- Repository path to the controller image.
-    repository: public.ecr.aws/karpenter/controller
+    repository: aimodelsregistry.azurecr.io/gpu-provisioner
     # -- Tag of the controller image.
-    tag: v0.29.2
+    tag: 0.1.0
     # -- SHA256 digest of the controller image.
-    digest: sha256:bac5ea470c09df21eb3742cf9448e9b806138ed5b6321d4e04697bbdf122eac6
+    digest: ""
   # -- SecurityContext for the controller container.
   securityContext: {}
   # -- Additional environment variables for the controller pod.
-  env: []
-  # - name: AWS_REGION
-  #   value: eu-west-1
+  env:
+    - name: ARM_SUBSCRIPTION_ID
+      value: 
+    - name: LOCATION
+      value: eastus
+    - name: ARM_USE_MANAGED_IDENTITY_EXTENSION
+      value: "true"
+    - name: ARM_USER_ASSIGNED_IDENTITY_ID
+      value: 
+    - name: AZURE_CLUSTER_NAME
+      value: 
+    - name: AZURE_NODE_RESOURCE_GROUP
+      value: 
+    - name: ARM_RESOURCE_GROUP
+      value: llm-test
+    # TODO: move to settings
+    - name: AZURE_SUBNET_ID # the id of subnet to create network interfaces on
+      value: /subscriptions/ff05f55d-22b5-44a7-b704-f9a8efd493ed/resourceGroups/MC_llm-test_new_demo_eastus/providers/Microsoft.Network/virtualNetworks/aks-vnet-16592489/subnets/aks-subnet
+    - name: LEADER_ELECT # disable leader election for better debugging experience
+      value: "false"
   envFrom: []
   # -- Resources for the controller pod.
-  resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  #  requests:
-  #    cpu: 1
-  #    memory: 1Gi
-  #  limits:
-  #    cpu: 1
-  #    memory: 1Gi
+  resources:
+    requests:
+      cpu: 200m
+    limits:
+      cpu: 500m
 
   # -- Controller outputPaths - default to stdout only
   outputPaths:
@@ -140,7 +152,7 @@ controller:
   errorOutputPaths:
     - stderr
   # -- Controller log level, defaults to the global log level
-  logLevel: ""
+  logLevel: debug
   # -- Controller log encoding, defaults to the global log encoding
   logEncoding: ""
   # -- Additional volumeMounts for the controller pod.
@@ -178,12 +190,17 @@ settings:
   # -- Azure-specific configuration values
   azure:
     # -- Cluster name.
-    clusterName: ""
+    clusterName: new_demo
     # -- Cluster endpoint.
-    clusterEndpoint: ""
+    clusterEndpoint: https://newdemo-llm-test-ff05f5-vs68qyru.hcp.eastus.azmk8s.io:443
     # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types
     # TODO: not used yet ...
     vmMemoryOverheadPercent: 0.075
+    kubeletClientTLSBootstrapToken: 
+    # TODO: autogenerate
+    sshPublicKey: 
+    networkPlugin: "kubenet" # TODO: get this from the cluster
+    networkPolicy: ""
     # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
     # TODO: not propagated yet ...
     tags:
