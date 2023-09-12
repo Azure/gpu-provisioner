@@ -86,7 +86,7 @@ jobs:
           echo "IMG_TAG=${ver#"v"}" >> $GITHUB_ENV
       - name: Build image
         run: |
-          OUTPUT_TYPE=type=docker make docker-build
+          OUTPUT_TYPE=type=registry make docker-build
         env:
           VERSION: ${{ env.IMG_TAG }}
 
@@ -99,16 +99,11 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-          timeout: '5m0s'
+          timeout: '10m0s'
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push image
-        run: |
-          OUTPUT_TYPE=type=registry make docker-build
-        env:
-          VERSION: ${{ env.IMG_TAG }}
       - name: Save registry and tag as an artifact for other workflows that run on workflow_run to download them
         run: |
           mkdir -p /tmp/artifacts
