@@ -26,6 +26,7 @@ import (
 // the values race free by wrapping the pointer itself in a mutex.  There is no Get() method, but instead a Clone() method
 // deep copies the object being stored by serializing/de-serializing it from JSON.  This pattern shouldn't be followed
 // anywhere else but is an easy way to eliminate races in our tests.
+// nolint:	structcheck
 type AtomicPtr[T any] struct {
 	mu    sync.Mutex
 	value *T
@@ -129,6 +130,7 @@ func MaxCalls(maxCalls int) AtomicErrorOption {
 
 // AtomicPtrStack exposes a slice of a pointer type in a race-free manner. The interface is just enough to replace the
 // set.Set usage in our previous tests.
+// nolint:	structcheck
 type AtomicPtrStack[T any] struct {
 	mu     sync.Mutex
 	values []*T

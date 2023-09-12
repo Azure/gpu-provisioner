@@ -77,9 +77,7 @@ func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName s
 			log.Fatalf("failed to advance page: %v", err)
 			return nil, err
 		}
-		for i := range page.Value {
-			apList = append(apList, page.Value[i])
-		}
+		apList = append(apList, page.Value...)
 	}
 	return apList, nil
 }

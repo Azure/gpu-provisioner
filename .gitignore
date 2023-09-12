@@ -16,3 +16,4 @@
 # Vscode files
 .vscode
 _output/
+/hack/tools/bin/

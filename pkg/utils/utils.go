@@ -35,7 +35,7 @@ func ParseAgentPoolNameFromID(id string) (string, error) {
 		if name == "VMSSName" {
 			nodeName := matches[i]
 			agentPoolName := strings.Split(nodeName, "-") // agentpool name is the second substring
-			if agentPoolName == nil || len(agentPoolName) == 0 {
+			if len(agentPoolName) == 0 {
 				return "", fmt.Errorf("cannot parse agentpool name for ParseAgentPoolNameFromID %s", id)
 			}
 			return agentPoolName[1], nil

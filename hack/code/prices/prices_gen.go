@@ -128,7 +128,7 @@ func generatePricing(filePath string) {
 					log.Println("started wait loop for pricing update on region", region)
 				} else if attempts%10 == 0 {
 					log.Printf("waiting on pricing update on region %s...\n", region)
-				} else if time.Now().Sub(updateStarted) >= time.Minute*5 {
+				} else if time.Since(updateStarted) >= time.Minute*5 {
 					log.Fatalf("failed to update region %s within 2 minutes", region)
 				}
 				time.Sleep(1 * time.Second)
