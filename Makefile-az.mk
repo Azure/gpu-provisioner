@@ -1,5 +1,6 @@
 Version ?= v0.1.0
 # Image URL to use all building/pushing image targets
+REGISTRY ?= ghcr.io/Azure/gpu-provisioner
 IMG_NAME ?= gpu-provisioner
 IMG_TAG ?= $(subst v,,$(VERSION))
 
@@ -279,7 +280,7 @@ docker-build: docker-buildx
 		--output=$(OUTPUT_TYPE) \
 		--platform="linux/$(ARCH)" \
 		--pull \
-		--tag $(AZURE_ACR_NAME).azurecr.io/$(IMG_NAME):$(IMG_TAG) .
+		--tag $(REGISTRY)/$(IMG_NAME):$(IMG_TAG) .
 
 
 ## --------------------------------------
