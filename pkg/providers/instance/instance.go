@@ -180,14 +180,14 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
 	}
 
-	var instanceList []*Instance
+	instanceList := []*Instance{}
 	for ap := range apList {
 		subID, err := utils.ParseSubIDFromID(lo.FromPtr(apList[ap].ID))
 		if err != nil {
 			return nil, err
 		}
 		if subID == nil {
-			return nil, fmt.Errorf("subscribtion ID cannot be nil")
+			return nil, fmt.Errorf("subscription ID cannot be nil")
 		}
 		vm, err := p.getNodeName(ctx, lo.FromPtr(apList[ap].Name))
 		if err != nil {
@@ -234,7 +234,7 @@ func (p *Provider) fromAgentPoolToInstance(subscriptionID, nodeName string, apOb
 
 func newAgentPoolObject(vmSize, capacityType string, machine *v1alpha5.Machine) armcontainerservice.AgentPool {
 	taints := machine.Spec.Taints
-	var taintsStr []*string
+	taintsStr := []*string{}
 	for _, t := range taints {
 		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
 	}

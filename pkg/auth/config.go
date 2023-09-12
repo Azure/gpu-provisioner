@@ -38,9 +38,7 @@ const (
 const (
 	// from azure_manager
 	vmTypeVMSS = "vmss"
-	// for VMAS and standalone vms
-	vmTypeStandard = "standard"
-	vmTypeAKS      = "aks"
+	vmTypeAKS  = "aks"
 )
 
 // ClientConfig contains all essential information to create an Azure client.

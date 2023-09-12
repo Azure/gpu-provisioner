@@ -18,8 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-
 	//nolint SA1019 - deprecated package
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-12-01/compute"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
@@ -104,7 +102,6 @@ var (
 
 var (
 	Scheme             = runtime.NewScheme()
-	codec              = serializer.NewCodecFactory(Scheme, serializer.EnableStrict)
 	Group              = "karpenter.k8s.azure"
 	SchemeGroupVersion = schema.GroupVersion{Group: Group, Version: "v1alpha1"}
 	SchemeBuilder      = runtime.NewSchemeBuilder(func(scheme *runtime.Scheme) error {

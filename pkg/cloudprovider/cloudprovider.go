@@ -82,7 +82,7 @@ func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (
 func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
 	klog.InfoS("List")
 
-	var machines []*v1alpha5.Machine
+	machines := []*v1alpha5.Machine{}
 	instances, err := c.instanceProvider.List(ctx)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,9 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.M
 	klog.InfoS("Get", "providerID", providerID)
 
 	instance, err := c.instanceProvider.Get(ctx, providerID)
-
+	if err != nil {
+		return nil, fmt.Errorf("getting instance , %w", err)
+	}
 	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
 	if err != nil {
 		return nil, fmt.Errorf("getting instance types, %w", err)

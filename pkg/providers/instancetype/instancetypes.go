@@ -74,7 +74,7 @@ func (p *Provider) List(
 
 	// Get Viable offerings
 
-	var result []*cloudprovider.InstanceType
+	result := []*cloudprovider.InstanceType{}
 	for _, sku := range skus {
 		instanceType := NewInstanceType(ctx, sku, kc, p.region, p.createOfferings(ctx, sku))
 		if len(instanceType.Offerings) == 0 {

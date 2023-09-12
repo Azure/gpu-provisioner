@@ -26,9 +26,10 @@ type MockedFunction[I any, O any] struct {
 	Output          AtomicPtr[O]      // Output to return on call to this function
 	CalledWithInput AtomicPtrStack[I] // Stack used to keep track of passed input to this function
 	Error           AtomicError       // Error to return a certain number of times defined by custom error options
-
+	// nolint:	structcheck
 	successfulCalls atomic.Int32 // Internal construct to keep track of the number of times this function has successfully been called
-	failedCalls     atomic.Int32 // Internal construct to keep track of the number of times this function has failed (with error)
+	// nolint:	structcheck
+	failedCalls atomic.Int32 // Internal construct to keep track of the number of times this function has failed (with error)
 }
 
 // Reset must be called between tests otherwise tests will pollute
@@ -129,6 +130,7 @@ func (m *MockedLRO[I, O]) FailedCalls() int {
 }
 
 // MockHandler returns a pre-defined result or error.
+// nolint:	structcheck
 type MockHandler[T any] struct {
 	result *T
 	err    error
