@@ -1,6 +1,31 @@
+Version ?= v0.1.0
 # Image URL to use all building/pushing image targets
 IMG_NAME ?= gpu-provisioner
-IMG_TAG ?= 0.1.0
+IMG_TAG ?= $(subst v,,$(VERSION))
+
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+TOOLS_DIR := hack/tools
+TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
+
+GOLANGCI_LINT_VER := v1.54.1
+GOLANGCI_LINT_BIN := golangci-lint
+GOLANGCI_LINT := $(abspath $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER))
+
+# Scripts
+GO_INSTALL := ./hack/go-install.sh
+
+## --------------------------------------
+## Tooling Binaries
+## --------------------------------------
+
+$(GOLANGCI_LINT):
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
 
 # build variables
 BUILD_VERSION_VAR := $(REPO_PATH)/pkg/version.BuildVersion
@@ -256,3 +281,30 @@ docker-build: docker-buildx
 		--platform="linux/$(ARCH)" \
 		--pull \
 		--tag $(AZURE_ACR_NAME).azurecr.io/$(IMG_NAME):$(IMG_TAG) .
+
+
+## --------------------------------------
+## Linting
+## --------------------------------------
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
+.PHONY: lint
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run -v
+
+## --------------------------------------
+## Release
+## To create a release, run `make release VERSION=x.y.z`
+## --------------------------------------
+.PHONY: release-manifest
+release-manifest:
+	@sed -i -e 's/^VERSION ?= .*/VERSION ?= ${VERSION}/' ./Makefile
+	@sed -i -e "s/version: .*/version: ${IMG_TAG}/" ./charts/gpu-provisioner/Chart.yaml
+	@sed -i -e "s/tag: .*/tag: ${IMG_TAG}/" ./charts/gpu-provisioner/values.yaml
+	@sed -i -e 's/gpu-provisioner:.*/gpu-provisioner:${IMG_TAG}/' ./charts/gpu-provisioner/README.md
+	git checkout -b release-${VERSION}
+	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
+	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
+
