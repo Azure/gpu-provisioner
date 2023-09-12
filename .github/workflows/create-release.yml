@@ -1,7 +1,7 @@
 name: Create release
 on:
   workflow_run:
-    workflows: [ "Create, Scan and Publish KDgpu-provisionerM image" ]
+    workflows: [ "Create, Scan and Publish gpu-provisioner image" ]
     types: [completed]
     branches: [release-**]
 
