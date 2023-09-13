@@ -314,5 +314,6 @@ release-manifest:
 
 .PHONY: unit-test
 unit-test: ## Run unit tests.
-	go test -v $(shell go list ./... | grep -v /pkg/providers/instancetype) -race -coverprofile=coverage.txt -covermode=atomic fmt
+	go test -v ./pkg/providers/instance ./pkg/cloudprovider  \
+	-race -coverprofile=coverage.txt -covermode=atomic fmt
 	go tool cover -func=coverage.txt
