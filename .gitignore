@@ -17,3 +17,5 @@
 .vscode
 _output/
 /hack/tools/bin/
+/coverage.txt
+/coverage.out

@@ -308,3 +308,12 @@ release-manifest:
 	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
 	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
 
+## --------------------------------------
+## Tests
+## --------------------------------------
+
+.PHONY: unit-test
+unit-test: ## Run unit tests.
+	go test -v ./pkg/providers/instance ./pkg/cloudprovider  \
+	-race -coverprofile=coverage.txt -covermode=atomic fmt
+	go tool cover -func=coverage.txt
