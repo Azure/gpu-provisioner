@@ -77,8 +77,6 @@ spec:
               value: "1.19.0-0"
             - name: KARPENTER_SERVICE
               value: {{ include "gpu-provisioner.fullname" . }}
-            - name: WEBHOOK_PORT
-              value: "{{ .Values.webhook.port }}"
             - name: METRICS_PORT
               value: "{{ .Values.controller.metrics.port }}"
             - name: HEALTH_PROBE_PORT
@@ -101,14 +99,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
-            - name: http-metrics
-              containerPort: {{ .Values.controller.metrics.port }}
-              protocol: TCP
             - name: http
               containerPort: {{ .Values.controller.healthProbe.port }}
-              protocol: TCP
-            - name: https-webhook
-              containerPort: {{ .Values.webhook.port }}
               protocol: TCP
           livenessProbe:
             initialDelaySeconds: 30

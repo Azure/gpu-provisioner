@@ -38,13 +38,12 @@ var _ = Describe("Validation", func() {
 	It("should succeed to set defaults", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"azure.clusterEndpoint":                "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-				"azure.clusterName":                    "my-cluster",
-				"azure.clusterID":                      "my-cluster-id",
-				"azure.kubeletClientTLSBootstrapToken": "my-bootstrap-token",
-				"azure.sshPublicKey":                   "my-ssh-public-key",
-				"azure.networkPlugin":                  "kubenet",
-				"azure.networkPolicy":                  "azure",
+				"azure.clusterEndpoint": "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
+				"azure.clusterName":     "my-cluster",
+				"azure.clusterID":       "my-cluster-id",
+				"azure.sshPublicKey":    "my-ssh-public-key",
+				"azure.networkPlugin":   "kubenet",
+				"azure.networkPolicy":   "azure",
 			},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
@@ -56,15 +55,14 @@ var _ = Describe("Validation", func() {
 	It("should succeed to set custom values", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"azure.clusterEndpoint":                "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-				"azure.clusterName":                    "my-cluster",
-				"azure.vmMemoryOverheadPercent":        "0.1",
-				"azure.tags":                           `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
-				"azure.clusterID":                      "my-cluster-id",
-				"azure.kubeletClientTLSBootstrapToken": "my-bootstrap-token",
-				"azure.sshPublicKey":                   "my-ssh-public-key",
-				"azure.networkPlugin":                  "kubenet",
-				"azure.networkPolicy":                  "azure",
+				"azure.clusterEndpoint":         "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
+				"azure.clusterName":             "my-cluster",
+				"azure.vmMemoryOverheadPercent": "0.1",
+				"azure.tags":                    `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
+				"azure.clusterID":               "my-cluster-id",
+				"azure.sshPublicKey":            "my-ssh-public-key",
+				"azure.networkPlugin":           "kubenet",
+				"azure.networkPolicy":           "azure",
 			},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
