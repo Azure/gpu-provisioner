@@ -129,7 +129,7 @@ controller:
     - name: AZURE_CLUSTER_NAME
       value: new_demo
     - name: AZURE_NODE_RESOURCE_GROUP
-      value: lMC_llm-test_new_demo_eastus
+      value: MC_llm-test_new_demo_eastus
     - name: ARM_RESOURCE_GROUP
       value: llm-test
     # TODO: move to settings
