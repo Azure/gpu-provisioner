@@ -127,9 +127,9 @@ controller:
     - name: ARM_USER_ASSIGNED_IDENTITY_ID
       value: 
     - name: AZURE_CLUSTER_NAME
-      value: 
+      value: new_demo
     - name: AZURE_NODE_RESOURCE_GROUP
-      value: 
+      value: MC_llm-test_new_demo_eastus
     - name: ARM_RESOURCE_GROUP
       value: llm-test
     # TODO: move to settings
@@ -170,10 +170,6 @@ controller:
   healthProbe:
     # -- The container port to use for http health probe.
     port: 8081
-webhook:
-  logLevel: error
-  # -- The container port to use for the webhook.
-  port: 8443
 # -- Global log level
 logLevel: debug
 # -- Global log encoding
@@ -196,7 +192,6 @@ settings:
     # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types
     # TODO: not used yet ...
     vmMemoryOverheadPercent: 0.075
-    kubeletClientTLSBootstrapToken: 
     # TODO: autogenerate
     sshPublicKey: 
     networkPlugin: "kubenet" # TODO: get this from the cluster

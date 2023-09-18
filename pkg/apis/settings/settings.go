@@ -33,15 +33,14 @@ type settingsKeyType struct{}
 var ContextKey = settingsKeyType{}
 
 var defaultSettings = Settings{
-	ClusterName:                    "",
-	ClusterEndpoint:                "",
-	VMMemoryOverheadPercent:        0.075,
-	Tags:                           map[string]string{},
-	ClusterID:                      "",
-	KubeletClientTLSBootstrapToken: "",
-	SSHPublicKey:                   "",
-	NetworkPlugin:                  "",
-	NetworkPolicy:                  "",
+	ClusterName:             "",
+	ClusterEndpoint:         "",
+	VMMemoryOverheadPercent: 0.075,
+	Tags:                    map[string]string{},
+	ClusterID:               "",
+	SSHPublicKey:            "",
+	NetworkPlugin:           "",
+	NetworkPolicy:           "",
 }
 
 // +k8s:deepcopy-gen=true
@@ -57,10 +56,9 @@ type Settings struct {
 
 	ClusterID string
 
-	KubeletClientTLSBootstrapToken string `validate:"required"` // => TLSBootstrapToken in bootstrap (may need to be per node/nodepool)
-	SSHPublicKey                   string // ssh.publicKeys.keyData => VM SSH public key // TODO: move to node template?
-	NetworkPlugin                  string `validate:"required"` // => NetworkPlugin in bootstrap
-	NetworkPolicy                  string // => NetworkPolicy in bootstrap
+	SSHPublicKey  string // ssh.publicKeys.keyData => VM SSH public key // TODO: move to node template?
+	NetworkPlugin string `validate:"required"` // => NetworkPlugin in bootstrap
+	NetworkPolicy string // => NetworkPolicy in bootstrap
 }
 
 func (*Settings) ConfigMap() string {
@@ -77,7 +75,6 @@ func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context,
 		configmap.AsFloat64("azure.vmMemoryOverheadPercent", &s.VMMemoryOverheadPercent),
 		AsStringMap("azure.tags", &s.Tags),
 		configmap.AsString("azure.clusterID", &s.ClusterID),
-		configmap.AsString("azure.kubeletClientTLSBootstrapToken", &s.KubeletClientTLSBootstrapToken),
 		configmap.AsString("azure.sshPublicKey", &s.SSHPublicKey),
 		configmap.AsString("azure.networkPlugin", &s.NetworkPlugin),
 		configmap.AsString("azure.networkPolicy", &s.NetworkPolicy),

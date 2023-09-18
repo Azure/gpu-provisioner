@@ -25,8 +25,7 @@ manifests:
           settings:
             azure:
               clusterName: 
-              clusterEndpoint: 
-              kubeletClientTLSBootstrapToken: 
+              clusterEndpoint:
               # TODO: autogenerate
               sshPublicKey: 
               networkPlugin: "kubenet" # TODO: get this from the cluster

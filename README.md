@@ -18,13 +18,10 @@ Change vendor code to disable controllers from the karpenter-core package.
 
 ## How to build
 
-For now, all required steps are mentioned in `Makefile-az.mk`. The `skaffold` tool is used for CI/CD. `skaffold.yaml` contains everything for building the image and customizing the helm chart.
+For now, all required steps are mentioned in `Makefile-az.mk`.
 
-A one-for-all command is `make az-all`. You can run individual steps like `az-mkaks`, `az-perm`, `az-patch-skaffold-kubenet` which are the most important ones. Make sure to setup `AZURE_RESOURCE_GROUP`, `AZURE_ACR_NAME`, and `AZURE_CLUSTER_NAME` correctly in `Makefile-az.mk`.
-
-If you already have a working cluster, just run 
 ```
-make docker-build
+VERSION=v0.1.0 make docker-build
 make az-perm
 helm install gpu-provisioner /charts/gpu-provisioner
 

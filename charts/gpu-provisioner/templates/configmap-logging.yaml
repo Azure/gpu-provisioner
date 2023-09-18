@@ -38,6 +38,3 @@ data:
 {{- with .Values.controller.logLevel }}
   loglevel.controller: {{ . | quote }}
 {{- end }}
-{{- with .Values.webhook.logLevel }}
-  loglevel.webhook: {{ . | quote }}
-{{- end }}

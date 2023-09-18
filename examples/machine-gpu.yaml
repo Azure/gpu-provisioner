@@ -62,5 +62,6 @@ spec:
       cpu: 2310m
       memory: 725280Ki
       pods: "7"
+      storage: 120Gi
 
 status:
