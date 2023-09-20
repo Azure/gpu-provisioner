@@ -37,26 +37,19 @@ type AgentPoolsAPI interface {
 	NewListPager(resourceGroupName string, resourceName string, options *armcontainerservice.AgentPoolsClientListOptions) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse]
 }
 
-type NetworkInterfacesAPI interface {
-	BeginCreateOrUpdate(ctx context.Context, resourceGroupName string, networkInterfaceName string, parameters armnetwork.Interface, options *armnetwork.InterfacesClientBeginCreateOrUpdateOptions) (*runtime.Poller[armnetwork.InterfacesClientCreateOrUpdateResponse], error)
-}
-
 type AZClient struct {
-	agentPoolsClient        AgentPoolsAPI
-	networkInterfacesClient NetworkInterfacesAPI
+	agentPoolsClient AgentPoolsAPI
 	// SKU CLIENT is still using track 1 because skewer does not support the track 2 path. We need to refactor this once skewer supports track 2
 	SKUClient skewer.ResourceClient
 }
 
 func NewAZClientFromAPI(
 	agentPoolsClient AgentPoolsAPI,
-	interfacesClient NetworkInterfacesAPI,
 	skuClient skewer.ResourceClient,
 ) *AZClient {
 	return &AZClient{
-		agentPoolsClient:        agentPoolsClient,
-		networkInterfacesClient: interfacesClient,
-		SKUClient:               skuClient,
+		agentPoolsClient: agentPoolsClient,
+		SKUClient:        skuClient,
 	}
 }
 
@@ -112,8 +105,7 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
 
 	return &AZClient{
-		agentPoolsClient:        agentPoolClient,
-		networkInterfacesClient: interfacesClient,
-		SKUClient:               skuClient,
+		agentPoolsClient: agentPoolClient,
+		SKUClient:        skuClient,
 	}, nil
 }

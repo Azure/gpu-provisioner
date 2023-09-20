@@ -22,7 +22,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/Azure/go-autorest/autorest/to"
-	"github.com/gpu-vmprovisioner/pkg/providers/instance"
 )
 
 type NetworkInterfaceCreateOrUpdateInput struct {
@@ -36,9 +35,6 @@ type NetworkInterfacesBehavior struct {
 	NetworkInterfacesCreateOrUpdateBehavior MockedLRO[NetworkInterfaceCreateOrUpdateInput, armnetwork.InterfacesClientCreateOrUpdateResponse]
 	NetworkInterfaces                       sync.Map
 }
-
-// assert that the fake implements the interface
-var _ instance.NetworkInterfacesAPI = (*NetworkInterfacesAPI)(nil)
 
 type NetworkInterfacesAPI struct {
 	// instance.NetworkInterfacesAPI
