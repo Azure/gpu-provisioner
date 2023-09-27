@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 	"github.com/gpu-vmprovisioner/pkg/tests"
