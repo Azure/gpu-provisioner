@@ -10,7 +10,7 @@ package armcontainerservice
 
 const (
 	moduleName    = "armcontainerservice"
-	moduleVersion = "v4.1.0"
+	moduleVersion = "v4.3.0"
 )
 
 // AgentPoolMode - A cluster must have at least one 'System' Agent Pool at all times. For additional information on agent
@@ -472,6 +472,34 @@ func PossibleNetworkPolicyValues() []NetworkPolicy {
 	}
 }
 
+// NodeOSUpgradeChannel - Manner in which the OS on your nodes is updated. The default is NodeImage.
+type NodeOSUpgradeChannel string
+
+const (
+	// NodeOSUpgradeChannelNodeImage - AKS will update the nodes with a newly patched VHD containing security fixes and bugfixes
+	// on a weekly cadence. With the VHD update machines will be rolling reimaged to that VHD following maintenance windows and
+	// surge settings. No extra VHD cost is incurred when choosing this option as AKS hosts the images.
+	NodeOSUpgradeChannelNodeImage NodeOSUpgradeChannel = "NodeImage"
+	// NodeOSUpgradeChannelNone - No attempt to update your machines OS will be made either by OS or by rolling VHDs. This means
+	// you are responsible for your security updates
+	NodeOSUpgradeChannelNone NodeOSUpgradeChannel = "None"
+	// NodeOSUpgradeChannelUnmanaged - OS updates will be applied automatically through the OS built-in patching infrastructure.
+	// Newly scaled in machines will be unpatched initially and will be patched at some point by the OS's infrastructure. Behavior
+	// of this option depends on the OS in question. Ubuntu and Mariner apply security patches through unattended upgrade roughly
+	// once a day around 06:00 UTC. Windows does not apply security patches automatically and so for them this option is equivalent
+	// to None till further notice
+	NodeOSUpgradeChannelUnmanaged NodeOSUpgradeChannel = "Unmanaged"
+)
+
+// PossibleNodeOSUpgradeChannelValues returns the possible values for the NodeOSUpgradeChannel const type.
+func PossibleNodeOSUpgradeChannelValues() []NodeOSUpgradeChannel {
+	return []NodeOSUpgradeChannel{
+		NodeOSUpgradeChannelNodeImage,
+		NodeOSUpgradeChannelNone,
+		NodeOSUpgradeChannelUnmanaged,
+	}
+}
+
 // OSDiskType - The default is 'Ephemeral' if the VM supports it and has a cache disk larger than the requested OSDiskSizeGB.
 // Otherwise, defaults to 'Managed'. May not be changed after creation. For more information
 // see Ephemeral OS [https://docs.microsoft.com/azure/aks/cluster-configuration#ephemeral-os].
@@ -742,10 +770,8 @@ func PossibleTypeValues() []Type {
 type UpgradeChannel string
 
 const (
-	// UpgradeChannelNodeImage - Automatically upgrade the node image to the latest version available. Microsoft provides patches
-	// and new images for image nodes frequently (usually weekly), but your running nodes won't get the new images unless you
-	// do a node image upgrade. Turning on the node-image channel will automatically update your node images whenever a new version
-	// is available.
+	// UpgradeChannelNodeImage - Automatically upgrade the node image to the latest version available. Consider using nodeOSUpgradeChannel
+	// instead as that allows you to configure node OS patching separate from Kubernetes version patching
 	UpgradeChannelNodeImage UpgradeChannel = "node-image"
 	// UpgradeChannelNone - Disables auto-upgrades and keeps the cluster at its current version of Kubernetes.
 	UpgradeChannelNone UpgradeChannel = "none"

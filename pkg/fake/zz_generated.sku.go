@@ -19,7 +19,7 @@ package fake
 import (
 	"github.com/samber/lo"
 	// nolint SA1019 - deprecated package
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2021-12-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
 )
 
 // generated at 2023-04-26T21:36:07Z

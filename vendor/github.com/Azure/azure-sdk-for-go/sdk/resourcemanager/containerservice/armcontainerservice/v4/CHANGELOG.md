@@ -1,5 +1,25 @@
 # Release History
 
+## 4.3.0 (2023-08-25)
+### Features Added
+
+- New struct `ClusterUpgradeSettings`
+- New struct `UpgradeOverrideSettings`
+- New field `UpgradeSettings` in struct `ManagedClusterProperties`
+
+
+## 4.2.0 (2023-08-25)
+### Features Added
+
+- New enum type `NodeOSUpgradeChannel` with values `NodeOSUpgradeChannelNodeImage`, `NodeOSUpgradeChannelNone`, `NodeOSUpgradeChannelUnmanaged`
+- New struct `DelegatedResource`
+- New struct `ManagedClusterWorkloadAutoScalerProfileVerticalPodAutoscaler`
+- New field `DrainTimeoutInMinutes` in struct `AgentPoolUpgradeSettings`
+- New field `NodeOSUpgradeChannel` in struct `ManagedClusterAutoUpgradeProfile`
+- New field `DelegatedResources` in struct `ManagedClusterIdentity`
+- New field `VerticalPodAutoscaler` in struct `ManagedClusterWorkloadAutoScalerProfile`
+
+
 ## 4.1.0 (2023-07-28)
 ### Features Added
 
