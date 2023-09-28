@@ -41,44 +41,6 @@ const (
 	memoryAvailable = "memory.available"
 )
 
-var (
-	// "ignoredErrorSKUs" holds the SKUs that cannot be parsed using the current method.
-	// These SKUs are be excluded from error logging.
-	ignoredErrorSKUs = map[string]struct{}{
-		"M416s_8_v2":    {},
-		"DC16ads_cc_v5": {},
-		"DC16as_cc_v5":  {},
-		"DC32ads_cc_v5": {},
-		"DC32as_cc_v5":  {},
-		"DC48ads_cc_v5": {},
-		"DC48as_cc_v5":  {},
-		"DC4ads_cc_v5":  {},
-		"DC4as_cc_v5":   {},
-		"DC64ads_cc_v5": {},
-		"DC64as_cc_v5":  {},
-		"DC8ads_cc_v5":  {},
-		"DC8as_cc_v5":   {},
-		"DC96ads_cc_v5": {},
-		"DC96as_cc_v5":  {},
-		"EC16ads_cc_v5": {},
-		"EC16as_cc_v5":  {},
-		"EC20ads_cc_v5": {},
-		"EC20as_cc_v5":  {},
-		"EC32ads_cc_v5": {},
-		"EC32as_cc_v5":  {},
-		"EC48ads_cc_v5": {},
-		"EC48as_cc_v5":  {},
-		"EC4ads_cc_v5":  {},
-		"EC4as_cc_v5":   {},
-		"EC64ads_cc_v5": {},
-		"EC64as_cc_v5":  {},
-		"EC8ads_cc_v5":  {},
-		"EC8as_cc_v5":   {},
-		"EC96ads_cc_v5": {},
-		"EC96as_cc_v5":  {},
-	}
-)
-
 func NewInstanceType(ctx context.Context, sku *skewer.SKU, kc *v1alpha5.KubeletConfiguration, region string,
 	offerings cloudprovider.Offerings) *cloudprovider.InstanceType {
 	return &cloudprovider.InstanceType{
@@ -147,34 +109,30 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 	requirements[v1alpha1.LabelSKUName].Insert(sku.GetName())
 	requirements[v1alpha1.LabelSKUSize].Insert(*sku.Size)
 
-	vmsize, err := getVMSize(*sku.Size)
+	vmsize, err := sku.GetVMSize()
 	if err != nil {
-		if _, ok := ignoredErrorSKUs[*sku.Size]; !ok {
-			//TODO: uncomment after improving parsing
-			logging.FromContext(ctx).Errorf("ignoredErrorSKUs %v", ignoredErrorSKUs)
-			logging.FromContext(ctx).Errorf("parsing VM size %s, %v", *sku.Size, err)
-		}
+		logging.FromContext(ctx).Errorf("parsing VM size %s, %v", *sku.Size, err)
 		return requirements
 	}
 	// logging.FromContext(ctx).Debugf("VM Size %s: %s", *i.Size, vmsize)
 
-	requirements[v1alpha1.LabelSKUSeries].Insert(vmsize.getSeries())
+	requirements[v1alpha1.LabelSKUSeries].Insert(vmsize.Series)
 
 	// size parts
-	requirements[v1alpha1.LabelSKUFamily].Insert(vmsize.family)
-	if vmsize.subfamily != nil {
-		requirements[v1alpha1.LabelSKUSubfamily].Insert(*vmsize.subfamily)
+	requirements[v1alpha1.LabelSKUFamily].Insert(vmsize.Family)
+	if vmsize.Subfamily != nil {
+		requirements[v1alpha1.LabelSKUSubfamily].Insert(*vmsize.Subfamily)
 	}
 
-	if vmsize.cpusConstrained != nil {
-		requirements[v1alpha1.LabelSKUCPUConstrained].Insert(*vmsize.cpusConstrained)
+	if vmsize.CpusConstrained != nil {
+		requirements[v1alpha1.LabelSKUCPUConstrained].Insert(*vmsize.CpusConstrained)
 	}
 
 	// everything from additive features
 	for _, featureLabel := range v1alpha1.SkuFeatureToLabel {
 		requirements.Add(scheduling.NewRequirement(featureLabel, v1.NodeSelectorOpDoesNotExist))
 	}
-	for _, feature := range vmsize.additiveFeatures {
+	for _, feature := range vmsize.AdditiveFeatures {
 		if featureLabel, ok := v1alpha1.SkuFeatureToLabel[feature]; ok {
 			requirements[featureLabel].Insert("true") // TODO: correct way to deal with bool in requirements?
 		} else {
@@ -184,21 +142,21 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		}
 	}
 
-	// (How? Would have to introduce requirements at offerring level ...)
-	if IsPremiumIO(sku) {
+	// (How? Would have to introduce requirements at offering level ...)
+	if sku.IsPremiumIO() {
 		requirements[v1alpha1.LabelSKUStoragePremiumCapable].Insert("true")
 	}
 	if sku.IsEncryptionAtHostSupported() {
 		requirements[v1alpha1.LabelSKUEncryptionAtHostSupported].Insert("true")
 	}
-	if sku.IsEphemeralOSDiskSupported() && vmsize.getSeries() != "Dlds_v5" { // Dlds_v5 does not support ephemeral OS disk, contrary to what it claims
+	if sku.IsEphemeralOSDiskSupported() && vmsize.Series != "Dlds_v5" { // Dlds_v5 does not support ephemeral OS disk, contrary to what it claims
 		requirements[v1alpha1.LabelSKUEphemeralOSDiskSupported].Insert("true")
 	}
 	if sku.IsAcceleratedNetworkingSupported() {
 		requirements[v1alpha1.LabelSKUAcceleratedNetworking].Insert("true") // TODO: correct way to deal with bool in requirements?
 	}
 	// multiple values for instance type requirement:
-	if IsHyperVGen1Supported(sku) {
+	if sku.IsHyperVGen1Supported() {
 		requirements[v1alpha1.LabelSKUHyperVGeneration].Insert("V1")
 	}
 	if sku.IsHyperVGen2Supported() {
@@ -212,11 +170,11 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		requirements[v1alpha1.LabelSKUMaxResourceVolume].Insert(fmt.Sprint(maxTemp))
 	}
 
-	if vmsize.acceleratorType != nil {
-		requirements[v1alpha1.LabelSKUAccelerator].Insert(*vmsize.acceleratorType)
+	if vmsize.AcceleratorType != nil {
+		requirements[v1alpha1.LabelSKUAccelerator].Insert(*vmsize.AcceleratorType)
 	}
 
-	requirements[v1alpha1.LabelSKUVersion].Insert(vmsize.version)
+	requirements[v1alpha1.LabelSKUVersion].Insert(vmsize.Version)
 
 	// TODO: more: GPU, etc.
 
@@ -225,7 +183,7 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 
 func getArchitecture(sku *skewer.SKU) string {
 	// TODO: error handling
-	architecture, _ := GetCPUArchitectureType(sku)
+	architecture, _ := sku.GetCPUArchitectureType()
 	if value, ok := v1alpha1.AzureToKubeArchitectures[architecture]; ok {
 		return value
 	}

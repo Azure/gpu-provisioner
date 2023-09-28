@@ -121,6 +121,11 @@ type AgentPoolUpgradeProfilePropertiesUpgradesItem struct {
 
 // AgentPoolUpgradeSettings - Settings for upgrading an agentpool
 type AgentPoolUpgradeSettings struct {
+	// The amount of time (in minutes) to wait on eviction of pods and graceful termination per node. This eviction wait time
+	// honors waiting on pod disruption budgets. If this time is exceeded, the upgrade
+	// fails. If not specified, the default is 30 minutes.
+	DrainTimeoutInMinutes *int32
+
 	// This can either be set to an integer (e.g. '5') or a percentage (e.g. '50%'). If a percentage is specified, it is the percentage
 	// of the total agent pool size at the time of the upgrade. For
 	// percentages, fractional nodes are rounded up. If not specified, the default is 1. For more information, including best
@@ -148,6 +153,12 @@ type AzureKeyVaultKms struct {
 	// Resource ID of key vault. When keyVaultNetworkAccess is Private, this field is required and must be a valid resource ID.
 	// When keyVaultNetworkAccess is Public, leave the field empty.
 	KeyVaultResourceID *string
+}
+
+// ClusterUpgradeSettings - Settings for upgrading a cluster.
+type ClusterUpgradeSettings struct {
+	// Settings for overrides.
+	OverrideSettings *UpgradeOverrideSettings
 }
 
 // CommandResultProperties - The results of a run command
@@ -205,6 +216,21 @@ type DateSpan struct {
 
 	// REQUIRED; The start date of the date span.
 	Start *time.Time
+}
+
+// DelegatedResource - Delegated resource properties - internal use only.
+type DelegatedResource struct {
+	// The source resource location - internal use only.
+	Location *string
+
+	// The delegation id of the referral delegation (optional) - internal use only.
+	ReferralResource *string
+
+	// The ARM resource id of the delegated resource - internal use only.
+	ResourceID *string
+
+	// The tenant id of the delegated resource - internal use only.
+	TenantID *string
 }
 
 // EndpointDependency - A domain name that AKS agent nodes are reaching at.
@@ -853,6 +879,9 @@ type ManagedClusterAgentPoolProfileProperties struct {
 
 // ManagedClusterAutoUpgradeProfile - Auto upgrade profile for a managed cluster.
 type ManagedClusterAutoUpgradeProfile struct {
+	// Manner in which the OS on your nodes is updated. The default is NodeImage.
+	NodeOSUpgradeChannel *NodeOSUpgradeChannel
+
 	// For more information see setting the AKS cluster auto-upgrade channel [https://docs.microsoft.com/azure/aks/upgrade-cluster#set-auto-upgrade-channel].
 	UpgradeChannel *UpgradeChannel
 }
@@ -911,6 +940,11 @@ type ManagedClusterHTTPProxyConfig struct {
 
 // ManagedClusterIdentity - Identity for the managed cluster.
 type ManagedClusterIdentity struct {
+	// The delegated identity resources assigned to this managed cluster. This can only be set by another Azure Resource Provider,
+	// and managed cluster only accept one delegated identity resource. Internal
+	// use only.
+	DelegatedResources map[string]*DelegatedResource
+
 	// For more information see use managed identities in AKS [https://docs.microsoft.com/azure/aks/use-managed-identity].
 	Type *ResourceIdentityType
 
@@ -1208,6 +1242,9 @@ type ManagedClusterProperties struct {
 	// The support plan for the Managed Cluster. If unspecified, the default is 'KubernetesOfficial'.
 	SupportPlan *KubernetesSupportPlan
 
+	// Settings for upgrading a cluster.
+	UpgradeSettings *ClusterUpgradeSettings
+
 	// The profile for Windows VMs in the Managed Cluster.
 	WindowsProfile *ManagedClusterWindowsProfile
 
@@ -1470,12 +1507,22 @@ type ManagedClusterWindowsProfile struct {
 type ManagedClusterWorkloadAutoScalerProfile struct {
 	// KEDA (Kubernetes Event-driven Autoscaling) settings for the workload auto-scaler profile.
 	Keda *ManagedClusterWorkloadAutoScalerProfileKeda
+
+	// VPA (Vertical Pod Autoscaler) settings for the workload auto-scaler profile.
+	VerticalPodAutoscaler *ManagedClusterWorkloadAutoScalerProfileVerticalPodAutoscaler
 }
 
 // ManagedClusterWorkloadAutoScalerProfileKeda - KEDA (Kubernetes Event-driven Autoscaling) settings for the workload auto-scaler
 // profile.
 type ManagedClusterWorkloadAutoScalerProfileKeda struct {
 	// REQUIRED; Whether to enable KEDA.
+	Enabled *bool
+}
+
+// ManagedClusterWorkloadAutoScalerProfileVerticalPodAutoscaler - VPA (Vertical Pod Autoscaler) settings for the workload
+// auto-scaler profile.
+type ManagedClusterWorkloadAutoScalerProfileVerticalPodAutoscaler struct {
+	// REQUIRED; Whether to enable VPA. Default value is false.
 	Enabled *bool
 }
 
@@ -1965,6 +2012,18 @@ type TimeSpan struct {
 
 	// The start of a time span
 	Start *time.Time
+}
+
+// UpgradeOverrideSettings - Settings for overrides when upgrading a cluster.
+type UpgradeOverrideSettings struct {
+	// Whether to force upgrade the cluster. Note that this option instructs upgrade operation to bypass upgrade protections such
+	// as checking for deprecated API usage. Enable this option only with caution.
+	ForceUpgrade *bool
+
+	// Until when the overrides are effective. Note that this only matches the start time of an upgrade, and the effectiveness
+	// won't change once an upgrade starts even if the until expires as upgrade
+	// proceeds. This field is not set by default. It must be set for the overrides to take effect.
+	Until *time.Time
 }
 
 // UserAssignedIdentity - Details about a user assigned identity.

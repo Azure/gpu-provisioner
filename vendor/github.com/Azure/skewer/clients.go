@@ -3,7 +3,7 @@ package skewer
 import (
 	"context"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2021-12-01/compute" //nolint:staticcheck
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute" //nolint:staticcheck
 	"github.com/pkg/errors"
 )
 

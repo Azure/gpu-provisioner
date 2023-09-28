@@ -5,7 +5,6 @@ const (
 
 	// ResourceNotFound is a const used to reference if we are missing a resource from azure
 	ResourceNotFound = "ResourceNotFound"
-	NotFound         = "NotFound"
 
 	OperationNotAllowed = "OperationNotAllowed"
 
