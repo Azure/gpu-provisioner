@@ -19,7 +19,7 @@ import (
 	"log"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"k8s.io/klog/v2"
 )
 
@@ -41,14 +41,16 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 	klog.InfoS("deleteAgentPool", "agentpool", apName)
 	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
 	if err != nil {
-		if sdkerrors.IsNotFoundErr(err) {
+		azErr := sdkerrors.IsResponseError(err)
+		if azErr != nil && azErr.ErrorCode == "NotFound" {
 			return nil
 		}
 		return err
 	}
 	_, err = poller.PollUntilDone(ctx, nil)
 	if err != nil {
-		if sdkerrors.IsNotFoundErr(err) {
+		azErr := sdkerrors.IsResponseError(err)
+		if azErr != nil && azErr.ErrorCode == "NotFound" {
 			return nil
 		}
 	}
