@@ -46,6 +46,8 @@ var (
 	// alternative zone label for Machine (the standard one is protected for AKS nodes)
 	AlternativeLabelTopologyZone = LabelDomain + "/zone"
 
+	ManufacturerNvidia = "nvidia"
+
 	// TODO: this set needs to be designed properly and carefully; essentially represents the API
 
 	LabelSKUTier = LabelDomain + "/sku-tier" // Basic, Standard [, Premium?]
@@ -86,6 +88,10 @@ var (
 	LabelSKUCachedDiskSize            = LabelDomain + "/sku-storage-cache-maxsize"        // sku.CachedDiskBytes
 	LabelSKUMaxResourceVolume         = LabelDomain + "/sku-storage-temp-maxsize"         // sku.MaxResourceVolumeMB
 	// TODO: more labels
+	// GPU LABELS!
+	LabelSKUGPUName         = LabelDomain + "/sku-gpu-name"         // ie GPU Accelerator type we parse from vmSize
+	LabelSKUGPUManufacturer = LabelDomain + "/sku-gpu-manufacturer" // ie NVIDIA, AMD, etc
+	LabelSKUGPUCount        = LabelDomain + "/sku-gpu-count"        // ie 16, 32, etc
 
 	SkuFeatureToLabel = map[rune]string{
 		'a': LabelSKUCpuTypeAmd,
@@ -144,5 +150,9 @@ func init() {
 		LabelSKUEphemeralOSDiskSupported,
 		LabelSKUCachedDiskSize,
 		LabelSKUMaxResourceVolume,
+
+		LabelSKUGPUName,
+		LabelSKUGPUManufacturer,
+		LabelSKUGPUCount,
 	)
 }

@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/Azure/skewer"
+	"github.com/gpu-vmprovisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -77,6 +78,9 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		// Well Known to Azure
 		scheduling.NewRequirement(v1alpha1.LabelSKUCPU, v1.NodeSelectorOpIn, fmt.Sprint(cpu(sku).Value())),
 		scheduling.NewRequirement(v1alpha1.LabelSKUMemory, v1.NodeSelectorOpIn, fmt.Sprint(memory(sku).ScaledValue(resource.Mega))),
+		scheduling.NewRequirement(v1alpha1.LabelSKUGPUCount, v1.NodeSelectorOpIn, fmt.Sprint(gpuNvidiaCount(sku).Value())),
+		scheduling.NewRequirement(v1alpha1.LabelSKUGPUManufacturer, v1.NodeSelectorOpDoesNotExist),
+		scheduling.NewRequirement(v1alpha1.LabelSKUGPUName, v1.NodeSelectorOpDoesNotExist),
 
 		scheduling.NewRequirement(v1alpha1.LabelSKUTier, v1.NodeSelectorOpDoesNotExist),
 		//scheduling.NewRequirement(LabelSKUSizeGen, v1.NodeSelectorOpDoesNotExist),
@@ -163,6 +167,13 @@ func computeRequirements(ctx context.Context, sku *skewer.SKU, offerings cloudpr
 		requirements[v1alpha1.LabelSKUHyperVGeneration].Insert("V2")
 	}
 
+	if utils.IsNvidiaEnabledSKU(sku.GetName()) {
+		requirements[v1alpha1.LabelSKUGPUManufacturer].Insert(v1alpha1.ManufacturerNvidia)
+		if vmsize.AcceleratorType != nil {
+			requirements[v1alpha1.LabelSKUGPUName].Insert(*vmsize.AcceleratorType)
+		}
+	}
+
 	if maxCached, err := sku.MaxCachedDiskBytes(); err == nil {
 		requirements[v1alpha1.LabelSKUCachedDiskSize].Insert(fmt.Sprint(maxCached))
 	}
@@ -198,9 +209,18 @@ func computeCapacity(sku *skewer.SKU, kc *v1alpha5.KubeletConfiguration) v1.Reso
 		v1.ResourceEphemeralStorage: *getEphemeralStorage(sku),
 		v1.ResourcePods:             *pods(sku, kc),
 		// TODO: (important) more: GPU etc.
+		"nvidia.com/gpu": *gpuNvidiaCount(sku),
 	}
 }
 
+// gpuNvidiaCount returns the number of Nvidia GPUs in the SKU. Currently nvidia is the only gpu manufacturer we support.
+func gpuNvidiaCount(sku *skewer.SKU) *resource.Quantity {
+	count, err := sku.GPU()
+	if err != nil || !utils.IsNvidiaEnabledSKU(sku.GetName()) {
+		count = 0
+	}
+	return resources.Quantity(fmt.Sprint(count))
+}
 func cpu(sku *skewer.SKU) *resource.Quantity {
 	// TODO: error handling
 	vcpu, _ := sku.VCPU()
