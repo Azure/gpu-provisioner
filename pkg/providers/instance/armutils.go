@@ -58,8 +58,6 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 }
 
 func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
-	klog.InfoS("getAgentPool", "agentpool", apName)
-
 	resp, err := client.Get(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		return nil, err
@@ -69,8 +67,6 @@ func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, cluster
 }
 
 func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName string) ([]*armcontainerservice.AgentPool, error) {
-	klog.InfoS("listAgentPools")
-
 	var apList []*armcontainerservice.AgentPool
 	pager := client.NewListPager(rg, clusterName, nil)
 	for pager.More() {

@@ -401,7 +401,7 @@ func (c *Cluster) newStateFromNode(ctx context.Context, node *v1.Node, oldNode *
 	}
 	if err := multierr.Combine(
 		c.populateStartupTaints(ctx, n),
-		c.populateInflight(ctx, n),
+		//		c.populateInflight(ctx, n),   // gpu-provisioner does not need to calculate inflight capacity
 		c.populateResourceRequests(ctx, n),
 		c.populateVolumeLimits(ctx, n),
 	); err != nil {

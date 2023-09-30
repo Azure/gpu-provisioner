@@ -126,8 +126,6 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 
 // getVMSSNodeProviderID generates the provider ID for a virtual machine scale set.
 func (p *Provider) getVMSSNodeProviderID(subscriptionID, scaleSetName string) string {
-	klog.InfoS("Instance.getVMSSNodeProviderID", "subscriptionID", subscriptionID, "scaleSetName", scaleSetName)
-
 	return fmt.Sprintf(
 		"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/%s/virtualMachines/0", //vm = 0 as ew have the count always 1
 		subscriptionID,
@@ -137,8 +135,6 @@ func (p *Provider) getVMSSNodeProviderID(subscriptionID, scaleSetName string) st
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
-	klog.InfoS("Instance.Get", "id", id)
-
 	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
@@ -153,8 +149,6 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
-	klog.InfoS("Instance.List")
-
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
@@ -180,8 +174,6 @@ func (p *Provider) Delete(ctx context.Context, id string) error {
 }
 
 func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
-	klog.InfoS("Instance.fromAgentPoolToInstance", "agentpool", apObj.Name)
-
 	subID, err := utils.ParseSubIDFromID(lo.FromPtr(apObj.ID))
 	if err != nil {
 		return nil, err
@@ -212,8 +204,6 @@ func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontai
 }
 
 func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armcontainerservice.AgentPool) ([]*Instance, error) {
-	klog.InfoS("Instance.fromAPListToInstances")
-
 	if len(apList) == 0 {
 		return nil, fmt.Errorf("no agentpools found")
 	}
@@ -307,7 +297,6 @@ func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, 
 }
 
 func (p *Provider) getNodeByName(ctx context.Context, apName string) (*v1.Node, error) {
-	klog.InfoS("Instance.getNodeByName", "agentpool", apName)
 	nodeList := &v1.NodeList{}
 	labelSelector := client.MatchingLabels{"agentpool": apName, "kubernetes.azure.com/agentpool": apName}
 
