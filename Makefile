@@ -36,7 +36,7 @@ GETTING_STARTED_SCRIPT_DIR = website/content/en/preview/getting-started/getting-
 
 # TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" or "make test" against
 TEST_SUITE ?= "..."
-TEST_TIMEOUT ?= "3h"
+TEST_TIMEOUT ?= "1h"
 
 # Common Directories
 # TODO: revisit testing tools (temporarily excluded here, for make verify)
@@ -90,7 +90,7 @@ e2etests: ## Run the e2e suite against your local cluster
 		-count 1 \
 		-timeout ${TEST_TIMEOUT} \
 		-v \
-		./suites/$(shell echo $(TEST_SUITE) | tr A-Z a-z)/... \
+		./e2e/suites/suite_test.go \
 		--ginkgo.focus="${FOCUS}" \
 		--ginkgo.timeout=${TEST_TIMEOUT} \
 		--ginkgo.grace-period=3m \
@@ -98,18 +98,6 @@ e2etests: ## Run the e2e suite against your local cluster
 
 benchmark:
 	go test -tags=test_performance -run=NoTests -bench=. ./...
-
-deflake: ## Run randomized, racing, code-covered tests to deflake failures
-	for i in $(shell seq 1 5); do make battletest || exit 1; done
-
-deflake-until-it-fails: ## Run randomized, racing tests until the test fails to catch flakes
-	ginkgo \
-		--race \
-		--focus="${FOCUS}" \
-		--randomize-all \
-		--until-it-fails \
-		-v \
-		./pkg/...
 
 coverage:
 	go tool cover -html coverage.out -o coverage.html

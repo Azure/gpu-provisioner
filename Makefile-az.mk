@@ -41,18 +41,13 @@ LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_V
 # Data Plane Developer
 # AZURE_SUBSCRIPTION_ID=8643025a-c059-4a48-85d0-d76f51d63a74
 # AKS INT/Staging Test
-AZURE_SUBSCRIPTION_ID=ff05f55d-22b5-44a7-b704-f9a8efd493ed
+AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
 # Note: for experimental SAVM support, location has to be westus2
 AZURE_LOCATION=eastus
-ifeq ($(CODESPACES),true)
-  AZURE_RESOURCE_GROUP=$(CODESPACE_NAME)
-  AZURE_ACR_NAME=$(subst -,,$(CODESPACE_NAME))
-else
-  AZURE_RESOURCE_GROUP=llm-test
-  AZURE_ACR_NAME=aimodelsregistry
-endif
+AZURE_RESOURCE_GROUP ?= llm-test
+AZURE_ACR_NAME ?= aimodelsregistry
+AZURE_CLUSTER_NAME ?= new_demo
 
-AZURE_CLUSTER_NAME=new_demo
 AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
 az-all:      az-login az-mkaks      az-perm az-patch-skaffold-kubenet az-build az-run az-run-sample ## Provision the infra (ACR,AKS); build and deploy Karpenter; deploy sample Provisioner and workload
@@ -68,7 +63,6 @@ az-mkrg: ## Create resource group
 az-mkacr: az-mkrg ## Create test ACR
 	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Standard --admin-enabled -o none
 	az acr login  --name $(AZURE_ACR_NAME)
-	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
 az-mkaks: az-mkacr ## Create test AKS cluster (with --vm-set-type AvailabilitySet for compatibility with standalone VMs)
 	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
@@ -78,7 +72,6 @@ az-mkaks: az-mkacr ## Create test AKS cluster (with --vm-set-type AvailabilitySe
 az-mkaks-savm: az-mkrg ## Create experimental cluster with standalone VMs (+ ACR)
 	az deployment group create --resource-group $(AZURE_RESOURCE_GROUP) --template-file hack/azure/aks-savm.bicep --parameters aksname=$(AZURE_CLUSTER_NAME) acrname=$(AZURE_ACR_NAME)
 	az aks get-credentials     --resource-group $(AZURE_RESOURCE_GROUP) --name $(AZURE_CLUSTER_NAME)
-	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
 
 az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
@@ -107,6 +100,23 @@ az-patch-skaffold: 	## Update Azure client env vars and settings in skaffold con
 
 	skaffold config set default-repo $(AZURE_ACR_NAME).azurecr.io/gpu-ap
 
+az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
+	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
+	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq -r ".identityProfile.kubeletidentity.clientId"))
+	$(eval AZURE_SUBNET_ID=$(shell az network vnet list --resource-group $(AZURE_RESOURCE_GROUP_MC) | jq  -r ".[0].subnets[0].id"))
+
+	yq -i '(.controller.image.repository)                                              = "$(AZURE_ACR_NAME).azurecr.io/gpu-provisioner"'   ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.image.tag)                                                     = "$(IMG_TAG)"'                                     ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_SUBSCRIPTION_ID"))           .value = "$(AZURE_SUBSCRIPTION_ID)"'                       ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="LOCATION"))                      .value = "$(AZURE_LOCATION)"'                              ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_USER_ASSIGNED_IDENTITY_ID")) .value = "$(AZURE_CLIENT_ID)"'                             ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_RESOURCE_GROUP"))            .value = "$(AZURE_RESOURCE_GROUP)"'                        ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_NODE_RESOURCE_GROUP"))     .value = "$(AZURE_RESOURCE_GROUP_MC)"'                     ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_CLUSTER_NAME"))            .value = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_SUBNET_ID"))               .value = "$(AZURE_SUBNET_ID)"'                             ./charts/gpu-provisioner/values.yaml
+
+	helm install gpu-provisioner ./charts/gpu-provisioner
+
 az-patch-skaffold-kubenet: az-patch-skaffold
 	$(eval AZURE_SUBNET_ID=$(shell az network vnet list --resource-group $(AZURE_RESOURCE_GROUP_MC) | jq  -r ".[0].subnets[0].id"))
 	yq -i '(.manifests.helm.releases[0].overrides.controller.env[] | select(.name=="AZURE_SUBNET_ID"))               .value = "$(AZURE_SUBNET_ID)"'         skaffold.yaml
@@ -125,10 +135,12 @@ az-rmvmss-vms: ## Delete all VMs in VMSS Flex (use with care!)
 
 az-perm: ## Create role assignments to let Karpenter manage VMs and Network
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) --role "Virtual Machine Contributor"
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    --role "Contributor"
-	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    --role "Azure Kubernetes Service RBAC Cluster Admin"
-	@echo Consider "make az-patch-skaffold"!
+	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) \
+	--role "Virtual Machine Contributor" --assignee-principal-type ServicePrincipal
+	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
+	--role "Contributor" --assignee-principal-type ServicePrincipal
+	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
+	--role "Azure Kubernetes Service RBAC Cluster Admin" --assignee-principal-type ServicePrincipal
 
 az-perm-acr:
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))

@@ -23,6 +23,7 @@ For now, all required steps are mentioned in `Makefile-az.mk`.
 ```
 VERSION=v0.1.0 make docker-build
 make az-perm
+make az-patch-helm
 helm install gpu-provisioner /charts/gpu-provisioner
 
 ```

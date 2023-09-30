@@ -70,20 +70,20 @@ affinity:
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       nodeSelectorTerms:
-      - matchExpressions:
-        - key: kubernetes.azure.com/cluster
-          operator: Exists
-        - key: type
-          operator: NotIn
-          values:
-          - virtual-kubelet
-        - key: kubernetes.io/os
-          operator: In
-          values:
-          - linux
-      - matchExpressions:
-        - key: karpenter.sh/provisioner-name
-          operator: DoesNotExist
+        - matchExpressions:
+            - key: kubernetes.azure.com/cluster
+              operator: Exists
+            - key: type
+              operator: NotIn
+              values:
+                - virtual-kubelet
+            - key: kubernetes.io/os
+              operator: In
+              values:
+                - linux
+        - matchExpressions:
+            - key: karpenter.sh/provisioner-name
+              operator: DoesNotExist
   podAntiAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
       - topologyKey: "kubernetes.io/hostname"
@@ -119,22 +119,22 @@ controller:
   # -- Additional environment variables for the controller pod.
   env:
     - name: ARM_SUBSCRIPTION_ID
-      value: 
+      value:
     - name: LOCATION
-      value: eastus
+      value:
     - name: ARM_USE_MANAGED_IDENTITY_EXTENSION
       value: "true"
     - name: ARM_USER_ASSIGNED_IDENTITY_ID
-      value: 
+      value:
     - name: AZURE_CLUSTER_NAME
-      value: new_demo
+      value:
     - name: AZURE_NODE_RESOURCE_GROUP
-      value: MC_llm-test_new_demo_eastus
+      value:
     - name: ARM_RESOURCE_GROUP
-      value: llm-test
+      value:
     # TODO: move to settings
     - name: AZURE_SUBNET_ID # the id of subnet to create network interfaces on
-      value: /subscriptions/ff05f55d-22b5-44a7-b704-f9a8efd493ed/resourceGroups/MC_llm-test_new_demo_eastus/providers/Microsoft.Network/virtualNetworks/aks-vnet-16592489/subnets/aks-subnet
+      value:
     - name: LEADER_ELECT # disable leader election for better debugging experience
       value: "false"
   envFrom: []
@@ -144,7 +144,6 @@ controller:
       cpu: 200m
     limits:
       cpu: 500m
-
   # -- Controller outputPaths - default to stdout only
   outputPaths:
     - stdout
@@ -193,7 +192,7 @@ settings:
     # TODO: not used yet ...
     vmMemoryOverheadPercent: 0.075
     # TODO: autogenerate
-    sshPublicKey: 
+    sshPublicKey:
     networkPlugin: "kubenet" # TODO: get this from the cluster
     networkPolicy: ""
     # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
