@@ -134,13 +134,11 @@ az-rmvmss-vms: ## Delete all VMs in VMSS Flex (use with care!)
 	az vmss delete-instances --name $(AZURE_CLUSTER_NAME)-vmss --resource-group $(AZURE_RESOURCE_GROUP_MC) --instance-ids '*'
 
 az-perm: ## Create role assignments to let Karpenter manage VMs and Network
-	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
+	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.objectId"))
 	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) \
 	--role "Virtual Machine Contributor" --assignee-principal-type ServicePrincipal
 	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
 	--role "Contributor" --assignee-principal-type ServicePrincipal
-	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
-	--role "Azure Kubernetes Service RBAC Cluster Admin" --assignee-principal-type ServicePrincipal
 
 az-perm-acr:
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))

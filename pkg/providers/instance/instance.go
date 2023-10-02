@@ -101,7 +101,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 	var ap *armcontainerservice.AgentPool
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		index++
-		return index <= len(instanceTypes)
+		return index < len(instanceTypes)
 	}, func() error {
 		instanceType := instanceTypes[index]
 		capacityType := p.getPriorityForInstanceType(machine, instanceType)
