@@ -80,8 +80,6 @@ func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (
 }
 
 func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
-	klog.InfoS("List")
-
 	machines := []*v1alpha5.Machine{}
 	instances, err := c.instanceProvider.List(ctx)
 	if err != nil {
