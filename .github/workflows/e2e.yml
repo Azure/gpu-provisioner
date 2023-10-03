@@ -34,9 +34,13 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - name: Shorten SHA
+        id: vars
+        run: echo "::set-output name=pr_sha_short::$(git rev-parse --short ${{ github.event.pull_request.head.sha }} )"
+
       - name: Set e2e Resource and Cluster Name
         run: |
-          rand=$(git rev-parse --short ${{ github.event.pull_request.head.sha }} )
+          rand=${{ steps.vars.outputs.pr_sha_short }}
 
           if [ "$rand" = "" ]; then
              rand=$RANDOM
