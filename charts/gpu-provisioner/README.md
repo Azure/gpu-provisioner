@@ -1,8 +1,6 @@
 # karpenter
 
-A Helm chart for Karpenter, an open-source node provisioning project built for Kubernetes.
-
-![Version: 0.22.0](https://img.shields.io/badge/Version-0.22.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.22.0](https://img.shields.io/badge/AppVersion-0.22.0-informational?style=flat-square)
+A Helm chart for gpu-provisioner, an open-source agent pool provisioning project.
 
 ## Documentation
 
