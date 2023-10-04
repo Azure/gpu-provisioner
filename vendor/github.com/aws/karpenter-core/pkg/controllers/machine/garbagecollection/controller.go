@@ -155,7 +155,6 @@ func (c *Controller) batchDeleteMachines(ctx context.Context, machines []*v1alph
 					return
 				}
 			}
-
 		} else if err := c.kubeClient.Delete(ctx, machines[i]); err != nil {
 			errs[i] = client.IgnoreNotFound(err)
 			return
