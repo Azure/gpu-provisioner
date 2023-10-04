@@ -23,11 +23,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
 	"knative.dev/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -79,13 +81,23 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 		return m.Status.ProviderID
 	})...)
 
+	// Allows deleting machines that have not launched for more than 10 minutes.
+	deletedNotLaunchedMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
+		return !m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
+			!m.DeletionTimestamp.IsZero() &&
+			c.clock.Since(m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).LastTransitionTime.Inner.Time) > time.Minute*10
+	})
+
+	rfErrs := c.batchDeleteMachines(ctx, deletedNotLaunchedMachines, true, "to be deleted and has not been launched for more than 10 minutes")
+
+	// Check all machine heartbeats
 	hbMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
 		return m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
 			m.DeletionTimestamp.IsZero()
 	})
 
 	var hbUpdated atomic.Uint64
-	deletedMachines := []*v1alpha5.Machine{}
+	deletedNotReadyMachines := []*v1alpha5.Machine{}
 	// Update machine heartbeat,
 	hbErrs := make([]error, len(hbMachines))
 	workqueue.ParallelizeUntil(ctx, 20, len(hbMachines), func(i int) {
@@ -119,27 +131,44 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 		}
 		if !updateCopy.StatusConditions().IsHappy() &&
 			c.clock.Since(updateCopy.StatusConditions().GetCondition("Ready").LastTransitionTime.Inner.Time) > time.Minute*6 {
-			deletedMachines = append(deletedMachines, updateCopy)
+			deletedNotReadyMachines = append(deletedNotReadyMachines, updateCopy)
 		}
 	})
 	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d out of %d machines", hbUpdated.Load(), len(hbMachines)))
 
-	errs := make([]error, len(deletedMachines))
-	workqueue.ParallelizeUntil(ctx, 20, len(deletedMachines), func(i int) {
-		if err := c.kubeClient.Delete(ctx, deletedMachines[i]); err != nil {
+	errs := c.batchDeleteMachines(ctx, deletedNotReadyMachines, false, "being NotReady for more than 6 minutes")
+	errs = append(errs, hbErrs...)
+	errs = append(errs, rfErrs...)
+	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(errs...)
+}
+
+func (c *Controller) batchDeleteMachines(ctx context.Context, machines []*v1alpha5.Machine, removeFinalizer bool, msg string) []error {
+	errs := make([]error, len(machines))
+	workqueue.ParallelizeUntil(ctx, 20, len(machines), func(i int) {
+		if removeFinalizer {
+			stored := machines[i].DeepCopy()
+			updated := machines[i].DeepCopy()
+			controllerutil.RemoveFinalizer(updated, v1alpha5.TerminationFinalizer)
+			if !equality.Semantic.DeepEqual(stored, updated) {
+				if err := c.kubeClient.Patch(ctx, updated, client.MergeFrom(stored)); err != nil {
+					errs[i] = client.IgnoreNotFound(err)
+					return
+				}
+			}
+
+		} else if err := c.kubeClient.Delete(ctx, machines[i]); err != nil {
 			errs[i] = client.IgnoreNotFound(err)
 			return
 		}
 		logging.FromContext(ctx).
-			With("provisioner", deletedMachines[i].Labels[v1alpha5.ProvisionerNameLabelKey], "machine", deletedMachines[i].Name, "provider-id", deletedMachines[i].Status.ProviderID).
-			Debugf("garbage collecting machine with no cloudprovider representation for more than 6 minutes")
+			With("provisioner", machines[i].Labels[v1alpha5.ProvisionerNameLabelKey], "machine", machines[i].Name, "provider-id", machines[i].Status.ProviderID).
+			Debugf("garbage collecting machine with reason: %s", msg)
 		metrics.MachinesTerminatedCounter.With(prometheus.Labels{
 			metrics.ReasonLabel:      "garbage_collected",
-			metrics.ProvisionerLabel: deletedMachines[i].Labels[v1alpha5.ProvisionerNameLabelKey],
+			metrics.ProvisionerLabel: machines[i].Labels[v1alpha5.ProvisionerNameLabelKey],
 		}).Inc()
 	})
-	errs = append(errs, hbErrs...)
-	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(errs...)
+	return errs
 }
 
 func (c *Controller) Builder(_ context.Context, m manager.Manager) corecontroller.Builder {
