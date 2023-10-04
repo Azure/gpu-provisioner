@@ -17,6 +17,7 @@ package garbagecollection
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -83,7 +84,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 			m.DeletionTimestamp.IsZero()
 	})
 
-	hbUpdated := 0
+	var hbUpdated atomic.Uint64
 	deletedMachines := []*v1alpha5.Machine{}
 	// Update machine heartbeat,
 	hbErrs := make([]error, len(hbMachines))
@@ -92,7 +93,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 		updated := hbMachines[i].DeepCopy()
 
 		if cloudProviderProviderIDs.Has(stored.Status.ProviderID) {
-			hbUpdated++
+			hbUpdated.Add(1)
 			if updated.Annotations == nil {
 				updated.Annotations = make(map[string]string)
 			}
@@ -120,7 +121,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 			deletedMachines = append(deletedMachines, updateCopy)
 		}
 	})
-	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d machines", hbUpdated))
+	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d machines", hbUpdated.Load()))
 
 	errs := make([]error, len(deletedMachines))
 	workqueue.ParallelizeUntil(ctx, 20, len(deletedMachines), func(i int) {
