@@ -20,9 +20,11 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 
 	"github.com/gpu-vmprovisioner/pkg/utils"
@@ -42,6 +44,7 @@ import (
 	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	nodeutil "github.com/aws/karpenter-core/pkg/utils/node"
 )
 
 const (
@@ -121,7 +124,35 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 	if err != nil {
 		return nil, err
 	}
-	return p.fromAgentPoolToInstance(ctx, ap)
+
+	instance, err := p.fromAgentPoolToInstance(ctx, ap)
+	if instance == nil && err == nil {
+		// means the node object has not been found yet, we wait until the node is created
+		b := wait.Backoff{
+			Steps:    15,
+			Duration: 1 * time.Second,
+			Factor:   1.0,
+			Jitter:   0.1,
+		}
+
+		err = retry.OnError(b, func(err error) bool {
+			return true
+		}, func() error {
+			var e error
+			instance, e = p.fromAgentPoolToInstance(ctx, ap)
+			if e != nil {
+				return e
+			}
+			if instance == nil {
+				return fmt.Errorf("fail to find the node object")
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return instance, err
 }
 
 // getVMSSNodeProviderID generates the provider ID for a virtual machine scale set.
@@ -181,14 +212,15 @@ func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontai
 	if subID == nil {
 		return nil, fmt.Errorf("subscription ID cannot be nil, agentpool: %s", lo.FromPtr(apObj.Name))
 	}
-	vm, err := p.getNodeByName(ctx, lo.FromPtr(apObj.Name))
+	node, err := p.getNodeByName(ctx, lo.FromPtr(apObj.Name))
 	if err != nil {
 		return nil, err
 	}
-	if vm == nil {
-		return nil, fmt.Errorf("node cannot be nil\", agentpool: %s", lo.FromPtr(apObj.Name))
+	if node == nil || nodeutil.GetCondition(node, v1.NodeReady).Status != v1.ConditionTrue {
+		// node is not found or not ready
+		return nil, nil
 	}
-	tokens := strings.SplitAfter(vm.Name, "-vmss") // remove the vm index "0000"
+	tokens := strings.SplitAfter(node.Name, "-vmss") // remove the vm index "0000"
 	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
 		return lo.FromPtr(k)
 	})
@@ -213,13 +245,10 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armconta
 		if err != nil {
 			return nil, err
 		}
-		instances = append(instances, instance)
+		if instance != nil { // exclude not found or not ready node
+			instances = append(instances, instance)
+		}
 	}
-
-	if len(instances) == 0 {
-		return nil, fmt.Errorf("no instances found")
-	}
-
 	return instances, nil
 }
 
@@ -310,7 +339,8 @@ func (p *Provider) getNodeByName(ctx context.Context, apName string) (*v1.Node, 
 	}
 
 	if nodeList == nil || len(nodeList.Items) == 0 {
-		return nil, fmt.Errorf("node not found for agentpool %s", apName)
+		// NotFound is not considered as an error
+		return nil, nil
 	}
 
 	return &nodeList.Items[0], nil
