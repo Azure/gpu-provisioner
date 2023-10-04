@@ -104,6 +104,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 			// If the machine was not ready, it becomes ready after getting the heartbeat.
 			updated.StatusConditions().MarkTrue("Ready")
 		} else {
+			logging.FromContext(ctx).Debugf(fmt.Sprintf("machine %s does not receive hb", stored.Name))
 			updated.StatusConditions().MarkFalse("Ready", "NodeNotReady", "Node status is NotReady")
 		}
 		statusCopy := updated.DeepCopy()
@@ -121,7 +122,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 			deletedMachines = append(deletedMachines, updateCopy)
 		}
 	})
-	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d machines", hbUpdated.Load()))
+	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d out of %d machines", hbUpdated.Load(), len(hbMachines)))
 
 	errs := make([]error, len(deletedMachines))
 	workqueue.ParallelizeUntil(ctx, 20, len(deletedMachines), func(i int) {

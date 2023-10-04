@@ -183,7 +183,7 @@ func AllNodesForMachine(ctx context.Context, c client.Client, machine *v1alpha5.
 	providerID := lo.Ternary(machine.Status.ProviderID != "", machine.Status.ProviderID, machine.Annotations[v1alpha5.MachineLinkedAnnotationKey])
 	// Machines that have no resolved providerID have no nodes mapped to them
 	if providerID == "" {
-		return nil, nil
+		return nil, fmt.Errorf("The machine has not been associated with any node yet")
 	}
 	nodeList := v1.NodeList{}
 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": providerID}); err != nil {
