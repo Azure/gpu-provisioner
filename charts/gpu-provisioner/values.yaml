@@ -111,7 +111,7 @@ controller:
     # -- Repository path to the controller image.
     repository: aimodelsregistry.azurecr.io/gpu-provisioner
     # -- Tag of the controller image.
-    tag: 0.1.0
+    tag: 0.2.0
     # -- SHA256 digest of the controller image.
     digest: ""
   # -- SecurityContext for the controller container.
