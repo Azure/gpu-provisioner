@@ -106,6 +106,9 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.M
 	if err != nil {
 		return nil, fmt.Errorf("getting instance , %w", err)
 	}
+	if instance == nil {
+		return nil, fmt.Errorf("cannot find a ready instance , %w", err)
+	}
 	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
 	if err != nil {
 		return nil, fmt.Errorf("getting instance types, %w", err)

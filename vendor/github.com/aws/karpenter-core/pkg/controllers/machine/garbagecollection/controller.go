@@ -16,11 +16,13 @@ package garbagecollection
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
 	"knative.dev/pkg/logging"
@@ -33,6 +35,10 @@ import (
 	"github.com/aws/karpenter-core/pkg/metrics"
 	corecontroller "github.com/aws/karpenter-core/pkg/operator/controller"
 	"github.com/aws/karpenter-core/pkg/utils/sets"
+)
+
+const (
+	NodeHeartBeatAnnotationKey = "NodeHeartBeatTimeStamp"
 )
 
 type Controller struct {
@@ -53,11 +59,14 @@ func (c *Controller) Name() string {
 	return "machine.garbagecollection"
 }
 
+// gpu-provisioner: leverage two perodic check to update machine readiness heartbeat
 func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	machineList := &v1alpha5.MachineList{}
 	if err := c.kubeClient.List(ctx, machineList); err != nil {
 		return reconcile.Result{}, err
 	}
+
+	// The NotReady nodes are excluded from the list
 	cloudProviderMachines, err := c.cloudProvider.List(ctx)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -68,27 +77,66 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 	cloudProviderProviderIDs := sets.New[string](lo.Map(cloudProviderMachines, func(m *v1alpha5.Machine, _ int) string {
 		return m.Status.ProviderID
 	})...)
-	machines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
+
+	hbMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
 		return m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
-			m.DeletionTimestamp.IsZero() &&
-			c.clock.Since(m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).LastTransitionTime.Inner.Time) > time.Second*10 &&
-			!cloudProviderProviderIDs.Has(m.Status.ProviderID)
+			m.DeletionTimestamp.IsZero()
 	})
 
-	errs := make([]error, len(machines))
-	workqueue.ParallelizeUntil(ctx, 20, len(machines), func(i int) {
-		if err := c.kubeClient.Delete(ctx, machines[i]); err != nil {
+	hbUpdated := 0
+	deletedMachines := []*v1alpha5.Machine{}
+	// Update machine heartbeat,
+	hbErrs := make([]error, len(hbMachines))
+	workqueue.ParallelizeUntil(ctx, 20, len(hbMachines), func(i int) {
+		stored := hbMachines[i].DeepCopy()
+		updated := hbMachines[i].DeepCopy()
+
+		if cloudProviderProviderIDs.Has(stored.Status.ProviderID) {
+			hbUpdated++
+			if updated.Annotations == nil {
+				updated.Annotations = make(map[string]string)
+			}
+
+			timeStr, _ := metav1.NewTime(time.Now()).MarshalJSON()
+			updated.Annotations[NodeHeartBeatAnnotationKey] = string(timeStr)
+
+			// If the machine was not ready, it becomes ready after getting the heartbeat.
+			updated.StatusConditions().MarkTrue("Ready")
+		} else {
+			updated.StatusConditions().MarkFalse("Ready", "NodeNotReady", "Node status is NotReady")
+		}
+		statusCopy := updated.DeepCopy()
+		updateCopy := updated.DeepCopy()
+		if err := c.kubeClient.Patch(ctx, updated, client.MergeFrom(stored)); err != nil {
+			hbErrs[i] = client.IgnoreNotFound(err)
+			return
+		}
+		if err := c.kubeClient.Status().Patch(ctx, statusCopy, client.MergeFrom(stored)); err != nil {
+			hbErrs[i] = client.IgnoreNotFound(err)
+			return
+		}
+		if !updateCopy.StatusConditions().IsHappy() &&
+			c.clock.Since(updateCopy.StatusConditions().GetCondition("Ready").LastTransitionTime.Inner.Time) > time.Minute*6 {
+			deletedMachines = append(deletedMachines, updateCopy)
+		}
+	})
+	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d machines", hbUpdated))
+
+	errs := make([]error, len(deletedMachines))
+	workqueue.ParallelizeUntil(ctx, 20, len(deletedMachines), func(i int) {
+		if err := c.kubeClient.Delete(ctx, deletedMachines[i]); err != nil {
 			errs[i] = client.IgnoreNotFound(err)
 			return
 		}
 		logging.FromContext(ctx).
-			With("provisioner", machines[i].Labels[v1alpha5.ProvisionerNameLabelKey], "machine", machines[i].Name, "provider-id", machines[i].Status.ProviderID).
-			Debugf("garbage collecting machine with no cloudprovider representation")
+			With("provisioner", deletedMachines[i].Labels[v1alpha5.ProvisionerNameLabelKey], "machine", deletedMachines[i].Name, "provider-id", deletedMachines[i].Status.ProviderID).
+			Debugf("garbage collecting machine with no cloudprovider representation for more than 6 minutes")
 		metrics.MachinesTerminatedCounter.With(prometheus.Labels{
 			metrics.ReasonLabel:      "garbage_collected",
-			metrics.ProvisionerLabel: machines[i].Labels[v1alpha5.ProvisionerNameLabelKey],
+			metrics.ProvisionerLabel: deletedMachines[i].Labels[v1alpha5.ProvisionerNameLabelKey],
 		}).Inc()
 	})
+	errs = append(errs, hbErrs...)
 	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(errs...)
 }
 
