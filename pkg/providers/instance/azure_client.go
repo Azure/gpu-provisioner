@@ -25,8 +25,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/Azure/go-autorest/autorest/azure"
-	"github.com/gpu-vmprovisioner/pkg/auth"
-	armopts "github.com/gpu-vmprovisioner/pkg/utils/opts"
+	"github.com/azure/gpu-provisioner/pkg/auth"
+	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
 	klog "k8s.io/klog/v2"
 )
 

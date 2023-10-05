@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing/client"
 )
 
 type PricingAPI struct {

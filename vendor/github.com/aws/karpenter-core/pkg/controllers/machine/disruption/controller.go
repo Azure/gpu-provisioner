@@ -39,7 +39,7 @@ import (
 	machineutil "github.com/aws/karpenter-core/pkg/utils/machine"
 	"github.com/aws/karpenter-core/pkg/utils/result"
 
-	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
+	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 type machineReconciler interface {

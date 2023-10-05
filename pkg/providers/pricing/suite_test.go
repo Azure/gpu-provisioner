@@ -24,9 +24,9 @@ import (
 	. "github.com/onsi/gomega"
 	. "knative.dev/pkg/logging/testing"
 
-	"github.com/gpu-vmprovisioner/pkg/fake"
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
+	"github.com/azure/gpu-provisioner/pkg/fake"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing/client"
 )
 
 var ctx context.Context

@@ -23,16 +23,16 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/gpu-vmprovisioner/pkg/apis"
-	"github.com/gpu-vmprovisioner/pkg/providers/instance"
-	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/azure/gpu-provisioner/pkg/apis"
+	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
 	"github.com/samber/lo"
 
 	coreapis "github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
-	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
+	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 func init() {

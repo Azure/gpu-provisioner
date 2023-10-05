@@ -42,7 +42,7 @@ import (
 	podutils "github.com/aws/karpenter-core/pkg/utils/pod"
 	"github.com/aws/karpenter-core/pkg/utils/sets"
 
-	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
+	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 // Cluster maintains cluster state that is often needed but expensive to compute.

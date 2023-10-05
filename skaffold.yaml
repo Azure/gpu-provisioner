@@ -4,7 +4,7 @@ build:
   artifacts:
     - image: controller
       ko:
-        main: github.com/gpu-vmprovisioner/cmd/controller
+        main: github.com/azure/gpu-provisioner/cmd/controller
         dependencies:
           paths:
             - '**/*.go'

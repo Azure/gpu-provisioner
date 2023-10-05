@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 
-	"github.com/gpu-vmprovisioner/pkg/utils"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
@@ -38,10 +38,10 @@ import (
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	corecloudprovider "github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
-	"github.com/gpu-vmprovisioner/pkg/cache"
-	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
+	"github.com/azure/gpu-provisioner/pkg/cache"
+	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
 
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	nodeutil "github.com/aws/karpenter-core/pkg/utils/node"

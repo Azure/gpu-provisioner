@@ -12,4 +12,4 @@ keywords:
   - autoscaling
   - lifecycle
 sources:
-  - https://github.com/Fei-Guo/gpu-vmprovisioner
+  - https://github.com/Azure/gpu-provisioner

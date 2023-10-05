@@ -23,14 +23,14 @@ import (
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 
-	kcache "github.com/gpu-vmprovisioner/pkg/cache"
+	kcache "github.com/azure/gpu-provisioner/pkg/cache"
 	"github.com/patrickmn/go-cache"
 	"knative.dev/pkg/logging"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing"
 
 	"github.com/Azure/skewer"
 )
