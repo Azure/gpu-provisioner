@@ -66,8 +66,63 @@ func (c *Controller) Name() string {
 func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	merr := c.reconcileMachines(ctx)
 	nerr := c.reconcileNodes(ctx)
+	rerr := c.remediateNodeNameConflict(ctx)
 
-	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(merr, nerr)
+	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(merr, nerr, rerr)
+}
+
+// gpu-provisioner: node name conflict means two machines are linked to the same node.
+// This can happen since we have to convert machine name to agent pool name whose length is limited to 11,
+// which can lead to agent pool name collision.
+// Furthermore, AKS APIs only support PUT not POST for creating a new agent pool. The name conflict during
+// creation will not return error. The latest create call will overwrite the agent pool profile unconditionally.
+// This makes detecting name conflict impossible in the client side. We cannot prevent node name conflict.
+// We rely on periodic checks to remediate the conflict instead.
+func (c *Controller) remediateNodeNameConflict(ctx context.Context) error {
+	machineList := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList); err != nil {
+		return err
+	}
+
+	nodeToMachineMap := make(map[string][]*v1alpha5.Machine)
+
+	for i, _ := range machineList.Items {
+		if node, linked := machineList.Items[i].Annotations[v1alpha5.MachineLinkedAnnotationKey]; linked {
+			if _, ok := nodeToMachineMap[node]; !ok {
+				nodeToMachineMap[node] = []*v1alpha5.Machine{&machineList.Items[i]}
+			} else {
+				nodeToMachineMap[node] = append(nodeToMachineMap[node], &machineList.Items[i])
+			}
+		}
+	}
+
+	for _, v := range nodeToMachineMap {
+		// Detect node name conflict, the remediation is to remove extra machines.
+		if len(v) > 1 {
+			// There is no particular order to decide which ones should be deleted.
+			for i := 1; i < len(v); i++ {
+				stored := v[i].DeepCopy()
+				updated := v[i].DeepCopy()
+				updated.Annotations[v1alpha5.MachineLinkedAnnotationKey] = ""
+				updated.Status.ProviderID = ""
+				controllerutil.RemoveFinalizer(updated, v1alpha5.TerminationFinalizer)
+
+				updatedCopy := updated.DeepCopy()
+				if err := c.kubeClient.Patch(ctx, updated, client.MergeFrom(stored)); client.IgnoreNotFound(err) != nil {
+					return err
+				}
+				if err := c.kubeClient.Status().Patch(ctx, updatedCopy, client.MergeFrom(stored)); client.IgnoreNotFound(err) != nil {
+					return err
+				}
+				// After clear the provider id, we are safe to delete the machine.
+				if err := c.kubeClient.Delete(ctx, stored); client.IgnoreNotFound(err) != nil {
+					return err
+				}
+				logging.FromContext(ctx).Debugf("delete machine %s because it has a node name conflict with machine %s", v[i].Name, v[0].Name)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *Controller) reconcileNodes(ctx context.Context) error {
@@ -82,7 +137,7 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 			machineList := &v1alpha5.MachineList{}
 			if err := c.kubeClient.List(ctx, machineList, client.MatchingFields{"status.providerID": n.Spec.ProviderID}); err == nil {
 				if len(machineList.Items) == 0 {
-					// The linked machine CR is gone for some reason
+					// The linked machine CR is gone for some reason.
 					return true
 				}
 			}
@@ -92,7 +147,7 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 
 	errs := make([]error, len(deletedGarbageNodes))
 	workqueue.ParallelizeUntil(ctx, 20, len(deletedGarbageNodes), func(i int) {
-		// We delete nodes to trigger the node finalization and deletion flow
+		// We delete nodes to trigger the node finalization and deletion flow.
 		if err := c.kubeClient.Delete(ctx, deletedGarbageNodes[i]); client.IgnoreNotFound(err) != nil {
 			errs[i] = err
 			return
@@ -102,14 +157,14 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 	return multierr.Combine(errs...)
 }
 
-// gpu-provisioner: leverage the two minutes perodic check to update machine readiness heartbeat
+// gpu-provisioner: leverage the two minutes perodic check to update machine readiness heartbeat.
 func (c *Controller) reconcileMachines(ctx context.Context) error {
 	machineList := &v1alpha5.MachineList{}
 	if err := c.kubeClient.List(ctx, machineList); err != nil {
 		return err
 	}
 
-	// The NotReady nodes are excluded from the list
+	// The NotReady nodes are excluded from the list.
 	cloudProviderMachines, err := c.cloudProvider.List(ctx)
 	if err != nil {
 		return err
@@ -129,7 +184,7 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 
 	rfErrs := c.batchDeleteMachines(ctx, deletedGarbageMachines, true, "to be delete but blocked by finializer for more than 10 minutes")
 
-	// Check all machine heartbeats
+	// Check all machine heartbeats.
 	hbMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
 		return m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
 			m.DeletionTimestamp.IsZero()
@@ -137,7 +192,7 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 
 	var hbUpdated atomic.Uint64
 	deletedNotReadyMachines := []*v1alpha5.Machine{}
-	// Update machine heartbeat,
+	// Update machine heartbeat.
 	hbErrs := make([]error, len(hbMachines))
 	workqueue.ParallelizeUntil(ctx, 20, len(hbMachines), func(i int) {
 		stored := hbMachines[i].DeepCopy()
@@ -173,8 +228,9 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 			deletedNotReadyMachines = append(deletedNotReadyMachines, updateCopy)
 		}
 	})
-	logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d out of %d machines", hbUpdated.Load(), len(hbMachines)))
-
+	if len(hbMachines) > 0 {
+		logging.FromContext(ctx).Debugf(fmt.Sprintf("Update heartbeat for %d out of %d machines", hbUpdated.Load(), len(hbMachines)))
+	}
 	errs := c.batchDeleteMachines(ctx, deletedNotReadyMachines, false, "being NotReady for more than 10 minutes")
 	errs = append(errs, hbErrs...)
 	errs = append(errs, rfErrs...)

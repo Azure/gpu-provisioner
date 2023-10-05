@@ -16,6 +16,8 @@ package instance
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
@@ -92,11 +94,10 @@ func NewProvider(
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
 	klog.InfoS("Instance.Create", "machine", klog.KObj(machine))
 
-	apName := strings.ReplaceAll(machine.Name, "-", "")
-	if len(apName) > 11 {
-		//https://learn.microsoft.com/en-us/troubleshoot/azure/azure-kubernetes/aks-common-issues-faq#what-naming-restrictions-are-enforced-for-aks-resources-and-parameters-
-		return nil, fmt.Errorf("agentpool %q name is too long", apName)
-	}
+	// We have to convert machine name to agent pool name which is limitted to 11 digits.
+	// See https://learn.microsoft.com/en-us/troubleshoot/azure/azure-kubernetes/aks-common-issues-faq#what-naming-restrictions-are-enforced-for-aks-resources-and-parameters-
+	digest := sha256.Sum256([]byte(strings.ReplaceAll(machine.Name, "-", "")))
+	apName := "ws" + hex.EncodeToString(digest[0:])[0:9]
 
 	if len(instanceTypes) == 0 {
 		return nil, fmt.Errorf("creating agentpool %q failed: %v", apName, "instanceTypes cannot be nil")
