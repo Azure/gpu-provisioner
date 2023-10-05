@@ -35,8 +35,8 @@ import (
 	coreapis "github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/operator/injection"
-	"github.com/gpu-vmprovisioner/pkg/apis"
-	"github.com/gpu-vmprovisioner/pkg/utils/project"
+	"github.com/azure/gpu-provisioner/pkg/apis"
+	"github.com/azure/gpu-provisioner/pkg/utils/project"
 )
 
 type ContextKey string

@@ -7,11 +7,11 @@ It implements the cloud provider interfaces to realize the following abstraction
 After cloning the repo from `https://github.com/Azure/karpenter`,
 ### Rename the module
 ```
-for each in $(find pkg/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-vmprovisioner/g" -i $each;done;
-for each in $(find cmd/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-vmprovisioner/g" -i $each;done;
+for each in $(find pkg/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-provisioner/g" -i $each;done;
+for each in $(find cmd/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-provisioner/g" -i $each;done;
 ```
 ### Edit the `go.mod`
-Remove `github.com/Azure/karpenter` and change the module name to `github.com/gpu-vmprovisioner`.
+Remove `github.com/Azure/karpenter` and change the module name to `github.com/azure/gpu-provisioner`.
 
 ### Vendor all modules
 Change vendor code to disable controllers from the karpenter-core package.

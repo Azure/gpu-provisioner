@@ -36,7 +36,7 @@ import (
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	corecontroller "github.com/aws/karpenter-core/pkg/operator/controller"
 
-	"github.com/gpu-vmprovisioner/pkg/staticprovisioner"
+	"github.com/gpu-provisioner/pkg/staticprovisioner"
 )
 
 const (

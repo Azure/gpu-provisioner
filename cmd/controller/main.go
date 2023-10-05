@@ -17,8 +17,8 @@ package main
 import (
 	"github.com/samber/lo"
 
-	"github.com/gpu-vmprovisioner/pkg/cloudprovider"
-	"github.com/gpu-vmprovisioner/pkg/operator"
+	"github.com/azure/gpu-provisioner/pkg/cloudprovider"
+	"github.com/azure/gpu-provisioner/pkg/operator"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider/metrics"
 	corecontrollers "github.com/aws/karpenter-core/pkg/controllers"

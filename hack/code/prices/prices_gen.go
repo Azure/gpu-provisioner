@@ -27,7 +27,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing"
 	"github.com/samber/lo"
 )
 

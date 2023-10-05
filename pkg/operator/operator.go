@@ -18,11 +18,11 @@ import (
 	"context"
 
 	"github.com/aws/karpenter-core/pkg/operator"
-	"github.com/gpu-vmprovisioner/pkg/auth"
-	azurecache "github.com/gpu-vmprovisioner/pkg/cache"
-	"github.com/gpu-vmprovisioner/pkg/providers/instance"
-	"github.com/gpu-vmprovisioner/pkg/providers/instancetype"
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing"
+	"github.com/azure/gpu-provisioner/pkg/auth"
+	azurecache "github.com/azure/gpu-provisioner/pkg/cache"
+	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing"
 	"github.com/patrickmn/go-cache"
 	"knative.dev/pkg/logging"
 )

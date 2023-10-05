@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/aws/karpenter-core/pkg/utils/pretty"
-	"github.com/gpu-vmprovisioner/pkg/providers/pricing/client"
+	"github.com/azure/gpu-provisioner/pkg/providers/pricing/client"
 	"github.com/samber/lo"
 	"knative.dev/pkg/logging"
 )

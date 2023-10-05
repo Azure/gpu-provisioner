@@ -1,4 +1,4 @@
-module github.com/gpu-vmprovisioner
+module github.com/azure/gpu-provisioner
 
 go 1.20
 

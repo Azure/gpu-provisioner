@@ -25,8 +25,8 @@ import (
 	"github.com/samber/lo"
 
 	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
-	"github.com/gpu-vmprovisioner/pkg/apis/settings"
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/azure/gpu-provisioner/pkg/apis/settings"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 )
 
 var (

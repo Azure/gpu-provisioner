@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/crypto/pkcs12"
 
-	"github.com/gpu-vmprovisioner/pkg/utils/project"
+	"github.com/azure/gpu-provisioner/pkg/utils/project"
 )
 
 // decodePkcs12 decodes a PKCS#12 client certificate by extracting the public certificate and

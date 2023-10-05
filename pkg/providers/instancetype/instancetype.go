@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/Azure/skewer"
-	"github.com/gpu-vmprovisioner/pkg/utils"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -33,7 +33,7 @@ import (
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 
-	"github.com/gpu-vmprovisioner/pkg/apis/v1alpha1"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 
 	"github.com/aws/karpenter-core/pkg/utils/resources"
 )

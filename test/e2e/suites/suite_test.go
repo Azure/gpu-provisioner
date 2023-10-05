@@ -19,7 +19,7 @@ import (
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/test"
-	"github.com/gpu-vmprovisioner/test/e2e/pkg/environment/common"
+	"github.com/azure/gpu-provisioner/test/e2e/pkg/environment/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
