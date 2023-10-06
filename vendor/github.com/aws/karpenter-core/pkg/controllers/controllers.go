@@ -28,7 +28,6 @@ import (
 	machinelifecycle "github.com/aws/karpenter-core/pkg/controllers/machine/lifecycle"
 	machinetermination "github.com/aws/karpenter-core/pkg/controllers/machine/termination"
 	"github.com/aws/karpenter-core/pkg/controllers/state"
-	"github.com/aws/karpenter-core/pkg/controllers/state/informer"
 	"github.com/aws/karpenter-core/pkg/controllers/termination"
 	"github.com/aws/karpenter-core/pkg/controllers/termination/terminator"
 	"github.com/aws/karpenter-core/pkg/events"
@@ -54,10 +53,10 @@ func NewControllers(
 		//deprovisioning.NewController(clock, kubeClient, provisioner, cloudProvider, recorder, cluster),
 		//provisioning.NewController(kubeClient, provisioner, recorder),
 		//informer.NewDaemonSetController(kubeClient, cluster),
-		informer.NewNodeController(kubeClient, cluster),
+		//informer.NewNodeController(kubeClient, cluster),
 		//informer.NewPodController(kubeClient, cluster),
 		//informer.NewProvisionerController(kubeClient, cluster),
-		informer.NewMachineController(kubeClient, cluster),
+		//informer.NewMachineController(kubeClient, cluster),
 		termination.NewController(kubeClient, cloudProvider, terminator, recorder),
 		//metricspod.NewController(kubeClient),
 		//metricsprovisioner.NewController(kubeClient),

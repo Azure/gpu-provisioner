@@ -80,7 +80,7 @@ var _ = Describe("GPU", func() {
 
 		machine := test.Machine(v1alpha5.Machine{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "test-machine",
+				Name:   "testmachine",
 				Labels: machineLabels,
 			},
 			Spec: v1alpha5.MachineSpec{

@@ -1,7 +1,7 @@
 apiVersion: karpenter.sh/v1alpha5
 kind: Machine
 metadata:
-  name: machine-gpu-1
+  name: gpuvm
   labels:
     karpenter.sh/provisioner-name: default
 spec:

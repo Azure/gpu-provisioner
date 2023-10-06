@@ -92,10 +92,11 @@ func NewProvider(
 func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
 	klog.InfoS("Instance.Create", "machine", klog.KObj(machine))
 
-	apName := strings.ReplaceAll(machine.Name, "-", "")
+	// We made a strong assumption here. The machine name should be a valid agent pool name without "-".
+	apName := machine.Name
 	if len(apName) > 11 {
 		//https://learn.microsoft.com/en-us/troubleshoot/azure/azure-kubernetes/aks-common-issues-faq#what-naming-restrictions-are-enforced-for-aks-resources-and-parameters-
-		return nil, fmt.Errorf("agentpool %q name is too long", apName)
+		return nil, fmt.Errorf("the length agentpool name should be less than 11, got %d (%s)", len(apName), apName)
 	}
 
 	if len(instanceTypes) == 0 {
