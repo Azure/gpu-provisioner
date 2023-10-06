@@ -31,3 +31,6 @@ You should have a running controller in `gpu-provisioner` namespace.
 
 ## How to test
 After deploying the controller successfully, one can apply the yaml in `/example` to create a machine CR. A real node will be created and added to the cluster by the controller.
+
+## Important note
+The gpu-provisioner assumes the Machine CR name is **equal** to the agent pool name. Hence, **the machine CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.

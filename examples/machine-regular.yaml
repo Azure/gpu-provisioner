@@ -1,7 +1,7 @@
 apiVersion: karpenter.sh/v1alpha5
 kind: Machine
 metadata:
-  name: machine-regular-vms
+  name: regularvms
   labels:
     karpenter.sh/provisioner-name: default
 spec:
