@@ -136,6 +136,7 @@ func (c *Controller) Builder(ctx context.Context, m manager.Manager) corecontrol
 				},
 			),
 		)).
+		WithEventFilter(machineutil.KaitoMachinePredicate).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		//		Watches(
 		//			&source.Kind{Type: &v1alpha5.Provisioner{}},

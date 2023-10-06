@@ -77,6 +77,7 @@ var _ = Describe("GPU", func() {
 
 		var machineLabels = minstPodOptions.Labels
 		machineLabels["karpenter.sh/provisioner-name"] = "default"
+		machineLabels["kaito.sh/workspace"] = "none"
 
 		machine := test.Machine(v1alpha5.Machine{
 			ObjectMeta: metav1.ObjectMeta{

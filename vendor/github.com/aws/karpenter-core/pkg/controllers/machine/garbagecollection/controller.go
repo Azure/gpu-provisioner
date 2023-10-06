@@ -78,7 +78,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 // We rely on periodic checks to remediate the conflict if any.
 func (c *Controller) remediateNodeNameConflict(ctx context.Context) error {
 	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList); err != nil {
+	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
 		return err
 	}
 
@@ -130,7 +130,7 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 	}
 
 	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList); err != nil {
+	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
 		return err
 	}
 
@@ -166,7 +166,7 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 // gpu-provisioner: leverage the two minutes perodic check to update machine readiness heartbeat.
 func (c *Controller) reconcileMachines(ctx context.Context) error {
 	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList); err != nil {
+	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
 		return err
 	}
 
