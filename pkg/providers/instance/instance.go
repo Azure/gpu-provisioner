@@ -96,7 +96,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 	apName := machine.Name
 	if len(apName) > 11 {
 		//https://learn.microsoft.com/en-us/troubleshoot/azure/azure-kubernetes/aks-common-issues-faq#what-naming-restrictions-are-enforced-for-aks-resources-and-parameters-
-		return nil, fmt.Errorf("agentpool %q name is too long", apName)
+		return nil, fmt.Errorf("the length agentpool name should be less than 11, got %d (%s)", len(apName), apName)
 	}
 
 	if len(instanceTypes) == 0 {
