@@ -28,11 +28,18 @@ import (
 	"knative.dev/pkg/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 )
+
+var KaitoMachinePredicate, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	MatchExpressions: []metav1.LabelSelectorRequirement{
+		metav1.LabelSelectorRequirement{Key: "kaito.sh/workspace", Operator: "Exists"},
+	},
+})
 
 // EventHandler is a watcher on v1alpha5.Machine that maps Machines to Nodes based on provider ids
 // and enqueues reconcile.Requests for the Nodes

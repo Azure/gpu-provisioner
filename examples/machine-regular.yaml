@@ -4,6 +4,7 @@ metadata:
   name: regularvms
   labels:
     karpenter.sh/provisioner-name: default
+    kaito.sh/workspace: none
 spec:
   taints:
     - key: "sku"
