@@ -21,7 +21,7 @@ jobs:
   e2e-tests:
     env:
       E2E_IMG_TAG: "e2e-gpu"
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4
@@ -49,7 +49,7 @@ jobs:
           echo "VERSION=${rand}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
 
-      - uses: azure/login@v1
+      - uses: azure/login@v1.4.6
         with:
           client-id: ${{ secrets.CLIENT_ID }}
           tenant-id: ${{ secrets.TENANT_ID }}
