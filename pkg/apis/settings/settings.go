@@ -18,9 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
-	"math/rand"
-	"net/url"
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/multierr"
@@ -33,32 +30,14 @@ type settingsKeyType struct{}
 var ContextKey = settingsKeyType{}
 
 var defaultSettings = Settings{
-	ClusterName:             "",
-	ClusterEndpoint:         "",
-	VMMemoryOverheadPercent: 0.075,
-	Tags:                    map[string]string{},
-	ClusterID:               "",
-	SSHPublicKey:            "",
-	NetworkPlugin:           "",
-	NetworkPolicy:           "",
+	ClusterName: "",
+	Tags:        map[string]string{},
 }
 
 // +k8s:deepcopy-gen=true
 type Settings struct {
-	ClusterName             string  `validate:"required"`
-	ClusterEndpoint         string  `validate:"required"` // => APIServerName in bootstrap, except needs to be w/o https/port
-	VMMemoryOverheadPercent float64 `validate:"min=0"`
-	Tags                    map[string]string
-
-	// Cluster-level settings required for nodebootstrap (category "x")
-	// (Candidates for exposure/accessibility via API)
-	// TODO: consider making these AKS-specific (e.g. subkey?)
-
-	ClusterID string
-
-	SSHPublicKey  string // ssh.publicKeys.keyData => VM SSH public key // TODO: move to node template?
-	NetworkPlugin string `validate:"required"` // => NetworkPlugin in bootstrap
-	NetworkPolicy string // => NetworkPolicy in bootstrap
+	ClusterName string `validate:"required"`
+	Tags        map[string]string
 }
 
 func (*Settings) ConfigMap() string {
@@ -71,23 +50,12 @@ func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context,
 
 	if err := configmap.Parse(cm.Data,
 		configmap.AsString("azure.clusterName", &s.ClusterName),
-		configmap.AsString("azure.clusterEndpoint", &s.ClusterEndpoint),
-		configmap.AsFloat64("azure.vmMemoryOverheadPercent", &s.VMMemoryOverheadPercent),
 		AsStringMap("azure.tags", &s.Tags),
-		configmap.AsString("azure.clusterID", &s.ClusterID),
-		configmap.AsString("azure.sshPublicKey", &s.SSHPublicKey),
-		configmap.AsString("azure.networkPlugin", &s.NetworkPlugin),
-		configmap.AsString("azure.networkPolicy", &s.NetworkPolicy),
 	); err != nil {
 		return ctx, fmt.Errorf("parsing settings, %w", err)
 	}
 	if err := s.Validate(); err != nil {
 		return ctx, fmt.Errorf("validating settings, %w", err)
-	}
-
-	// if clusterID is not set, generate it from cluster endpoint
-	if s.ClusterID == "" {
-		s.ClusterID = getAKSClusterID(s.GetAPIServerName())
 	}
 
 	return ToContext(ctx, s), nil
@@ -115,24 +83,8 @@ func (s Settings) Data() (map[string]string, error) {
 func (s Settings) Validate() error {
 	validate := validator.New()
 	return multierr.Combine(
-		s.validateEndpoint(),
 		validate.Struct(s),
 	)
-}
-
-func (s Settings) validateEndpoint() error {
-	endpoint, err := url.Parse(s.ClusterEndpoint)
-	// url.Parse() will accept a lot of input without error; make
-	// sure it's a real URL
-	if err != nil || !endpoint.IsAbs() || endpoint.Hostname() == "" {
-		return fmt.Errorf("\"%s\" not a valid clusterEndpoint URL", s.ClusterEndpoint)
-	}
-	return nil
-}
-
-func (s Settings) GetAPIServerName() string {
-	endpoint, _ := url.Parse(s.ClusterEndpoint) // already validated
-	return endpoint.Hostname()
 }
 
 func ToContext(ctx context.Context, s *Settings) context.Context {
@@ -148,16 +100,6 @@ func FromContext(ctx context.Context) *Settings {
 	return data.(*Settings)
 }
 
-// AsTypedString passes the value at key through into the target, if it exists.
-func AsTypedString[T ~string](key string, target *T) configmap.ParseFunc {
-	return func(data map[string]string) error {
-		if raw, ok := data[key]; ok {
-			*target = T(raw)
-		}
-		return nil
-	}
-}
-
 // AsStringMap parses a value as a JSON map of map[string]string.
 func AsStringMap(key string, target *map[string]string) configmap.ParseFunc {
 	return func(data map[string]string) error {
@@ -170,15 +112,4 @@ func AsStringMap(key string, target *map[string]string) configmap.ParseFunc {
 		}
 		return nil
 	}
-}
-
-// getAKSClusterID returns cluster ID based on the DNS prefix of the cluster.
-// The logic comes from AgentBaker and other places, originally from aks-engine
-// with the additional assumption of DNS prefix being the first 33 chars of FQDN
-func getAKSClusterID(apiServerFQDN string) string {
-	dnsPrefix := apiServerFQDN[:33]
-	h := fnv.New64a()
-	h.Write([]byte(dnsPrefix))
-	r := rand.New(rand.NewSource(int64(h.Sum64()))) //nolint:gosec
-	return fmt.Sprintf("%08d", r.Uint32())[:8]
 }

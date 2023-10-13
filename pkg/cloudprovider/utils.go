@@ -24,7 +24,9 @@ func (c *CloudProvider) instanceToMachine(ctx context.Context, instanceObj *inst
 	if instanceType != nil {
 		labels = lo.Assign(labels, utils.GetAllSingleValuedRequirementLabels(instanceType))
 		machine.Status.Capacity = functional.FilterMap(instanceType.Capacity, func(_ v1.ResourceName, v resource.Quantity) bool { return !resources.IsZero(v) })
-		machine.Status.Allocatable = functional.FilterMap(instanceType.Allocatable(), func(rName v1.ResourceName, v resource.Quantity) bool { return !resources.IsZero(v) && rName != v1.ResourceStorage })
+		machine.Status.Allocatable = functional.FilterMap(instanceType.Allocatable(), func(rName v1.ResourceName, v resource.Quantity) bool {
+			return !resources.IsZero(v) && rName != v1.ResourceStorage
+		})
 	}
 
 	if instanceObj.CapacityType != nil {

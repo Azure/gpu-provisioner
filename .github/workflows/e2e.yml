@@ -113,7 +113,7 @@ jobs:
 
       - name: Run e2e test
         run: |
-          OUTPUT_TYPE=type=registry make e2etests
+         make e2etests
 
       - name: Cleanup e2e resources
         if: ${{ always() }}
