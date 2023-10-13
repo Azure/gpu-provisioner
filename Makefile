@@ -1,89 +1,175 @@
-include Makefile-az.mk
+VERSION ?= v0.2.0
+# Image URL to use all building/pushing image targets
+REGISTRY ?= ghcr.io/azure/gpu-provisioner
+IMG_NAME ?= gpu-provisioner
+IMG_TAG ?= $(subst v,,$(VERSION))
 
-export K8S_VERSION ?= 1.27.x
-export KUBEBUILDER_ASSETS ?= ${HOME}/.kubebuilder/bin
-CLUSTER_NAME ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].name}' | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
-
-## Inject the app version into project.Version
-ifdef SNAPSHOT_TAG
-LDFLAGS ?= -ldflags=-X=github.com/aws/karpenter/pkg/utils/project.Version=$(SNAPSHOT_TAG)
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
 else
-LDFLAGS ?= -ldflags=-X=github.com/aws/karpenter/pkg/utils/project.Version=$(shell git describe --tags --always)
+GOBIN=$(shell go env GOBIN)
 endif
 
-GOFLAGS ?= $(LDFLAGS)
-WITH_GOFLAGS = GOFLAGS="$(GOFLAGS)"
+TOOLS_DIR := hack/tools
+TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
 
-## Extra helm options
-CLUSTER_ENDPOINT ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].cluster.server}')
-AWS_ACCOUNT_ID ?= $(shell aws sts get-caller-identity --query Account --output text)
-KARPENTER_IAM_ROLE_ARN ?= arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_NAME}-karpenter
-HELM_OPTS ?= --set serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${KARPENTER_IAM_ROLE_ARN} \
-      		--set settings.aws.clusterName=${CLUSTER_NAME} \
-			--set settings.aws.clusterEndpoint=${CLUSTER_ENDPOINT} \
-			--set settings.featureGates.driftEnabled=true \
-			--set controller.resources.requests.cpu=1 \
-			--set controller.resources.requests.memory=1Gi \
-			--set controller.resources.limits.cpu=1 \
-			--set controller.resources.limits.memory=1Gi \
-			--create-namespace
+GOLANGCI_LINT_VER := v1.54.1
+GOLANGCI_LINT_BIN := golangci-lint
+GOLANGCI_LINT := $(abspath $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER))
 
-# CR for local builds of Karpenter
-SYSTEM_NAMESPACE ?= karpenter
-KARPENTER_VERSION ?= $(shell git tag --sort=committerdate | tail -1)
-KO_DOCKER_REPO ?= ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/karpenter
-GETTING_STARTED_SCRIPT_DIR = website/content/en/preview/getting-started/getting-started-with-karpenter/scripts
+# Scripts
+GO_INSTALL := ./hack/go-install.sh
 
 # TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" or "make test" against
 TEST_SUITE ?= "..."
 TEST_TIMEOUT ?= "1h"
 
-# Common Directories
-# TODO: revisit testing tools (temporarily excluded here, for make verify)
-MOD_DIRS = $(shell find . -name go.mod -type f ! -path "./test/*" | xargs dirname)
-KARPENTER_CORE_DIR = $(shell go list -m -f '{{ .Dir }}' github.com/aws/karpenter-core)
+## --------------------------------------
+## Tooling Binaries
+## --------------------------------------
 
-# TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" or "make test" against
-TEST_SUITE ?= "..."
-TEST_TIMEOUT ?= "3h"
+$(GOLANGCI_LINT):
+	GOBIN=$(TOOLS_BIN_DIR) $(GO_INSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint $(GOLANGCI_LINT_BIN) $(GOLANGCI_LINT_VER)
 
-help: ## Display help
-	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+# build variables
+BUILD_VERSION_VAR := $(REPO_PATH)/pkg/version.BuildVersion
+BUILD_DATE_VAR := $(REPO_PATH)/pkg/version.BuildDate
+BUILD_DATE := $$(date +%Y-%m-%d-%H:%M)
+GIT_VAR := $(REPO_PATH)/pkg/version.GitCommit
+GIT_HASH := $$(git rev-parse --short HEAD)
+LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_VERSION) -X $(GIT_VAR)=$(GIT_HASH)"
 
-presubmit: verify test ## Run all steps in the developer loop
+# AKS INT/Staging Test
+AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
+AZURE_LOCATION=eastus
+AZURE_RESOURCE_GROUP ?= llm-test
+AZURE_ACR_NAME ?= helayoty
+AZURE_CLUSTER_NAME ?= new_demo
 
-ci-test: battletest coverage ## Runs tests and submits coverage
+AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
-ci-non-test: verify licenses vulncheck ## Runs checks other than tests
+az-login: ## Login into Azure
+	az login
+	az account set --subscription $(AZURE_SUBSCRIPTION_ID)
 
-run: ## Run Karpenter controller binary against your local cluster
-	kubectl create configmap -n ${SYSTEM_NAMESPACE} karpenter-global-settings \
-		--from-literal=aws.clusterName=${CLUSTER_NAME} \
-		--from-literal=aws.clusterEndpoint=${CLUSTER_ENDPOINT} \
-		--from-literal=aws.defaultInstanceProfile=KarpenterNodeInstanceProfile-${CLUSTER_NAME} \
-		--from-literal=aws.interruptionQueueName=${CLUSTER_NAME} \
-		--from-literal=featureGates.driftEnabled=true \
-		--dry-run=client -o yaml | kubectl apply -f -
+az-mkrg: ## Create resource group
+	az group create --name $(AZURE_RESOURCE_GROUP) --location $(AZURE_LOCATION) -o none
+
+az-mkacr: az-mkrg ## Create test ACR
+	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Standard --admin-enabled -o none
+	az acr login  --name $(AZURE_ACR_NAME)
+
+az-mkaks: az-mkacr ## Create test AKS cluster (with --vm-set-type AvailabilitySet for compatibility with standalone VMs)
+	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
+		--enable-managed-identity --node-count 1 --generate-ssh-keys --vm-set-type VirtualMachineScaleSets -o none
+	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
+
+az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
+	az group delete --name $(AZURE_RESOURCE_GROUP)
+
+.PHONY: az-patch-helm
+az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
+	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
+	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq -r ".identityProfile.kubeletidentity.clientId"))
+	$(eval AZURE_SUBNET_ID=$(shell az network vnet list --resource-group $(AZURE_RESOURCE_GROUP_MC) | jq  -r ".[0].subnets[0].id"))
+	$(eval CLUSTER_ENDPOINT=$(shell kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'))
+
+	yq -i '(.controller.image.repository)                                              = "$(REGISTRY)/gpu-provisioner"'                    ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.image.tag)                                                     = "$(IMG_TAG)"'                                     ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_SUBSCRIPTION_ID"))           .value = "$(AZURE_SUBSCRIPTION_ID)"'                       ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="LOCATION"))                      .value = "$(AZURE_LOCATION)"'                              ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_USER_ASSIGNED_IDENTITY_ID")) .value = "$(AZURE_CLIENT_ID)"'                             ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="ARM_RESOURCE_GROUP"))            .value = "$(AZURE_RESOURCE_GROUP)"'                        ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_NODE_RESOURCE_GROUP"))     .value = "$(AZURE_RESOURCE_GROUP_MC)"'                     ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_CLUSTER_NAME"))            .value = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="AZURE_SUBNET_ID"))               .value = "$(AZURE_SUBNET_ID)"'                             ./charts/gpu-provisioner/values.yaml
+	yq -i '(.settings.azure.clusterName)                                               = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
+
+	helm install gpu-provisioner ./charts/gpu-provisioner
+
+az-perm: ## Create role assignments to let Karpenter manage VMs and Network
+	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.objectId"))
+	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) \
+	--role "Virtual Machine Contributor" --assignee-principal-type ServicePrincipal
+	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
+	--role "Contributor" --assignee-principal-type ServicePrincipal
+
+az-perm-acr:
+	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
+	$(eval AZURE_ACR_ID=$(shell    az acr show --name $(AZURE_ACR_NAME)     --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".id"))
+	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope $(AZURE_ACR_ID) --role "AcrPull"
+
+az-build: ## Build the gpu-provisioner controller
+	az acr login -n $(AZURE_ACR_NAME)
+
+az-creds: ## Get cluster credentials
+	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
+
+.PHONY: go-build
+go-build:
+	go build -a -ldflags $(LDFLAGS) -o _output/gpu-provisioner ./cmd/controller/main.go
+
+##@ Docker
+BUILDX_BUILDER_NAME ?= img-builder
+OUTPUT_TYPE ?= type=registry
+QEMU_VERSION ?= 5.2.0-2
+ARCH ?= amd64
+
+.PHONY: docker-buildx
+docker-buildx: ## Build and push docker image for the manager for cross-platform support
+	@if ! docker buildx ls | grep $(BUILDX_BUILDER_NAME); then \
+		docker run --rm --privileged multiarch/qemu-user-static:$(QEMU_VERSION) --reset -p yes; \
+		docker buildx create --name $(BUILDX_BUILDER_NAME) --use; \
+		docker buildx inspect $(BUILDX_BUILDER_NAME) --bootstrap; \
+	fi
+
+.PHONY: docker-build
+docker-build: docker-buildx
+	docker buildx build \
+		--file ./Dockerfile \
+		--output=$(OUTPUT_TYPE) \
+		--platform="linux/$(ARCH)" \
+		--pull \
+		--tag $(REGISTRY)/$(IMG_NAME):$(IMG_TAG) .
 
 
-	SYSTEM_NAMESPACE=${SYSTEM_NAMESPACE} KUBERNETES_MIN_VERSION="1.19.0-0" LEADER_ELECT=false DISABLE_WEBHOOK=true \
-		go run ./cmd/controller/main.go
+## --------------------------------------
+## Linting
+## --------------------------------------
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
 
-clean-run: ## Clean resources deployed by the run target
-	kubectl delete configmap -n ${SYSTEM_NAMESPACE} karpenter-global-settings --ignore-not-found
+.PHONY: lint
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run -v
 
-test: ## Run tests
-	ginkgo -v --focus="${FOCUS}" ./pkg/$(shell echo $(TEST_SUITE) | tr A-Z a-z)
+## --------------------------------------
+## Release
+## To create a release, run `make release VERSION=x.y.z`
+## --------------------------------------
+.PHONY: release-manifest
+release-manifest:
+	@sed -i -e 's/^VERSION ?= .*/VERSION ?= ${VERSION}/' ./Makefile
+	@sed -i -e "s/version: .*/version: ${IMG_TAG}/" ./charts/gpu-provisioner/Chart.yaml
+	@sed -i -e "s/tag: .*/tag: ${IMG_TAG}/" ./charts/gpu-provisioner/values.yaml
+	@sed -i -e 's/gpu-provisioner: .*/gpu-provisioner:${IMG_TAG}/' ./charts/gpu-provisioner/README.md
+	git checkout -b release-${VERSION}
+	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
+	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
 
-battletest: ## Run randomized, racing, code-covered tests
-	ginkgo -v \
-		-race \
-		-cover -coverprofile=coverage.out -output-dir=. -coverpkg=./pkg/... \
-		--focus="${FOCUS}" \
-		--randomize-all \
-		-tags random_test_delay \
-		./pkg/...
+## --------------------------------------
+## Tests
+## --------------------------------------
 
+.PHONY: unit-test
+unit-test: ## Run unit tests.
+	go test -v ./pkg/providers/instance ./pkg/cloudprovider  \
+	-race -coverprofile=coverage.txt -covermode=atomic fmt
+	go tool cover -func=coverage.txt
+
+.PHONY: e2etests
 e2etests: ## Run the e2e suite against your local cluster
 	cd test && CLUSTER_NAME=${CLUSTER_NAME} go test \
 		-p 1 \
@@ -95,105 +181,3 @@ e2etests: ## Run the e2e suite against your local cluster
 		--ginkgo.timeout=${TEST_TIMEOUT} \
 		--ginkgo.grace-period=3m \
 		--ginkgo.vv
-
-benchmark:
-	go test -tags=test_performance -run=NoTests -bench=. ./...
-
-coverage:
-	go tool cover -html coverage.out -o coverage.html
-
-verify: tidy download ## Verify code. Includes dependencies, linting, formatting, etc
-	go generate ./...
-	hack/boilerplate.sh
-	cp $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
-	yq -i '(.spec.versions[0].additionalPrinterColumns[] | select (.name=="Zone")) .jsonPath=".metadata.labels.karpenter\.k8s\.azure/zone"' \
-		pkg/apis/crds/karpenter.sh_machines.yaml
-	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
-	@git diff --quiet ||\
-		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
-		if [ "${CI}" = true ]; then\
-			exit 1;\
-		fi;}
-	# TODO: restore codegen if needed; decide on the future of docgen
-	#@echo "Validating codegen/docgen build scripts..."
-	#@find hack/code hack/docs -name "*.go" -type f -print0 | xargs -0 -I {} go build -o /dev/null {}
-
-vulncheck: ## Verify code vulnerabilities
-	@govulncheck ./pkg/...
-
-licenses: download ## Verifies dependency licenses
-	! go-licenses csv ./... | grep -v -e 'MIT' -e 'Apache-2.0' -e 'BSD-3-Clause' -e 'BSD-2-Clause' -e 'ISC' -e 'MPL-2.0'
-
-setup: ## Sets up the IAM roles needed prior to deploying the karpenter-controller. This command only needs to be run once
-	CLUSTER_NAME=${CLUSTER_NAME} ./$(GETTING_STARTED_SCRIPT_DIR)/add-roles.sh $(KARPENTER_VERSION)
-
-build: ## Build the Karpenter controller images using ko build
-	$(eval CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build -B github.com/aws/karpenter/cmd/controller))
-	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
-	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
-	$(eval IMG_DIGEST=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 2))
-
-apply: build ## Deploy the controller from the current state of your git repository into your ~/.kube/config cluster
-	helm upgrade --install karpenter charts/karpenter --namespace ${SYSTEM_NAMESPACE} \
-		$(HELM_OPTS) \
-		--set controller.image.repository=$(IMG_REPOSITORY) \
-		--set controller.image.tag=$(IMG_TAG) \
-		--set controller.image.digest=$(IMG_DIGEST)
-
-install:  ## Deploy the latest released version into your ~/.kube/config cluster
-	@echo Upgrading to ${KARPENTER_VERSION}
-	helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version ${KARPENTER_VERSION} --namespace ${SYSTEM_NAMESPACE} \
-		$(HELM_OPTS)
-
-delete: ## Delete the controller from your ~/.kube/config cluster
-	helm uninstall karpenter --namespace karpenter
-
-docgen: ## Generate docs
-	go run hack/docs/metrics_gen_docs.go pkg/ $(KARPENTER_CORE_DIR)/pkg website/content/en/preview/concepts/metrics.md
-	go run hack/docs/instancetypes_gen_docs.go website/content/en/preview/concepts/instance-types.md
-	go run hack/docs/configuration_gen_docs.go website/content/en/preview/concepts/settings.md
-	cd charts/karpenter && helm-docs
-
-codegen: ## Auto generate files based on AWS APIs response
-	$(WITH_GOFLAGS) ./hack/codegen.sh
-
-stable-release-pr: ## Generate PR for stable release
-	$(WITH_GOFLAGS) ./hack/release/stable-pr.sh
-
-release: ## Builds and publishes stable release if env var RELEASE_VERSION is set, or a snapshot release otherwise
-	$(WITH_GOFLAGS) ./hack/release/release.sh
-
-release-crd: ## Packages and publishes a karpenter-crd helm chart
-	$(WITH_GOFLAGS) ./hack/release/release-crd.sh
-
-prepare-website: ## prepare the website for release
-	./hack/release/prepare-website.sh
-
-toolchain: ## Install developer toolchain
-	./hack/toolchain.sh
-
-issues: ## Run GitHub issue analysis scripts
-	pip install -r ./hack/github/requirements.txt
-	@echo "Set GH_TOKEN env variable to avoid being rate limited by Github"
-	./hack/github/feature_request_reactions.py > "karpenter-feature-requests-$(shell date +"%Y-%m-%d").csv"
-	./hack/github/label_issue_count.py > "karpenter-labels-$(shell date +"%Y-%m-%d").csv"
-
-website: ## Serve the docs website locally
-	cd website && npm install && git submodule update --init --recursive && hugo server
-
-tidy: ## Recursively "go mod tidy" on all directories where go.mod exists
-	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod tidy $(newline))
-
-download: ## Recursively "go mod download" on all directories where go.mod exists
-	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod download $(newline))
-
-update-core: ## Update karpenter-core to latest
-	go get -u github.com/aws/karpenter-core@HEAD
-	go mod tidy
-
-.PHONY: help dev ci release test battletest e2etests verify tidy download docgen codegen apply delete toolchain licenses vulncheck issues website nightly snapshot
-
-define newline
-
-
-endef

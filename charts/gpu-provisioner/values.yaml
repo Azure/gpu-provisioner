@@ -98,18 +98,10 @@ tolerations:
     operator: Exists
 # -- Additional volumes for the pod.
 extraVolumes: []
-# - name: aws-iam-token
-#   projected:
-#     defaultMode: 420
-#     sources:
-#     - serviceAccountToken:
-#         audience: sts.amazonaws.com
-#         expirationSeconds: 86400
-#         path: token
 controller:
   image:
     # -- Repository path to the controller image.
-    repository: aimodelsregistry.azurecr.io/gpu-provisioner
+    repository: ghcr.io/azure/gpu-provisioner
     # -- Tag of the controller image.
     tag: 0.2.0
     # -- SHA256 digest of the controller image.
@@ -156,10 +148,6 @@ controller:
   logEncoding: ""
   # -- Additional volumeMounts for the controller pod.
   extraVolumeMounts: []
-  # - name: aws-iam-token
-  #   mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
-  #   readOnly: true
-  # -- Additional sidecarContainer config
   sidecarContainer: []
   # -- Additional volumeMounts for the sidecar - this will be added to the volume mounts on top of extraVolumeMounts
   sidecarVolumeMounts: []
@@ -175,33 +163,13 @@ logLevel: debug
 logEncoding: console
 # -- Global Settings to configure gpu-provisioner
 settings:
-  # -- The maximum length of a batch window. The longer this is, the more pods we can consider for provisioning at one
-  # time which usually results in fewer but larger nodes.
-  batchMaxDuration: 10s
-  # -- The maximum amount of time with no new ending pods that if exceeded ends the current batching window. If pods arrive
-  # faster than this time, the batching window will be extended up to the maxDuration. If they arrive slower, the pods
-  # will be batched separately.
-  batchIdleDuration: 1s
   # -- Azure-specific configuration values
   azure:
     # -- Cluster name.
     clusterName: new_demo
-    # -- Cluster endpoint.
-    clusterEndpoint: https://newdemo-llm-test-ff05f5-vs68qyru.hcp.eastus.azmk8s.io:443
-    # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types
-    # TODO: not used yet ...
-    vmMemoryOverheadPercent: 0.075
-    # TODO: autogenerate
-    sshPublicKey:
-    networkPlugin: "kubenet" # TODO: get this from the cluster
-    networkPolicy: ""
     # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
     # TODO: not propagated yet ...
     tags:
   # -- Feature Gate configuration values. Feature Gates will follow the same graduation process and requirements as feature gates
   # in Kubernetes. More information here https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#feature-gates-for-alpha-or-beta-features
   featureGates:
-    # -- driftEnabled is in ALPHA and is disabled by default.
-    # Setting driftEnabled to true enables the drift deprovisioner to watch for drift between currently deployed nodes
-    # and the desired state of nodes set in provisioners and node templates
-    driftEnabled: false

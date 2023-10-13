@@ -38,37 +38,24 @@ var _ = Describe("Validation", func() {
 	It("should succeed to set defaults", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"azure.clusterEndpoint": "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-				"azure.clusterName":     "my-cluster",
-				"azure.clusterID":       "my-cluster-id",
-				"azure.sshPublicKey":    "my-ssh-public-key",
-				"azure.networkPlugin":   "kubenet",
-				"azure.networkPolicy":   "azure",
+				"azure.clusterName": "my-cluster",
 			},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).ToNot(HaveOccurred())
 		s := settings.FromContext(ctx)
-		Expect(s.VMMemoryOverheadPercent).To(Equal(0.075))
 		Expect(len(s.Tags)).To(BeZero())
 	})
 	It("should succeed to set custom values", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"azure.clusterEndpoint":         "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-				"azure.clusterName":             "my-cluster",
-				"azure.vmMemoryOverheadPercent": "0.1",
-				"azure.tags":                    `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
-				"azure.clusterID":               "my-cluster-id",
-				"azure.sshPublicKey":            "my-ssh-public-key",
-				"azure.networkPlugin":           "kubenet",
-				"azure.networkPolicy":           "azure",
+				"azure.clusterName": "my-cluster",
+				"azure.tags":        `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
 			},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).ToNot(HaveOccurred())
 		s := settings.FromContext(ctx)
-		Expect(s.VMMemoryOverheadPercent).To(Equal(0.1))
 		Expect(len(s.Tags)).To(Equal(3))
 		Expect(s.Tags).To(HaveKeyWithValue("tag1", "value1"))
 		Expect(s.Tags).To(HaveKeyWithValue("tag2", "value2"))
@@ -77,39 +64,7 @@ var _ = Describe("Validation", func() {
 	})
 	It("should fail validation with panic when clusterName not included", func() {
 		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"azure.clusterEndpoint": "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-			},
-		}
-		_, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-	})
-	It("should fail validation with panic when clusterEndpoint not included", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"azure.clusterName": "my-name",
-			},
-		}
-		_, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-	})
-	It("should fail validation with panic when clusterEndpoint is invalid (not absolute)", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"azure.clusterName":     "my-name",
-				"azure.clusterEndpoint": "karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-			},
-		}
-		_, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-	})
-	It("should fail validation with panic when vmMemoryOverheadPercent is negative", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"azure.clusterEndpoint":         "https://karpenter-000000000000.hcp.westus2.staging.azmk8s.io",
-				"azure.clusterName":             "my-cluster",
-				"azure.vmMemoryOverheadPercent": "-0.01",
-			},
+			Data: map[string]string{},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
