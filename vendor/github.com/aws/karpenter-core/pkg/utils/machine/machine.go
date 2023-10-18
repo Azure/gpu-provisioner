@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -190,7 +191,16 @@ func AllNodesForMachine(ctx context.Context, c client.Client, machine *v1alpha5.
 	providerID := lo.Ternary(machine.Status.ProviderID != "", machine.Status.ProviderID, machine.Annotations[v1alpha5.MachineLinkedAnnotationKey])
 	// Machines that have no resolved providerID have no nodes mapped to them
 	if providerID == "" {
-		return nil, fmt.Errorf("The machine has not been associated with any node yet")
+		// check common failures caused by bad input
+		msg := machine.StatusConditions().GetCondition(v1alpha5.MachineLaunched).GetMessage()
+		if machine.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsFalse() &&
+			(msg == "all requested instance types were unavailable during launch" ||
+				strings.Contains(msg, "is not allowed in your subscription in location")) {
+			return nil, nil // Not recoverable, does not consider as an error
+
+		} else {
+			return nil, fmt.Errorf("The machine has not been associated with any node yet")
+		}
 	}
 	nodeList := v1.NodeList{}
 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": providerID}); err != nil {
