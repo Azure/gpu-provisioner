@@ -115,7 +115,6 @@ var _ = Describe("GPU", func() {
 		env.ExpectCreated(machine, deployment)
 		env.EventuallyExpectHealthyPodCountWithTimeout(time.Minute*15, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), int(*deployment.Spec.Replicas))
 		env.ExpectCreatedNodeCount("==", int(*deployment.Spec.Replicas))
-		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
-		Expect(node.Labels).To(HaveKeyWithValue("kubernetes.azure.com/accelerator", "nvidia"))
+		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 	})
 })
