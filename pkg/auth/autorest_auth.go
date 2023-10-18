@@ -15,76 +15,81 @@ limitations under the License.
 package auth
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
-	klog "k8s.io/klog/v2"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
+	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
-func NewAuthorizer(config *Config, env *azure.Environment) (autorest.Authorizer, error) {
-	token, err := newServicePrincipalTokenFromCredentials(config, env)
-	if err != nil {
-		return nil, fmt.Errorf("retrieve service principal token: %w", err)
-	}
-	return autorest.NewBearerAuthorizer(token), nil
+// authResult contains the subset of results from token acquisition operation in ConfidentialClientApplication
+// For details see https://aka.ms/msal-net-authenticationresult
+type authResult struct {
+	accessToken    string
+	expiresOn      time.Time
+	grantedScopes  []string
+	declinedScopes []string
 }
 
-// newServicePrincipalTokenFromCredentials creates a new ServicePrincipalToken using values of the
-// passed credentials map.
-func newServicePrincipalTokenFromCredentials(config *Config, env *azure.Environment) (*adal.ServicePrincipalToken, error) {
-	oauthConfig, err := adal.NewOAuthConfig(env.ActiveDirectoryEndpoint, config.TenantID)
+func NewAuthorizer(config *Config, env *azure.Environment) (autorest.Authorizer, error) {
+
+	// Azure AD Workload Identity webhook will inject the following env vars:
+	// 	AZURE_FEDERATED_TOKEN_FILE is the service account token path
+	// 	AZURE_AUTHORITY_HOST is the AAD authority hostname
+
+	tokenFilePath := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	authority := os.Getenv("AZURE_AUTHORITY_HOST")
+
+	if tokenFilePath == "" || authority == "" {
+		return nil, fmt.Errorf("required environment variables not set, AZURE_FEDERATED_TOKEN_FILE: %s, AZURE_AUTHORITY_HOST: %s", tokenFilePath, authority)
+	}
+
+	cred := confidential.NewCredFromAssertionCallback(func(context.Context, confidential.AssertionRequestOptions) (string, error) {
+		return readJWTFromFS(tokenFilePath)
+	})
+	// create the confidential client to request an AAD token
+	confidentialClientApp, err := confidential.New(
+		fmt.Sprintf("%s%s/oauth2/token", authority, config.TenantID),
+		config.UserAssignedIdentityID,
+		cred)
 	if err != nil {
-		return nil, fmt.Errorf("creating the OAuth config: %w", err)
+		return nil, fmt.Errorf("failed to create confidential client app: %w", err)
 	}
 
-	if config.UseManagedIdentityExtension {
-		klog.V(2).Infoln("azure: using managed identity extension to retrieve access token")
-		msiEndpoint, err := adal.GetMSIVMEndpoint()
-		if err != nil {
-			return nil, fmt.Errorf("getting the managed service identity endpoint: %w", err)
-		}
-
-		if len(config.UserAssignedIdentityID) > 0 {
-			klog.V(4).Info("azure: using User Assigned MSI ID to retrieve access token")
-			return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID(msiEndpoint,
-				env.ServiceManagementEndpoint,
-				config.UserAssignedIdentityID)
-		}
-		klog.V(4).Info("azure: using System Assigned MSI to retrieve access token")
-		return adal.NewServicePrincipalTokenFromMSI(
-			msiEndpoint,
-			env.ServiceManagementEndpoint)
+	result, err := confidentialClientApp.AcquireTokenByCredential(context.Background(), []string{strings.TrimSuffix(env.ResourceManagerEndpoint, "/") + "/.default"})
+	if err != nil {
+		klog.ErrorS(err, "failed to acquire token")
+		return autorest.NewBearerAuthorizer(authResult{}), errors.Wrap(err, "failed to acquire token")
 	}
 
-	if len(config.AADClientSecret) > 0 {
-		klog.V(2).Infoln("azure: using client_id+client_secret to retrieve access token")
-		return adal.NewServicePrincipalToken(
-			*oauthConfig,
-			config.AADClientID,
-			config.AADClientSecret,
-			env.ServiceManagementEndpoint)
-	}
+	return autorest.NewBearerAuthorizer(authResult{
+		accessToken:    result.AccessToken,
+		expiresOn:      result.ExpiresOn,
+		grantedScopes:  result.GrantedScopes,
+		declinedScopes: result.DeclinedScopes,
+	}), nil
+}
 
-	if len(config.AADClientCertPath) > 0 && len(config.AADClientCertPassword) > 0 {
-		klog.V(2).Infoln("azure: using jwt client_assertion (client_cert+client_private_key) to retrieve access token")
-		certData, err := os.ReadFile(config.AADClientCertPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading the client certificate from file %s: %w", config.AADClientCertPath, err)
-		}
-		certificate, privateKey, err := decodePkcs12(certData, config.AADClientCertPassword)
-		if err != nil {
-			return nil, fmt.Errorf("decoding the client certificate: %w", err)
-		}
-		return adal.NewServicePrincipalTokenFromCertificate(
-			*oauthConfig,
-			config.AADClientID,
-			certificate,
-			privateKey,
-			env.ServiceManagementEndpoint)
-	}
+// OAuthToken implements the OAuthTokenProvider interface.  It returns the current access token.
+func (ar authResult) OAuthToken() string {
+	return ar.accessToken
+}
 
-	return nil, fmt.Errorf("no credentials provided for AAD application %s", config.AADClientID)
+func (a *authResult) WithAuthorization() autorest.PrepareDecorator {
+	return autorest.WithBearerAuthorization(a.accessToken)
+}
+
+// readJWTFromFS reads the jwt from file system
+func readJWTFromFS(tokenFilePath string) (string, error) {
+	token, err := os.ReadFile(tokenFilePath)
+	if err != nil {
+		return "", err
+	}
+	return string(token), nil
 }

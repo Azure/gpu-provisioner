@@ -58,7 +58,6 @@ type Provider struct {
 	instanceTypeProvider *instancetype.Provider
 	resourceGroup        string
 	nodeResourceGroup    string
-	subnetID             string
 	clusterName          string
 	unavailableOfferings *cache.UnavailableOfferings
 }
@@ -71,7 +70,6 @@ func NewProvider(
 	location string,
 	resourceGroup string,
 	nodeResourceGroup string,
-	subnetID string,
 	clusterName string,
 ) *Provider {
 	return &Provider{
@@ -81,7 +79,6 @@ func NewProvider(
 		location:             location,
 		resourceGroup:        resourceGroup,
 		nodeResourceGroup:    nodeResourceGroup,
-		subnetID:             subnetID,
 		clusterName:          clusterName,
 		unavailableOfferings: offeringsCache,
 	}

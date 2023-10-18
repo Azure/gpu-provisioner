@@ -15,7 +15,7 @@ roleRef:
   name: {{ include "gpu-provisioner.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ template "gpu-provisioner.serviceAccountName" . }}
+    name: gpu-provisioner
     namespace:  {{ .Values.namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -35,5 +35,5 @@ roleRef:
   name: {{ include "gpu-provisioner.fullname" . }}-dns
 subjects:
   - kind: ServiceAccount
-    name: {{ template "gpu-provisioner.serviceAccountName" . }}
+    name: gpu-provisioner
     namespace: {{ .Values.namespace }}

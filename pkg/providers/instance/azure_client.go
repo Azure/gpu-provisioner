@@ -57,12 +57,6 @@ func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
 	// Defaulting env to Azure Public Cloud.
 	env := azure.PublicCloud
 	var err error
-	if cfg.Cloud != "" {
-		env, err = azure.EnvironmentFromName(cfg.Cloud)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	azClient, err := NewAZClient(cfg, &env)
 	if err != nil {
@@ -80,7 +74,7 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 
 	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
 	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg)
+	cred, err := auth.NewCredential(cfg, env)
 	if err != nil {
 		return nil, err
 	}

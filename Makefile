@@ -60,44 +60,50 @@ az-mkacr: az-mkrg ## Create test ACR
 	az acr create --name $(AZURE_ACR_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --sku Standard --admin-enabled -o none
 	az acr login  --name $(AZURE_ACR_NAME)
 
-az-mkaks: az-mkacr ## Create test AKS cluster (with --vm-set-type AvailabilitySet for compatibility with standalone VMs)
+az-mkaks: az-mkacr ## Create test AKS cluster (with msi, oidc and workload identity enabled)
 	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
-		--enable-managed-identity --node-count 1 --generate-ssh-keys --vm-set-type VirtualMachineScaleSets -o none
+	--node-count 1 --generate-ssh-keys --enable-managed-identity  --enable-workload-identity --enable-oidc-issuer -o none
 	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
 
 az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
 	az group delete --name $(AZURE_RESOURCE_GROUP)
 
+.PHONE: az-identity-perm
+az-identity-perm: ## Create identity for gpu-provisioner
+	az identity create --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP)
+
+	IDENTITY_PRINCIPAL_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'principalId')
+	IDENTITY_CLIENT_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'clientId')
+
+	az role assignment create --assignee $(IDENTITY_PRINCIPAL_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)  --role "Contributor"
+
+	AKS_OIDC_ISSUER=$(shell az aks show -n "$(AZURE_CLUSTER_NAME)" -g "$(AZURE_RESOURCE_GROUP)" --subscription $(AZURE_SUBSCRIPTION_ID) --query "oidcIssuerProfile.issuerUrl")
+
+	az identity federated-credential create --name gpu-federatecredential --identity-name gpuIdentity --resource-group "$(AZURE_RESOURCE_GROUP)" --issuer "$(AKS_OIDC_ISSUER)" \
+	--subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange --subscription $(AZURE_SUBSCRIPTION_ID)
+
 .PHONY: az-patch-helm
 az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
 	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
-	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq -r ".identityProfile.kubeletidentity.clientId"))
-	$(eval AZURE_SUBNET_ID=$(shell az network vnet list --resource-group $(AZURE_RESOURCE_GROUP_MC) | jq  -r ".[0].subnets[0].id"))
-	$(eval CLUSTER_ENDPOINT=$(shell kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'))
+	$(eval IDENTITY_CLIENT_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --query 'clientId' -o tsv))
+	$(eval AZURE_TENANT_ID=$(shell az account show | jq -r ".tenantId"))
 
 	yq -i '(.controller.image.repository)                                              = "$(REGISTRY)/gpu-provisioner"'                    ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.image.tag)                                                     = "$(IMG_TAG)"'                                     ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="ARM_SUBSCRIPTION_ID"))           .value = "$(AZURE_SUBSCRIPTION_ID)"'                       ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="LOCATION"))                      .value = "$(AZURE_LOCATION)"'                              ./charts/gpu-provisioner/values.yaml
-	yq -i '(.controller.env[] | select(.name=="ARM_USER_ASSIGNED_IDENTITY_ID")) .value = "$(AZURE_CLIENT_ID)"'                             ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="ARM_RESOURCE_GROUP"))            .value = "$(AZURE_RESOURCE_GROUP)"'                        ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="AZURE_NODE_RESOURCE_GROUP"))     .value = "$(AZURE_RESOURCE_GROUP_MC)"'                     ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="AZURE_CLUSTER_NAME"))            .value = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
-	yq -i '(.controller.env[] | select(.name=="AZURE_SUBNET_ID"))               .value = "$(AZURE_SUBNET_ID)"'                             ./charts/gpu-provisioner/values.yaml
 	yq -i '(.settings.azure.clusterName)                                               = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
+	yq -i '(.workloadIdentity.clientId)                                                = "$(IDENTITY_CLIENT_ID)"'                          ./charts/gpu-provisioner/values.yaml
+	yq -i '(.workloadIdentity.tenantId)                                                = "$(AZURE_TENANT_ID)"'                             ./charts/gpu-provisioner/values.yaml
 
-	helm install gpu-provisioner ./charts/gpu-provisioner
-
-az-perm: ## Create role assignments to let Karpenter manage VMs and Network
-	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.objectId"))
-	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP_MC) \
-	--role "Virtual Machine Contributor" --assignee-principal-type ServicePrincipal
-	az role assignment create --assignee-object-id $(AZURE_CLIENT_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)    \
-	--role "Contributor" --assignee-principal-type ServicePrincipal
+#kubectl annotate sa gpu-provisioner -n gpu-provisioner azure.workload.identity/tenant-id="$(AZURE_TENANT_ID)" --overwrite
 
 az-perm-acr:
 	$(eval AZURE_CLIENT_ID=$(shell az aks show --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".identityProfile.kubeletidentity.clientId"))
-	$(eval AZURE_ACR_ID=$(shell    az acr show --name $(AZURE_ACR_NAME)     --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".id"))
+	$(eval AZURE_ACR_ID=$(shell az acr show --name $(AZURE_ACR_NAME)  --resource-group $(AZURE_RESOURCE_GROUP) | jq  -r ".id"))
 	az role assignment create --assignee $(AZURE_CLIENT_ID) --scope $(AZURE_ACR_ID) --role "AcrPull"
 
 az-build: ## Build the gpu-provisioner controller
@@ -177,7 +183,6 @@ e2etests: ## Run the e2e suite against your local cluster
 		-timeout ${TEST_TIMEOUT} \
 		-v \
 		./e2e/suites/suite_test.go \
-		--ginkgo.focus="${FOCUS}" \
 		--ginkgo.timeout=${TEST_TIMEOUT} \
 		--ginkgo.grace-period=3m \
 		--ginkgo.vv

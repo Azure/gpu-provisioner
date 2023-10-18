@@ -114,18 +114,11 @@ controller:
       value:
     - name: LOCATION
       value:
-    - name: ARM_USE_MANAGED_IDENTITY_EXTENSION
-      value: "true"
-    - name: ARM_USER_ASSIGNED_IDENTITY_ID
-      value:
     - name: AZURE_CLUSTER_NAME
       value:
     - name: AZURE_NODE_RESOURCE_GROUP
       value:
     - name: ARM_RESOURCE_GROUP
-      value:
-    # TODO: move to settings
-    - name: AZURE_SUBNET_ID # the id of subnet to create network interfaces on
       value:
     - name: LEADER_ELECT # disable leader election for better debugging experience
       value: "false"
@@ -146,11 +139,6 @@ controller:
   logLevel: debug
   # -- Controller log encoding, defaults to the global log encoding
   logEncoding: ""
-  # -- Additional volumeMounts for the controller pod.
-  extraVolumeMounts: []
-  sidecarContainer: []
-  # -- Additional volumeMounts for the sidecar - this will be added to the volume mounts on top of extraVolumeMounts
-  sidecarVolumeMounts: []
   metrics:
     # -- The container port to use for metrics.
     port: 8000
@@ -162,11 +150,14 @@ logLevel: debug
 # -- Global log encoding
 logEncoding: console
 # -- Global Settings to configure gpu-provisioner
+workloadIdentity:
+  clientId: ""
+  tenantId: ""
 settings:
   # -- Azure-specific configuration values
   azure:
     # -- Cluster name.
-    clusterName: new_demo
+    clusterName: fed-gpu
     # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
     # TODO: not propagated yet ...
     tags:

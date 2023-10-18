@@ -74,6 +74,11 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
 
+      - name: Create Azure Identity
+        shell: bash
+        run: |
+          az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
+
       - name: build gpu-provisioner image
         shell: bash
         run: |
@@ -81,6 +86,12 @@ jobs:
         env:
           REGISTRY: ${{ env.CLUSTER_NAME }}.azurecr.io
           VERSION: ${{ env.VERSION }}
+
+      - name: Create Role Assignment
+        shell: bash
+        run: |
+          IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
+          az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}"  --role "Contributor"
 
       - name: create cluster
         shell: bash
@@ -91,18 +102,19 @@ jobs:
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
           AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
 
-      - name: update azure perms
+      - name: Create Azure Federated Identity
         shell: bash
         run: |
-          make az-perm
-        env:
-          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
-          AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+         AKS_OIDC_ISSUER="$(az aks show -n "${{ env.CLUSTER_NAME }}" -g "${{ env.CLUSTER_NAME }}" --query 'oidcIssuerProfile.issuerUrl' -otsv)"
+         az identity federated-credential create --name gpu-fed-credential --identity-name gpuIdentity --resource-group "${{ env.CLUSTER_NAME }}" \
+          --issuer "${AKS_OIDC_ISSUER}" --subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange
 
       - name: Install GPU-Provisioner helm chart
         shell: bash
         run: |
+          echo "IDENTITY_CLIENT_ID=$(az identity show --name gpuIdentity -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
           make az-patch-helm
+          helm install gpu-provisioner ./charts/gpu-provisioner
           kubectl wait --for=condition=available deploy "gpu-provisioner" -n gpu-provisioner --timeout=300s
         env:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}

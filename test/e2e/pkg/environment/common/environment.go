@@ -74,7 +74,7 @@ func NewEnvironment(t *testing.T) *Environment {
 		Context:    ctx,
 		Config:     config,
 		Client:     client,
-		KubeClient: kubernetes.NewForConfigOrDie(config),
+		KubeClient: kubernetesInterface,
 		Monitor:    NewMonitor(ctx, client),
 	}
 }
