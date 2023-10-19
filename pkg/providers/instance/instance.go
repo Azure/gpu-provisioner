@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	LabelMachineType = "gpu-provisioner.sh/machine-type"
+	LabelMachineType = "kaito.sh/machine-type"
 )
 
 type Provider struct {
@@ -268,6 +268,8 @@ func newAgentPoolObject(vmSize, capacityType string, machine *v1alpha5.Machine) 
 
 	if strings.Contains(vmSize, "Standard_N") {
 		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
+	} else {
+		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("cpu")})
 	}
 
 	storage := &resource.Quantity{}
