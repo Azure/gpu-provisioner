@@ -72,7 +72,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		azConfig.Location,
 		azConfig.ResourceGroup,
 		azConfig.NodeResourceGroup,
-		azConfig.SubnetID,
 		azConfig.ClusterName,
 	)
 
