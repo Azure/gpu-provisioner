@@ -161,9 +161,9 @@ release-manifest:
 	@sed -i -e "s/version: .*/version: ${IMG_TAG}/" ./charts/gpu-provisioner/Chart.yaml
 	@sed -i -e "s/tag: .*/tag: ${IMG_TAG}/" ./charts/gpu-provisioner/values.yaml
 	@sed -i -e 's/gpu-provisioner: .*/gpu-provisioner:${IMG_TAG}/' ./charts/gpu-provisioner/README.md
-#	git checkout -b release-${VERSION}
-#	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
-#	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
+	git checkout -b release-${VERSION}
+	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
+	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
 
 ## --------------------------------------
 ## Tests
