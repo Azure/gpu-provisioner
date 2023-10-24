@@ -1,0 +1,24 @@
+apiVersion: v1
+entries:
+  gpu-provisioner:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2023-10-24T20:39:47.967109371Z"
+    description: A Helm chart for gpu-provisioner, an open-source GPU provisioning
+      project built for Kubernetes.
+    digest: 18bde0ac6d999b6594dc6a5230729134fd8639ea553c560264cc70f9471d2d1e
+    keywords:
+    - gpu
+    - cluster
+    - node
+    - scheduler
+    - autoscaling
+    - lifecycle
+    name: gpu-provisioner
+    sources:
+    - https://github.com/Azure/gpu-provisioner
+    type: application
+    urls:
+    - https://Azure.github.io/gpu-provisioner/charts/gpu-provisioner-0.0.1.tgz
+    version: 0.0.1
+generated: "2023-10-24T20:39:47.965818739Z"
