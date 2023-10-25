@@ -43,9 +43,9 @@ LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_V
 # AKS INT/Staging Test
 AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
 AZURE_LOCATION=eastus
-AZURE_RESOURCE_GROUP ?= llm-test
-AZURE_ACR_NAME ?= helayoty
-AZURE_CLUSTER_NAME ?= new_demo
+AZURE_RESOURCE_GROUP ?= <YOUR RG>
+AZURE_ACR_NAME ?= <YOUR ACR>
+AZURE_CLUSTER_NAME ?= <YOUR CLUSTER>
 
 AZURE_RESOURCE_GROUP_MC=MC_$(AZURE_RESOURCE_GROUP)_$(AZURE_CLUSTER_NAME)_$(AZURE_LOCATION)
 
@@ -71,16 +71,9 @@ az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use
 .PHONE: az-identity-perm
 az-identity-perm: ## Create identity for gpu-provisioner
 	az identity create --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP)
-
-	IDENTITY_PRINCIPAL_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'principalId')
-	IDENTITY_CLIENT_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'clientId')
-
+	$(eval IDENTITY_PRINCIPAL_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'principalId'))
+	$(eval IDENTITY_CLIENT_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'clientId'))
 	az role assignment create --assignee $(IDENTITY_PRINCIPAL_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)  --role "Contributor"
-
-	AKS_OIDC_ISSUER=$(shell az aks show -n "$(AZURE_CLUSTER_NAME)" -g "$(AZURE_RESOURCE_GROUP)" --subscription $(AZURE_SUBSCRIPTION_ID) --query "oidcIssuerProfile.issuerUrl")
-
-	az identity federated-credential create --name gpu-federatecredential --identity-name gpuIdentity --resource-group "$(AZURE_RESOURCE_GROUP)" --issuer "$(AKS_OIDC_ISSUER)" \
-	--subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange --subscription $(AZURE_SUBSCRIPTION_ID)
 
 .PHONY: az-patch-helm
 az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
@@ -98,6 +91,11 @@ az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
 	yq -i '(.settings.azure.clusterName)                                               = "$(AZURE_CLUSTER_NAME)"'                          ./charts/gpu-provisioner/values.yaml
 	yq -i '(.workloadIdentity.clientId)                                                = "$(IDENTITY_CLIENT_ID)"'                          ./charts/gpu-provisioner/values.yaml
 	yq -i '(.workloadIdentity.tenantId)                                                = "$(AZURE_TENANT_ID)"'                             ./charts/gpu-provisioner/values.yaml
+
+.PHONE: az-federated-credential
+	$(eval AKS_OIDC_ISSUER=$(shell az aks show -n "$(AZURE_CLUSTER_NAME)" -g "$(AZURE_RESOURCE_GROUP)" --subscription $(AZURE_SUBSCRIPTION_ID) --query "oidcIssuerProfile.issuerUrl"))
+	az identity federated-credential create --name gpu-federatecredential --identity-name gpuIdentity --resource-group "$(AZURE_RESOURCE_GROUP)" --issuer "$(AKS_OIDC_ISSUER)" \
+        --subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange --subscription $(AZURE_SUBSCRIPTION_ID)
 
 #kubectl annotate sa gpu-provisioner -n gpu-provisioner azure.workload.identity/tenant-id="$(AZURE_TENANT_ID)" --overwrite
 
