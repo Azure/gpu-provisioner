@@ -16,6 +16,8 @@ package operator
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/aws/karpenter-core/pkg/operator"
 	"github.com/azure/gpu-provisioner/pkg/auth"
@@ -47,6 +49,9 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	azClient, err := instance.CreateAzClient(azConfig)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("creating Azure client, %s", err)
+		// Let us panic here, instead of crashing in the following code.
+		// TODO: move this to an init container
+		panic(fmt.Sprintf("Configure azure client fails. Please ensure federatedcredential has been created for identity %s.", os.Getenv("AZURE_CLIENT_ID")))
 	}
 
 	unavailableOfferingsCache := azurecache.NewUnavailableOfferings()
