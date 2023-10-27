@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/karpenter-core/pkg/operator/injection"
 	"github.com/onsi/gomega"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,8 +35,6 @@ import (
 
 	coreapis "github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/operator/injection"
-	"github.com/azure/gpu-provisioner/pkg/apis"
 	"github.com/azure/gpu-provisioner/pkg/utils/project"
 )
 
@@ -63,9 +62,9 @@ func NewEnvironment(t *testing.T) *Environment {
 
 	lo.Must0(os.Setenv(system.NamespaceEnvKey, "gpu-provisioner"))
 	kubernetesInterface := kubernetes.NewForConfigOrDie(config)
-	ctx = injection.WithSettingsOrDie(ctx, kubernetesInterface, apis.Settings...)
 	if val, ok := os.LookupEnv("GIT_REF"); ok {
 		ctx = context.WithValue(ctx, GitRefContextKey, val)
+		ctx = injection.WithSettingsOrDie(ctx, kubernetesInterface, coreapis.Settings...)
 	}
 
 	gomega.SetDefaultEventuallyTimeout(5 * time.Minute)
@@ -92,9 +91,7 @@ func NewClient(config *rest.Config) (client.Client, error) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-	if err := apis.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
+
 	if err := coreapis.AddToScheme(scheme); err != nil {
 		return nil, err
 	}

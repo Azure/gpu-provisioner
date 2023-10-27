@@ -101,7 +101,7 @@ extraVolumes: []
 controller:
   image:
     # -- Repository path to the controller image.
-    repository: ghcr.io/azure/gpu-provisioner
+    repository: mcr.microsoft.com/aks/kaito/gpu-provisioner
     # -- Tag of the controller image.
     tag: 0.0.1
     # -- SHA256 digest of the controller image.
@@ -111,15 +111,15 @@ controller:
   # -- Additional environment variables for the controller pod.
   env:
     - name: ARM_SUBSCRIPTION_ID
-      value:
+      value: ff05f55d-22b5-44a7-b704-f9a8efd493ed
     - name: LOCATION
-      value:
+      value: eastus
     - name: AZURE_CLUSTER_NAME
-      value:
+      value: new_demo
     - name: AZURE_NODE_RESOURCE_GROUP
-      value:
+      value: MC_llm-test_new_demo_eastus
     - name: ARM_RESOURCE_GROUP
-      value:
+      value: llm-test
     - name: LEADER_ELECT # disable leader election for better debugging experience
       value: "false"
   envFrom: []
@@ -151,16 +151,5 @@ logLevel: debug
 logEncoding: console
 # -- Global Settings to configure gpu-provisioner
 workloadIdentity:
-  clientId: ""
-  tenantId: ""
-settings:
-  # -- Azure-specific configuration values
-  azure:
-    # -- Cluster name.
-    clusterName: fed-gpu
-    # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
-    # TODO: not propagated yet ...
-    tags:
-  # -- Feature Gate configuration values. Feature Gates will follow the same graduation process and requirements as feature gates
-  # in Kubernetes. More information here https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#feature-gates-for-alpha-or-beta-features
-  featureGates:
+  clientId: "00411c3a-8361-42f3-8917-50b6da46e9fc"
+  tenantId: "72f988bf-86f1-41af-91ab-2d7cd011db47"
