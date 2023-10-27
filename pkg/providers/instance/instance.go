@@ -52,7 +52,6 @@ const (
 )
 
 type Provider struct {
-	location             string
 	azClient             *AZClient
 	kubeClient           client.Client
 	instanceTypeProvider *instancetype.Provider
@@ -67,7 +66,7 @@ func NewProvider(
 	kubeClient client.Client,
 	instanceTypeProvider *instancetype.Provider,
 	offeringsCache *cache.UnavailableOfferings,
-	location string,
+
 	resourceGroup string,
 	nodeResourceGroup string,
 	clusterName string,
@@ -76,7 +75,6 @@ func NewProvider(
 		azClient:             azClient,
 		kubeClient:           kubeClient,
 		instanceTypeProvider: instanceTypeProvider,
-		location:             location,
 		resourceGroup:        resourceGroup,
 		nodeResourceGroup:    nodeResourceGroup,
 		clusterName:          clusterName,

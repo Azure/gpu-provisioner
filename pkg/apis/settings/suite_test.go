@@ -44,24 +44,10 @@ var _ = Describe("Validation", func() {
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).ToNot(HaveOccurred())
 		s := settings.FromContext(ctx)
-		Expect(len(s.Tags)).To(BeZero())
-	})
-	It("should succeed to set custom values", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"azure.clusterName": "my-cluster",
-				"azure.tags":        `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
-			},
-		}
-		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).ToNot(HaveOccurred())
-		s := settings.FromContext(ctx)
-		Expect(len(s.Tags)).To(Equal(3))
-		Expect(s.Tags).To(HaveKeyWithValue("tag1", "value1"))
-		Expect(s.Tags).To(HaveKeyWithValue("tag2", "value2"))
-		Expect(s.Tags).To(HaveKeyWithValue("example.com/tag", "my-value"))
+		Expect(s.ClusterName).To(Equal("my-cluster"))
 
 	})
+
 	It("should fail validation with panic when clusterName not included", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{},
@@ -69,5 +55,4 @@ var _ = Describe("Validation", func() {
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
 	})
-	// TODO: more validation tests
 })

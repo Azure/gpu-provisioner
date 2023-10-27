@@ -10,7 +10,7 @@ additionalLabels: {}
 # -- Additional annotations to add into metadata.
 additionalAnnotations: {}
 # -- Image pull policy for Docker images.
-imagePullPolicy: Always
+imagePullPolicy: IfNotPresent
 # -- Image pull secrets for Docker images.
 imagePullSecrets: []
 serviceAccount:
@@ -112,16 +112,12 @@ controller:
   env:
     - name: ARM_SUBSCRIPTION_ID
       value:
-    - name: LOCATION
-      value:
     - name: AZURE_CLUSTER_NAME
       value:
     - name: AZURE_NODE_RESOURCE_GROUP
       value:
     - name: ARM_RESOURCE_GROUP
       value:
-    - name: LEADER_ELECT # disable leader election for better debugging experience
-      value: "false"
   envFrom: []
   # -- Resources for the controller pod.
   resources:
@@ -157,10 +153,4 @@ settings:
   # -- Azure-specific configuration values
   azure:
     # -- Cluster name.
-    clusterName: fed-gpu
-    # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)
-    # TODO: not propagated yet ...
-    tags:
-  # -- Feature Gate configuration values. Feature Gates will follow the same graduation process and requirements as feature gates
-  # in Kubernetes. More information here https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#feature-gates-for-alpha-or-beta-features
-  featureGates:
+    clusterName: 

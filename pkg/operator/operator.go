@@ -74,7 +74,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		operator.GetClient(),
 		instanceTypeProvider,
 		unavailableOfferingsCache,
-		azConfig.Location,
 		azConfig.ResourceGroup,
 		azConfig.NodeResourceGroup,
 		azConfig.ClusterName,
