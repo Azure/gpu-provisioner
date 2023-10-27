@@ -31,13 +31,11 @@ var ContextKey = settingsKeyType{}
 
 var defaultSettings = Settings{
 	ClusterName: "",
-	Tags:        map[string]string{},
 }
 
 // +k8s:deepcopy-gen=true
 type Settings struct {
 	ClusterName string `validate:"required"`
-	Tags        map[string]string
 }
 
 func (*Settings) ConfigMap() string {
@@ -50,7 +48,6 @@ func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context,
 
 	if err := configmap.Parse(cm.Data,
 		configmap.AsString("azure.clusterName", &s.ClusterName),
-		AsStringMap("azure.tags", &s.Tags),
 	); err != nil {
 		return ctx, fmt.Errorf("parsing settings, %w", err)
 	}
@@ -74,12 +71,6 @@ func (s Settings) Data() (map[string]string, error) {
 	return d, nil
 }
 
-// Validate leverages struct tags with go-playground/validator so you can define a struct with custom
-// validation on fields i.e.
-//
-//	type ExampleStruct struct {
-//	    Example  metav1.Duration `json:"example" validate:"required,min=10m"`
-//	}
 func (s Settings) Validate() error {
 	validate := validator.New()
 	return multierr.Combine(
@@ -98,18 +89,4 @@ func FromContext(ctx context.Context) *Settings {
 		panic("settings doesn't exist in context")
 	}
 	return data.(*Settings)
-}
-
-// AsStringMap parses a value as a JSON map of map[string]string.
-func AsStringMap(key string, target *map[string]string) configmap.ParseFunc {
-	return func(data map[string]string) error {
-		if raw, ok := data[key]; ok {
-			m := map[string]string{}
-			if err := json.Unmarshal([]byte(raw), &m); err != nil {
-				return err
-			}
-			*target = m
-		}
-		return nil
-	}
 }

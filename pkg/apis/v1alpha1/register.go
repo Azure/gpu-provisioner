@@ -28,9 +28,6 @@ const ()
 var (
 	LabelDomain = "karpenter.k8s.azure"
 
-	// TODO: Double check that we don't need to support "Low"
-	// TODO: Consider renaming to PrioritySpot/Regular
-	// TODO: Q: These might actually be values gpu-provisioner-core knows about,
 	// may not be able to use Regular instead of On-demand
 	PrioritySpot             = string(compute.Spot)
 	PriorityRegular          = string(compute.Regular)
@@ -76,8 +73,6 @@ var (
 	LabelSKUMemoryIntensive         = LabelDomain + "/sku-memory-intensive"          // m
 	LabelSKUMemoryTiny              = LabelDomain + "/sku-memory-tiny"               // t
 	LabelSKUStoragePremiumCapable   = LabelDomain + "/sku-storage-premium-capable"   // s = sku.UltraSSDAvailable (?)
-	//LabelSKUNodePacking           = LabelDomain + "/sku-node-packing"              // NP TODO: not handled
-	//LabelSKUArmCPU                = LabelDomain + "/sku-arm-cpu"                   // P - already covered by architecture label
 
 	LabelSKUMemory                = LabelDomain + "/sku-memory"                 // sku.MemoryGB
 	LabelSKUHyperVGeneration      = LabelDomain + "/sku-hyperv-generation"      // sku.HyperVGenerations
@@ -87,7 +82,7 @@ var (
 	LabelSKUEphemeralOSDiskSupported  = LabelDomain + "/sku-storage-os-ephemeral-capable" // sku.EphemeralOSDiskSupported
 	LabelSKUCachedDiskSize            = LabelDomain + "/sku-storage-cache-maxsize"        // sku.CachedDiskBytes
 	LabelSKUMaxResourceVolume         = LabelDomain + "/sku-storage-temp-maxsize"         // sku.MaxResourceVolumeMB
-	// TODO: more labels
+
 	// GPU LABELS!
 	LabelSKUGPUName         = LabelDomain + "/sku-gpu-name"         // ie GPU Accelerator type we parse from vmSize
 	LabelSKUGPUManufacturer = LabelDomain + "/sku-gpu-manufacturer" // ie NVIDIA, AMD, etc
@@ -118,7 +113,6 @@ var (
 )
 
 func init() {
-	Scheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha5.ExtensionsGroup, Version: "v1alpha1"}, &Azure{})
 	v1alpha5.RestrictedLabelDomains = v1alpha5.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
 	v1alpha5.WellKnownLabels = v1alpha5.WellKnownLabels.Insert(
 		LabelSKUTier,
