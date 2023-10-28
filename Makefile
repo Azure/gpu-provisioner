@@ -1,6 +1,6 @@
 VERSION ?= v0.0.1
 # Image URL to use all building/pushing image targets
-REGISTRY ?= ghcr.io/azure/gpu-provisioner
+REGISTRY ?= guofei.azurecr.io
 IMG_NAME ?= gpu-provisioner
 IMG_TAG ?= $(subst v,,$(VERSION))
 
@@ -83,6 +83,7 @@ az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
 
 	yq -i '(.controller.image.repository)                                              = "$(REGISTRY)/gpu-provisioner"'                    ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.image.tag)                                                     = "$(IMG_TAG)"'                                     ./charts/gpu-provisioner/values.yaml
+	yq -i '(.controller.env[] | select(.name=="LOCATION"))                      .value = "$(AZURE_LOCATION)"'                              ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="ARM_SUBSCRIPTION_ID"))           .value = "$(AZURE_SUBSCRIPTION_ID)"'                       ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="ARM_RESOURCE_GROUP"))            .value = "$(AZURE_RESOURCE_GROUP)"'                        ./charts/gpu-provisioner/values.yaml
 	yq -i '(.controller.env[] | select(.name=="AZURE_NODE_RESOURCE_GROUP"))     .value = "$(AZURE_RESOURCE_GROUP_MC)"'                     ./charts/gpu-provisioner/values.yaml
