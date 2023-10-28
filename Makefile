@@ -1,6 +1,6 @@
 VERSION ?= v0.0.1
 # Image URL to use all building/pushing image targets
-REGISTRY ?= guofei.azurecr.io
+REGISTRY ?= ghcr.io/azure/gpu-provisioner
 IMG_NAME ?= gpu-provisioner
 IMG_TAG ?= $(subst v,,$(VERSION))
 
