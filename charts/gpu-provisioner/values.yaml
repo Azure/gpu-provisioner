@@ -43,7 +43,7 @@ podLabels: {}
 # -- Additional annotations for the pod.
 podAnnotations: {}
 podDisruptionBudget:
-  name: karpenter
+  name: gpu-provisioner
   maxUnavailable: 1
 # -- SecurityContext for the pod.
 podSecurityContext:
@@ -112,12 +112,16 @@ controller:
   env:
     - name: ARM_SUBSCRIPTION_ID
       value:
+    - name: LOCATION
+      value:
     - name: AZURE_CLUSTER_NAME
       value:
     - name: AZURE_NODE_RESOURCE_GROUP
       value:
     - name: ARM_RESOURCE_GROUP
       value:
+    - name: LEADER_ELECT # disable leader election for better debugging experience
+      value: "false"
   envFrom: []
   # -- Resources for the controller pod.
   resources:
@@ -153,4 +157,4 @@ settings:
   # -- Azure-specific configuration values
   azure:
     # -- Cluster name.
-    clusterName: 
+    clusterName:
