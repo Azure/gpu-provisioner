@@ -23,18 +23,11 @@ import (
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/controllers/consistency"
-	"github.com/aws/karpenter-core/pkg/controllers/counter"
-	"github.com/aws/karpenter-core/pkg/controllers/deprovisioning"
 	machinedisruption "github.com/aws/karpenter-core/pkg/controllers/machine/disruption"
 	machinegarbagecollection "github.com/aws/karpenter-core/pkg/controllers/machine/garbagecollection"
 	machinelifecycle "github.com/aws/karpenter-core/pkg/controllers/machine/lifecycle"
 	machinetermination "github.com/aws/karpenter-core/pkg/controllers/machine/termination"
-	metricspod "github.com/aws/karpenter-core/pkg/controllers/metrics/pod"
-	metricsprovisioner "github.com/aws/karpenter-core/pkg/controllers/metrics/provisioner"
-	metricsstate "github.com/aws/karpenter-core/pkg/controllers/metrics/state"
-	"github.com/aws/karpenter-core/pkg/controllers/provisioning"
 	"github.com/aws/karpenter-core/pkg/controllers/state"
-	"github.com/aws/karpenter-core/pkg/controllers/state/informer"
 	"github.com/aws/karpenter-core/pkg/controllers/termination"
 	"github.com/aws/karpenter-core/pkg/controllers/termination/terminator"
 	"github.com/aws/karpenter-core/pkg/events"
@@ -51,23 +44,23 @@ func NewControllers(
 	cloudProvider cloudprovider.CloudProvider,
 ) []controller.Controller {
 
-	provisioner := provisioning.NewProvisioner(kubeClient, kubernetesInterface.CoreV1(), recorder, cloudProvider, cluster)
+	//provisioner := provisioning.NewProvisioner(kubeClient, kubernetesInterface.CoreV1(), recorder, cloudProvider, cluster)
 	terminator := terminator.NewTerminator(clock, kubeClient, terminator.NewEvictionQueue(ctx, kubernetesInterface.CoreV1(), recorder))
 
 	return []controller.Controller{
-		provisioner,
-		metricsstate.NewController(cluster),
-		deprovisioning.NewController(clock, kubeClient, provisioner, cloudProvider, recorder, cluster),
-		provisioning.NewController(kubeClient, provisioner, recorder),
-		informer.NewDaemonSetController(kubeClient, cluster),
-		informer.NewNodeController(kubeClient, cluster),
-		informer.NewPodController(kubeClient, cluster),
-		informer.NewProvisionerController(kubeClient, cluster),
-		informer.NewMachineController(kubeClient, cluster),
+		//provisioner,
+		//metricsstate.NewController(cluster),
+		//deprovisioning.NewController(clock, kubeClient, provisioner, cloudProvider, recorder, cluster),
+		//provisioning.NewController(kubeClient, provisioner, recorder),
+		//informer.NewDaemonSetController(kubeClient, cluster),
+		//informer.NewNodeController(kubeClient, cluster),
+		//informer.NewPodController(kubeClient, cluster),
+		//informer.NewProvisionerController(kubeClient, cluster),
+		//informer.NewMachineController(kubeClient, cluster),
 		termination.NewController(kubeClient, cloudProvider, terminator, recorder),
-		metricspod.NewController(kubeClient),
-		metricsprovisioner.NewController(kubeClient),
-		counter.NewController(kubeClient, cluster),
+		//metricspod.NewController(kubeClient),
+		//metricsprovisioner.NewController(kubeClient),
+		//counter.NewController(kubeClient, cluster),
 		consistency.NewController(clock, kubeClient, recorder, cloudProvider),
 		machinelifecycle.NewController(clock, kubeClient, cloudProvider, recorder),
 		machinegarbagecollection.NewController(clock, kubeClient, cloudProvider),

@@ -41,6 +41,8 @@ import (
 	"github.com/aws/karpenter-core/pkg/scheduling"
 	podutils "github.com/aws/karpenter-core/pkg/utils/pod"
 	"github.com/aws/karpenter-core/pkg/utils/sets"
+
+	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 // Cluster maintains cluster state that is often needed but expensive to compute.
@@ -399,7 +401,7 @@ func (c *Cluster) newStateFromNode(ctx context.Context, node *v1.Node, oldNode *
 	}
 	if err := multierr.Combine(
 		c.populateStartupTaints(ctx, n),
-		c.populateInflight(ctx, n),
+		//		c.populateInflight(ctx, n),   // gpu-provisioner does not need to calculate inflight capacity
 		c.populateResourceRequests(ctx, n),
 		c.populateVolumeLimits(ctx, n),
 	); err != nil {
@@ -431,10 +433,11 @@ func (c *Cluster) populateStartupTaints(ctx context.Context, n *StateNode) error
 	if !n.Owned() {
 		return nil
 	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
+	//	}
+	provisioner := staticprovisioner.Sp
 	n.startupTaints = provisioner.Spec.StartupTaints
 	return nil
 }
@@ -443,10 +446,11 @@ func (c *Cluster) populateInflight(ctx context.Context, n *StateNode) error {
 	if !n.Owned() {
 		return nil
 	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, client.ObjectKey{Name: n.Labels()[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//		return client.IgnoreNotFound(fmt.Errorf("getting provisioner, %w", err))
+	//	}
+	provisioner := staticprovisioner.Sp
 	instanceTypes, err := c.cloudProvider.GetInstanceTypes(ctx, provisioner)
 	if err != nil {
 		return err

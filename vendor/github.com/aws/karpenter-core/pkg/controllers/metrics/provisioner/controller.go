@@ -35,6 +35,8 @@ import (
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	corecontroller "github.com/aws/karpenter-core/pkg/operator/controller"
+
+	"github.com/gpu-provisioner/pkg/staticprovisioner"
 )
 
 const (
@@ -112,10 +114,11 @@ func (c *Controller) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	c.cleanup(req.NamespacedName)
 
 	// Retrieve provisioner from reconcile request
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, req.NamespacedName, provisioner); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, req.NamespacedName, provisioner); err != nil {
+	//		return reconcile.Result{}, client.IgnoreNotFound(err)
+	//	}
+	provisioner := staticprovisioner.Sp
 
 	c.record(ctx, provisioner)
 	// periodically update our metrics per provisioner even if nothing has changed
