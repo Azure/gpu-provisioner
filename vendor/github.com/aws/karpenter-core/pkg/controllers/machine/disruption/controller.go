@@ -21,7 +21,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -39,6 +38,8 @@ import (
 	corecontroller "github.com/aws/karpenter-core/pkg/operator/controller"
 	machineutil "github.com/aws/karpenter-core/pkg/utils/machine"
 	"github.com/aws/karpenter-core/pkg/utils/result"
+
+	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 type machineReconciler interface {
@@ -80,10 +81,11 @@ func (c *Controller) Reconcile(ctx context.Context, machine *v1alpha5.Machine) (
 	if !machine.DeletionTimestamp.IsZero() {
 		return reconcile.Result{}, nil
 	}
-	provisioner := &v1alpha5.Provisioner{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: machine.Labels[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
-	}
+	//	provisioner := &v1alpha5.Provisioner{}
+	//	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: machine.Labels[v1alpha5.ProvisionerNameLabelKey]}, provisioner); err != nil {
+	//		return reconcile.Result{}, client.IgnoreNotFound(err)
+	//	}
+	provisioner := staticprovisioner.Sp
 
 	var results []reconcile.Result
 	var errs error
@@ -134,11 +136,12 @@ func (c *Controller) Builder(ctx context.Context, m manager.Manager) corecontrol
 				},
 			),
 		)).
+		WithEventFilter(machineutil.KaitoMachinePredicate).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
-		Watches(
-			&source.Kind{Type: &v1alpha5.Provisioner{}},
-			machineutil.ProvisionerEventHandler(ctx, c.kubeClient),
-		).
+		//		Watches(
+		//			&source.Kind{Type: &v1alpha5.Provisioner{}},
+		//			machineutil.ProvisionerEventHandler(ctx, c.kubeClient),
+		//		).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},
 			machineutil.NodeEventHandler(ctx, c.kubeClient),
