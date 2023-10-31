@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -28,11 +29,18 @@ import (
 	"knative.dev/pkg/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 )
+
+var KaitoMachinePredicate, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	MatchExpressions: []metav1.LabelSelectorRequirement{
+		metav1.LabelSelectorRequirement{Key: "kaito.sh/workspace", Operator: "Exists"},
+	},
+})
 
 // EventHandler is a watcher on v1alpha5.Machine that maps Machines to Nodes based on provider ids
 // and enqueues reconcile.Requests for the Nodes
@@ -183,7 +191,16 @@ func AllNodesForMachine(ctx context.Context, c client.Client, machine *v1alpha5.
 	providerID := lo.Ternary(machine.Status.ProviderID != "", machine.Status.ProviderID, machine.Annotations[v1alpha5.MachineLinkedAnnotationKey])
 	// Machines that have no resolved providerID have no nodes mapped to them
 	if providerID == "" {
-		return nil, nil
+		// check common failures caused by bad input
+		msg := machine.StatusConditions().GetCondition(v1alpha5.MachineLaunched).GetMessage()
+		if machine.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsFalse() &&
+			(msg == "all requested instance types were unavailable during launch" ||
+				strings.Contains(msg, "is not allowed in your subscription in location")) {
+			return nil, nil // Not recoverable, does not consider as an error
+
+		} else {
+			return nil, fmt.Errorf("The machine has not been associated with any node yet")
+		}
 	}
 	nodeList := v1.NodeList{}
 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": providerID}); err != nil {
