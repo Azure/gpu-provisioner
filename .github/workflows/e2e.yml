@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
-          az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}"  --role "Contributor"
+          az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}/providers/Microsoft.ContainerService/managedClusters/${{ env.CLUSTER_NAME }}"  --role "Contributor"
 
       - name: Create Azure Federated Identity
         shell: bash
