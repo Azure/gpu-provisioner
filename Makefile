@@ -73,7 +73,7 @@ az-identity-perm: ## Create identity for gpu-provisioner
 	az identity create --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP)
 	$(eval IDENTITY_PRINCIPAL_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'principalId'))
 	$(eval IDENTITY_CLIENT_ID=$(shell az identity show --name gpuIdentity --resource-group $(AZURE_RESOURCE_GROUP) --subscription $(AZURE_SUBSCRIPTION_ID) --query 'clientId'))
-	az role assignment create --assignee $(IDENTITY_PRINCIPAL_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)  --role "Contributor"
+	az role assignment create --assignee $(IDENTITY_PRINCIPAL_ID) --scope /subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(AZURE_RESOURCE_GROUP)/providers/Microsoft.ContainerService/managedClusters/$(AZURE_CLUSTER_NAME)  --role "Contributor"
 
 .PHONY: az-patch-helm
 az-patch-helm:  ## Update Azure client env vars and settings in helm values.yml
