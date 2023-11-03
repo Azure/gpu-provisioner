@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/http"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -31,8 +30,6 @@ import (
 	coreapis "github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
-	"github.com/aws/karpenter-core/pkg/scheduling"
-	"github.com/azure/gpu-provisioner/pkg/staticprovisioner"
 )
 
 func init() {
@@ -59,22 +56,11 @@ func New(instanceTypeProvider *instancetype.Provider, instanceProvider *instance
 func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (*v1alpha5.Machine, error) {
 	klog.InfoS("Create", "machine", klog.KObj(machine))
 
-	instanceTypes, err := c.resolveInstanceTypes(ctx, machine)
-	if err != nil {
-		return nil, fmt.Errorf("resolving instance types, %w", err)
-	}
-	if len(instanceTypes) == 0 {
-		return nil, fmt.Errorf("all requested instance types were unavailable during launch")
-	}
-	instance, err := c.instanceProvider.Create(ctx, machine, instanceTypes)
+	instance, err := c.instanceProvider.Create(ctx, machine)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
-	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
-		return i.Name == lo.FromPtr(instance.Type) // vm size
-	})
-
-	m := c.instanceToMachine(ctx, instance, instanceType)
+	m := c.instanceToMachine(ctx, instance)
 	m.Labels = lo.Assign(m.Labels, instance.Labels)
 	return m, nil
 }
@@ -85,16 +71,9 @@ func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
 	if err != nil {
 		return nil, err
 	}
-	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
-	if err != nil {
-		return nil, fmt.Errorf("getting instance types, %w", err)
-	}
 
 	for index := range instances {
-		instanceType, _ := lo.Find(instanceTypes, func(instanceType *cloudprovider.InstanceType) bool {
-			return instanceType.Name == *instances[index].Type // vm size
-		})
-		machines = append(machines, c.instanceToMachine(ctx, instances[index], instanceType))
+		machines = append(machines, c.instanceToMachine(ctx, instances[index]))
 	}
 	return machines, nil
 }
@@ -109,28 +88,11 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.M
 	if instance == nil {
 		return nil, fmt.Errorf("cannot find a ready instance , %w", err)
 	}
-	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
-	if err != nil {
-		return nil, fmt.Errorf("getting instance types, %w", err)
-	}
-	instanceType, _ := lo.Find(instanceTypes, func(instanceType *cloudprovider.InstanceType) bool {
-		return instanceType.Name == *instance.Type // vm size
-	})
-	return c.instanceToMachine(ctx, instance, instanceType), err
+	return c.instanceToMachine(ctx, instance), err
 }
 
 func (c *CloudProvider) LivenessProbe(req *http.Request) error {
 	return c.instanceTypeProvider.LivenessProbe(req)
-}
-
-// GetInstanceTypes returns all available InstanceTypes
-func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
-
-	instanceTypes, err := c.instanceTypeProvider.List(ctx, staticprovisioner.Sp.Spec.KubeletConfiguration)
-	if err != nil {
-		return nil, err
-	}
-	return instanceTypes, nil
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
@@ -140,42 +102,17 @@ func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) e
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {
 	klog.InfoS("IsMachineDrifted", "machine", klog.KObj(machine))
+	return false, nil
+}
 
-	imageDrifted, err := c.isImageDrifted(ctx, machine, staticprovisioner.Sp)
-	if err != nil {
-		return false, err
-	}
-	return imageDrifted, nil
+func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
+
+	instanceTypes := []*cloudprovider.InstanceType{}
+
+	return instanceTypes, nil
 }
 
 // Name returns the CloudProvider implementation name.
 func (c *CloudProvider) Name() string {
 	return "azure"
-}
-
-func (c *CloudProvider) isImageDrifted(
-	ctx context.Context, machine *v1alpha5.Machine, provisioner *v1alpha5.Provisioner) (bool, error) {
-	instanceTypes, err := c.GetInstanceTypes(ctx, provisioner)
-	if err != nil {
-		return false, fmt.Errorf("getting instanceTypes, %w", err)
-	}
-	_, found := lo.Find(instanceTypes, func(instType *cloudprovider.InstanceType) bool {
-		return instType.Name == machine.Labels[v1.LabelInstanceTypeStable]
-	})
-	if !found {
-		return false, fmt.Errorf(`finding node instance type "%s"`, machine.Labels[v1.LabelInstanceTypeStable])
-	}
-
-	return false, nil
-}
-
-func (c *CloudProvider) resolveInstanceTypes(ctx context.Context, machine *v1alpha5.Machine) ([]*cloudprovider.InstanceType, error) {
-	instanceTypes, err := c.GetInstanceTypes(ctx, staticprovisioner.Sp)
-	if err != nil {
-		return nil, fmt.Errorf("getting instance types, %w", err)
-	}
-	reqs := scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...)
-	return lo.Filter(instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool {
-		return reqs.Get(v1.LabelInstanceTypeStable).Has(i.Name) && len(i.Offerings.Requirements(reqs).Available()) > 0
-	}), nil
 }
