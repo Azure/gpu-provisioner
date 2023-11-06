@@ -17,8 +17,6 @@ package instance
 import (
 	"context"
 	"fmt"
-	"math"
-	"sort"
 	"strings"
 	"time"
 
@@ -36,12 +34,9 @@ import (
 	"knative.dev/pkg/logging"
 
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	corecloudprovider "github.com/aws/karpenter-core/pkg/cloudprovider"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 	"github.com/azure/gpu-provisioner/pkg/cache"
 	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
-
-	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	nodeutil "github.com/aws/karpenter-core/pkg/utils/node"
@@ -84,7 +79,7 @@ func NewProvider(
 
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
-func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instanceTypes []*corecloudprovider.InstanceType) (*Instance, error) {
+func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine) (*Instance, error) {
 	klog.InfoS("Instance.Create", "machine", klog.KObj(machine))
 
 	// We made a strong assumption here. The machine name should be a valid agent pool name without "-".
@@ -94,22 +89,17 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine, instan
 		return nil, fmt.Errorf("the length agentpool name should be less than 11, got %d (%s)", len(apName), apName)
 	}
 
-	if len(instanceTypes) == 0 {
-		return nil, fmt.Errorf("creating agentpool %q failed: %v", apName, "instanceTypes cannot be nil")
-	}
-
-	instanceTypes = orderInstanceTypesByPrice(instanceTypes, scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...))
-
-	index := 0
 	var ap *armcontainerservice.AgentPool
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		index++
-		return index < len(instanceTypes)
+		return false
 	}, func() error {
-		instanceType := instanceTypes[index]
-		capacityType := p.getPriorityForInstanceType(machine, instanceType)
-		vmSize := instanceType.Name
-		apObj := newAgentPoolObject(vmSize, capacityType, machine)
+		instanceTypes := scheduling.NewNodeSelectorRequirements(machine.Spec.Requirements...).Get("node.kubernetes.io/instance-type").Values()
+		if len(instanceTypes) == 0 {
+			return fmt.Errorf("machine spec has no requirement for instance type")
+		}
+
+		vmSize := instanceTypes[0]
+		apObj := newAgentPoolObject(vmSize, machine)
 
 		logging.FromContext(ctx).Debugf("creating Agent pool %s (%s)", apName, vmSize)
 		var err error
@@ -252,7 +242,7 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armconta
 	return instances, nil
 }
 
-func newAgentPoolObject(vmSize, capacityType string, machine *v1alpha5.Machine) armcontainerservice.AgentPool {
+func newAgentPoolObject(vmSize string, machine *v1alpha5.Machine) armcontainerservice.AgentPool {
 	taints := machine.Spec.Taints
 	taintsStr := []*string{}
 	for _, t := range taints {
@@ -277,54 +267,15 @@ func newAgentPoolObject(vmSize, capacityType string, machine *v1alpha5.Machine) 
 
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-			NodeLabels:       labels,
-			NodeTaints:       taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
-			Type:             to.Ptr(scaleSetsType),
-			VMSize:           to.Ptr(vmSize),
-			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
-			Count:            to.Ptr(int32(1)),
-			ScaleSetPriority: (*armcontainerservice.ScaleSetPriority)(to.Ptr(capacityType)),
-			OSDiskSizeGB:     to.Ptr(int32(storage.Value())),
+			NodeLabels:   labels,
+			NodeTaints:   taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			Type:         to.Ptr(scaleSetsType),
+			VMSize:       to.Ptr(vmSize),
+			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
+			Count:        to.Ptr(int32(1)),
+			OSDiskSizeGB: to.Ptr(int32(storage.Value())),
 		},
 	}
-}
-
-// getPriorityForInstanceType selects spot if both constraints are flexible and there is an available offering.
-// The Azure Cloud Provider defaults to Regular, so spot must be explicitly included in capacity type requirements.
-//
-// Unlike AWS getCapacityType, this picks based on a single pre-selected InstanceType, rather than all InstanceType options in nodeRequest,
-// because Azure Cloud Provider does client-side selection of particular InstanceType from options
-func (p *Provider) getPriorityForInstanceType(machine *v1alpha5.Machine, instanceType *corecloudprovider.InstanceType) string {
-	requirements := scheduling.NewNodeSelectorRequirements(machine.
-		Spec.Requirements...)
-
-	if requirements.Get(v1alpha5.LabelCapacityType).Has(v1alpha1.PrioritySpot) {
-		for _, offering := range instanceType.Offerings.Available() {
-			if requirements.Get(v1.LabelTopologyZone).Has(offering.Zone) && offering.CapacityType == v1alpha1.PrioritySpot {
-				return v1alpha1.PrioritySpot
-			}
-		}
-	}
-	return v1alpha1.PriorityRegular
-}
-
-func orderInstanceTypesByPrice(instanceTypes []*corecloudprovider.InstanceType, requirements scheduling.Requirements) []*corecloudprovider.InstanceType {
-	// Order instance types so that we get the cheapest instance types of the available offerings
-	sort.Slice(instanceTypes, func(i, j int) bool {
-		iPrice := math.MaxFloat64
-		jPrice := math.MaxFloat64
-		if len(instanceTypes[i].Offerings.Available().Requirements(requirements)) > 0 {
-			iPrice = instanceTypes[i].Offerings.Available().Requirements(requirements).Cheapest().Price
-		}
-		if len(instanceTypes[j].Offerings.Available().Requirements(requirements)) > 0 {
-			jPrice = instanceTypes[j].Offerings.Available().Requirements(requirements).Cheapest().Price
-		}
-		if iPrice == jPrice {
-			return instanceTypes[i].Name < instanceTypes[j].Name
-		}
-		return iPrice < jPrice
-	})
-	return instanceTypes
 }
 
 func (p *Provider) getNodeByName(ctx context.Context, apName string) (*v1.Node, error) {

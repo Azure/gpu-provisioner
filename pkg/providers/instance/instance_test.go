@@ -6,7 +6,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 	"github.com/azure/gpu-provisioner/pkg/tests"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
@@ -16,16 +15,14 @@ import (
 
 func TestNewAgentPoolObject(t *testing.T) {
 	testCases := []struct {
-		name         string
-		vmSize       string
-		capacityType string
-		machine      *v1alpha5.Machine
-		expected     armcontainerservice.AgentPool
+		name     string
+		vmSize   string
+		machine  *v1alpha5.Machine
+		expected armcontainerservice.AgentPool
 	}{
 		{
-			name:         "Machine with Storage requirement",
-			vmSize:       "Standard_NC6s_v3",
-			capacityType: v1alpha1.PriorityRegular,
+			name:   "Machine with Storage requirement",
+			vmSize: "Standard_NC6s_v3",
 			machine: tests.GetMachineObj(map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30, resource.DecimalSI)),
@@ -36,9 +33,8 @@ func TestNewAgentPoolObject(t *testing.T) {
 				[]*string{}, 30, "Standard_NC6s_v3"),
 		},
 		{
-			name:         "Machine with no Storage requirement",
-			vmSize:       "Standard_NC6s_v3",
-			capacityType: v1alpha1.PriorityRegular,
+			name:   "Machine with no Storage requirement",
+			vmSize: "Standard_NC6s_v3",
 			machine: tests.GetMachineObj(map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
 				Requests: v1.ResourceList{},
 			}),
@@ -50,7 +46,7 @@ func TestNewAgentPoolObject(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := newAgentPoolObject(tc.vmSize, tc.capacityType, tc.machine)
+			result := newAgentPoolObject(tc.vmSize, tc.machine)
 			assert.Equal(t, tc.expected.Properties.Type, result.Properties.Type)
 			assert.Equal(t, tc.expected.Properties.OSDiskSizeGB, result.Properties.OSDiskSizeGB)
 		})
