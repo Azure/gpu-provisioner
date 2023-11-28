@@ -22,6 +22,7 @@ jobs:
     env:
       E2E_IMG_TAG: "e2e-gpu"
     runs-on: ubuntu-latest
+    environment: e2e-test
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4
