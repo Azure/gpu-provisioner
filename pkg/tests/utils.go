@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
@@ -38,4 +39,46 @@ func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armc
 			OSDiskSizeGB:     to.Ptr(storage),
 		},
 	}
+}
+
+func GetAgentPoolObjWithName(apName string, apId string, vmSize string) armcontainerservice.AgentPool {
+	return armcontainerservice.AgentPool{
+		Name: &apName,
+		ID:   &apId,
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			VMSize: &vmSize,
+			NodeLabels: map[string]*string{
+				"test": to.Ptr("test"),
+			},
+		},
+	}
+}
+func GetNodeList(nodes []v1.Node) *v1.NodeList {
+	return &v1.NodeList{
+		Items: nodes,
+	}
+}
+
+var (
+	ReadyNode = v1.Node{
+		ObjectMeta: v12.ObjectMeta{
+			Name: "aks-agentpool0-20562481-vmss_0",
+			Labels: map[string]string{
+				"agentpool":                      "agentpool0",
+				"kubernetes.azure.com/agentpool": "agentpool0",
+			},
+		},
+		Status: v1.NodeStatus{
+			Conditions: []v1.NodeCondition{
+				{
+					Type:   v1.NodeReady,
+					Status: v1.ConditionTrue,
+				},
+			},
+		},
+	}
+)
+
+func NotFoundAzError() *azcore.ResponseError {
+	return &azcore.ResponseError{ErrorCode: "NotFound"}
 }
