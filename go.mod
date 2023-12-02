@@ -23,6 +23,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.38.1
 	github.com/stretchr/testify v1.8.4
+	go.uber.org/mock v0.3.0
 	go.uber.org/multierr v1.11.0
 	k8s.io/api v0.25.4
 	k8s.io/apimachinery v0.25.4
