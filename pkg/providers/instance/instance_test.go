@@ -1,16 +1,22 @@
 package instance
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
+	"github.com/azure/gpu-provisioner/pkg/fake"
 	"github.com/azure/gpu-provisioner/pkg/tests"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestNewAgentPoolObject(t *testing.T) {
@@ -51,4 +57,167 @@ func TestNewAgentPoolObject(t *testing.T) {
 			assert.Equal(t, tc.expected.Properties.OSDiskSizeGB, result.Properties.OSDiskSizeGB)
 		})
 	}
+}
+
+func TestGet(t *testing.T) {
+	testCases := []struct {
+		name              string
+		id                string
+		mockAgentPool     armcontainerservice.AgentPool
+		mockAgentPoolResp func(ap armcontainerservice.AgentPool) armcontainerservice.AgentPoolsClientGetResponse
+		callK8sMocks      func(c *fake.MockClient)
+		expectedError     error
+	}{
+		{
+			name:          "Successfully Get instance from agent pool",
+			id:            "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
+			mockAgentPoolResp: func(ap armcontainerservice.AgentPool) armcontainerservice.AgentPoolsClientGetResponse {
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}
+			},
+			callK8sMocks: func(c *fake.MockClient) {
+				nodeList := tests.GetNodeList([]v1.Node{tests.ReadyNode})
+				relevantMap := c.CreateMapWithType(nodeList)
+				//insert node objects into the map
+				for _, obj := range nodeList.Items {
+					n := obj
+					objKey := client.ObjectKeyFromObject(&n)
+
+					relevantMap[objKey] = &n
+				}
+
+				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(nil)
+			},
+		},
+		{
+			name: "Fail to get instance because agentPool.Get returns a failure",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(ap armcontainerservice.AgentPool) armcontainerservice.AgentPoolsClientGetResponse {
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}
+			},
+			expectedError: errors.New("Failed to get agent pool"),
+		},
+		{
+			name:          "Fail to get instance because agent pool ID cannot be parsed properly",
+			id:            "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/virtualMachines/0",
+			expectedError: errors.New("getting agentpool name, id does not match the regxp for ParseAgentPoolNameFromID"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+			if tc.mockAgentPoolResp != nil {
+				agentPoolMocks.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any()).Return(tc.mockAgentPoolResp(tc.mockAgentPool), tc.expectedError)
+			}
+
+			mockK8sClient := fake.NewClient()
+			if tc.callK8sMocks != nil {
+				tc.callK8sMocks(mockK8sClient)
+			}
+
+			p := createTestProvider(agentPoolMocks, mockK8sClient)
+
+			instance, err := p.Get(context.Background(), tc.id)
+
+			if tc.expectedError == nil {
+				assert.NoError(t, err, "Not expected to return error")
+				assert.NotNil(t, instance, "Response instance should not be nil")
+				assert.Equal(t, tc.mockAgentPool.Name, instance.Name, "Instance name should be same as the agent pool")
+				assert.Equal(t, tc.mockAgentPool.Properties.VMSize, instance.Type, "Instance type should be same as agent pool's vm size")
+			} else {
+				assert.Contains(t, err.Error(), tc.expectedError.Error())
+			}
+		})
+	}
+}
+
+func TestFromAgentPoolToInstance(t *testing.T) {
+	testCases := []struct {
+		name          string
+		callK8sMocks  func(c *fake.MockClient)
+		mockAgentPool armcontainerservice.AgentPool
+		isInstanceNil bool
+		expectedError error
+	}{
+		{
+			name:          "Successfully Get instance from agent pool",
+			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
+			callK8sMocks: func(c *fake.MockClient) {
+				nodeList := tests.GetNodeList([]v1.Node{tests.ReadyNode})
+				relevantMap := c.CreateMapWithType(nodeList)
+				//insert node objects into the map
+				for _, obj := range nodeList.Items {
+					n := obj
+					objKey := client.ObjectKeyFromObject(&n)
+
+					relevantMap[objKey] = &n
+				}
+
+				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(nil)
+			},
+		},
+		{
+			name:          "Fail to get instance from agent pool because node is nil",
+			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
+			callK8sMocks: func(c *fake.MockClient) {
+
+				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(nil)
+			},
+			isInstanceNil: true,
+		},
+		{
+			name:          "Fail to get instance from agent pool due to error in retrieving node list",
+			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
+			callK8sMocks: func(c *fake.MockClient) {
+				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(errors.New("Fail to get node list"))
+			},
+			expectedError: errors.New("Fail to get node list"),
+		},
+		{
+			name:          "Fail to get instance from agent pool due to malformed id",
+			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
+			expectedError: errors.New("id does not match the regxp for ParseSubIDFromID"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+
+			mockK8sClient := fake.NewClient()
+			if tc.callK8sMocks != nil {
+				tc.callK8sMocks(mockK8sClient)
+			}
+
+			p := createTestProvider(agentPoolMocks, mockK8sClient)
+
+			instance, err := p.fromAgentPoolToInstance(context.Background(), &tc.mockAgentPool)
+
+			if tc.expectedError == nil {
+				assert.NoError(t, err, "Not expected to return error")
+				if !tc.isInstanceNil {
+					assert.NotNil(t, instance, "Response instance should not be nil")
+					assert.Equal(t, tc.mockAgentPool.Name, instance.Name, "Instance name should be same as the agent pool")
+					assert.Equal(t, tc.mockAgentPool.Properties.VMSize, instance.Type, "Instance type should be same as agent pool's vm size")
+				} else {
+					assert.Nil(t, instance, "Response instance should be nil")
+				}
+			} else {
+				assert.Contains(t, err.Error(), tc.expectedError.Error())
+			}
+
+		})
+	}
+}
+
+func createTestProvider(agentPoolsAPIMocks *fake.MockAgentPoolsAPI, mockK8sClient *fake.MockClient) *Provider {
+	mockAzClient := NewAZClientFromAPI(agentPoolsAPIMocks, nil)
+	return NewProvider(mockAzClient, mockK8sClient, nil, nil, "testRG", "nodeRG", "testCluster")
 }
