@@ -227,7 +227,7 @@ func TestDelete(t *testing.T) {
 		expectedError     error
 	}{
 		{
-			name: "Sucessfully delete instance",
+			name: "Successfully delete instance",
 			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
@@ -285,7 +285,7 @@ func TestDelete(t *testing.T) {
 			expectedError: errors.New("Failed to fetch latest status of operation"),
 		},
 		{
-			name: "Sucessfully delete instance because agentPool.Delete returns a NotFound error",
+			name: "Successfully delete instance because agentPool.Delete returns a NotFound error",
 			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				return nil, tests.NotFoundAzError()
