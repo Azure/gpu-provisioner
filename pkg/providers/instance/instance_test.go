@@ -220,6 +220,120 @@ func TestFromAgentPoolToInstance(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	testCases := []struct {
+		name              string
+		id                string
+		mockAgentPoolResp func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error)
+		expectedError     error
+	}{
+		{
+			name: "Successfully delete instance",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
+				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
+				resp := http.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: http.NoBody}
+
+				mockHandler.EXPECT().Done().Return(true).Times(3)
+				mockHandler.EXPECT().Result(gomock.Any(), gomock.Any()).Return(nil)
+
+				pollingOptions := &runtime.NewPollerOptions[armcontainerservice.AgentPoolsClientDeleteResponse]{
+					Handler:  mockHandler,
+					Response: &delResp,
+				}
+
+				p, err := runtime.NewPoller(&resp, runtime.NewPipeline("", "", runtime.PipelineOptions{}, nil), pollingOptions)
+				return p, err
+			},
+		},
+		{
+			name: "Successfully deletes instance because poller returns a 404 not found error",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
+				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
+				resp := http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody}
+
+				mockHandler.EXPECT().Done().Return(false)
+				mockHandler.EXPECT().Poll(gomock.Any()).Return(&resp, tests.NotFoundAzError())
+
+				pollingOptions := &runtime.NewPollerOptions[armcontainerservice.AgentPoolsClientDeleteResponse]{
+					Handler:  mockHandler,
+					Response: &delResp,
+				}
+
+				p, err := runtime.NewPoller(&resp, runtime.NewPipeline("", "", runtime.PipelineOptions{}, nil), pollingOptions)
+				return p, err
+			},
+		},
+		{
+			name: "Fail to delete instance because poller returns error",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
+				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
+				resp := http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody}
+
+				mockHandler.EXPECT().Done().Return(false)
+				mockHandler.EXPECT().Poll(gomock.Any()).Return(&resp, errors.New("Failed to fetch latest status of operation"))
+
+				pollingOptions := &runtime.NewPollerOptions[armcontainerservice.AgentPoolsClientDeleteResponse]{
+					Handler:  mockHandler,
+					Response: &delResp,
+				}
+
+				p, err := runtime.NewPoller(&resp, runtime.NewPipeline("", "", runtime.PipelineOptions{}, nil), pollingOptions)
+				return p, err
+			},
+			expectedError: errors.New("Failed to fetch latest status of operation"),
+		},
+		{
+			name: "Successfully delete instance because agentPool.Delete returns a NotFound error",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
+				return nil, tests.NotFoundAzError()
+			},
+		},
+		{
+			name: "Fail to delete instance because agentPool.Delete returns a failure",
+			id:   "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
+				return nil, errors.New("Failed to delete agent pool")
+			},
+			expectedError: errors.New("Failed to delete agent pool"),
+		},
+		{
+			name:          "Fail to delete instance because agent pool ID cannot be parsed properly",
+			id:            "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/virtualMachines/0",
+			expectedError: errors.New("getting agentpool name, id does not match the regxp for ParseAgentPoolNameFromID"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+			if tc.mockAgentPoolResp != nil {
+				mockHandler := fake.NewMockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse](mockCtrl)
+
+				p, err := tc.mockAgentPoolResp(mockHandler)
+				agentPoolMocks.EXPECT().BeginDelete(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any()).Return(p, err)
+			}
+
+			mockK8sClient := fake.NewClient()
+			p := createTestProvider(agentPoolMocks, mockK8sClient)
+
+			err := p.Delete(context.Background(), tc.id)
+
+			if tc.expectedError == nil {
+				assert.NoError(t, err, "Not expected to return error")
+			} else {
+				assert.Contains(t, err.Error(), tc.expectedError.Error())
+			}
+		})
+	}
+}
+
 func TestCreateSuccess(t *testing.T) {
 	testCases := []struct {
 		name              string
