@@ -18,7 +18,6 @@ import (
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,11 +31,11 @@ func TestNewAgentPoolObject(t *testing.T) {
 		{
 			name:   "Machine with Storage requirement",
 			vmSize: "Standard_NC6s_v3",
-			machine: tests.GetMachineObj(map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
+			machine: tests.GetMachineObj("machine-test", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30, resource.DecimalSI)),
 				},
-			}),
+			}, []v1.NodeSelectorRequirement{}),
 			expected: tests.GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
 				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
 				[]*string{}, 30, "Standard_NC6s_v3"),
@@ -44,9 +43,9 @@ func TestNewAgentPoolObject(t *testing.T) {
 		{
 			name:   "Machine with no Storage requirement",
 			vmSize: "Standard_NC6s_v3",
-			machine: tests.GetMachineObj(map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
+			machine: tests.GetMachineObj("machine-test", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{
 				Requests: v1.ResourceList{},
-			}),
+			}, []v1.NodeSelectorRequirement{}),
 			expected: tests.GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
 				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
 				[]*string{}, 0, "Standard_NC6s_v3"),
@@ -338,27 +337,20 @@ func TestCreateSuccess(t *testing.T) {
 	testCases := []struct {
 		name              string
 		machine           *v1alpha5.Machine
-		mockAgentPoolResp func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error)
+		mockAgentPoolResp func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error)
 		callK8sMocks      func(c *fake.MockClient)
 	}{
 		{
 			name: "Successfully create instance",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_NC6s_v3"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+				ap := tests.GetAgentPoolObjWithName(machine.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", machine.Spec.Requirements[0].Values[0])
 
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: ap,
@@ -392,22 +384,15 @@ func TestCreateSuccess(t *testing.T) {
 		},
 		{
 			name: "Successfully create instance after waiting for node to be ready",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_NC6s_v3"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+				ap := tests.GetAgentPoolObjWithName(machine.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", machine.Spec.Requirements[0].Values[0])
 
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: ap,
@@ -452,8 +437,8 @@ func TestCreateSuccess(t *testing.T) {
 			if tc.mockAgentPoolResp != nil {
 				mockHandler := fake.NewMockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse](mockCtrl)
 
-				p, err := tc.mockAgentPoolResp(mockHandler)
-				agentPoolMocks.EXPECT().BeginCreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any(), gomock.Any()).Return(p, err)
+				p, err := tc.mockAgentPoolResp(tc.machine, mockHandler)
+				agentPoolMocks.EXPECT().BeginCreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), tc.machine.Name, gomock.Any(), gomock.Any()).Return(p, err)
 			}
 
 			mockK8sClient := fake.NewClient()
@@ -468,6 +453,7 @@ func TestCreateSuccess(t *testing.T) {
 			assert.NoError(t, err, "Not expected to return error")
 			assert.NotNil(t, instance, "Response instance should not be nil")
 			assert.Equal(t, &tc.machine.Name, instance.Name, "Instance name should be same as machine name")
+			assert.Equal(t, &tc.machine.Spec.Requirements[0].Values[0], instance.Type, "Instance type should be same as machine's instance type")
 		})
 	}
 }
@@ -476,28 +462,21 @@ func TestCreateFailure(t *testing.T) {
 	testCases := []struct {
 		name              string
 		machine           *v1alpha5.Machine
-		mockAgentPoolResp func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error)
+		mockAgentPoolResp func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error)
 		callK8sMocks      func(c *fake.MockClient)
 		expectedError     error
 	}{
 		{
 			name: "Fail to create instance because node is not found and returns error on retry",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_NC6s_v3"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+				ap := tests.GetAgentPoolObjWithName(machine.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", machine.Spec.Requirements[0].Values[0])
 
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: ap,
@@ -524,22 +503,15 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to create instance because node object is not found",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_NC6s_v3"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+				ap := tests.GetAgentPoolObjWithName(machine.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", machine.Spec.Requirements[0].Values[0])
 
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: ap,
@@ -564,21 +536,14 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to delete instance because poller returns error",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_NC6s_v3"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: armcontainerservice.AgentPool{},
 				}
@@ -599,41 +564,27 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to create instance because agentPool.CreateOrUpdate returns a failure",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
+			machine: tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_D4s_v4"},
 				},
-				Spec: v1alpha5.MachineSpec{
-					Requirements: []v1.NodeSelectorRequirement{
-						{
-							Key:      "node.kubernetes.io/instance-type",
-							Operator: "In",
-							Values:   []string{"Standard_D4s_v4"},
-						},
-					},
-				}},
-			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
+			}),
+			mockAgentPoolResp: func(machine *v1alpha5.Machine, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				return nil, errors.New("Failed to create agent pool")
 			},
 			expectedError: errors.New("Failed to create agent pool"),
 		},
 		{
-			name: "Fail to create instance because machine spec does not have requirement for instance type",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "agentpool0",
-					Namespace: "machine-ns",
-				}},
+			name:          "Fail to create instance because machine spec does not have requirement for instance type",
+			machine:       tests.GetMachineObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{}),
 			expectedError: errors.New("machine spec has no requirement for instance type"),
 		},
 		{
-			name: "Fail to create instance because of invalid machine name",
-			machine: &v1alpha5.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-machine-name",
-					Namespace: "machine-ns",
-				}},
+			name:    "Fail to create instance because of invalid machine name",
+			machine: tests.GetMachineObj("invalid-machine-name", map[string]string{"test": "test"}, []v1.Taint{}, v1alpha5.ResourceRequirements{}, []v1.NodeSelectorRequirement{}),
+
 			expectedError: errors.New("the length agentpool name should be less than 11"),
 		},
 	}
@@ -647,8 +598,8 @@ func TestCreateFailure(t *testing.T) {
 			if tc.mockAgentPoolResp != nil {
 				mockHandler := fake.NewMockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse](mockCtrl)
 
-				p, err := tc.mockAgentPoolResp(mockHandler)
-				agentPoolMocks.EXPECT().BeginCreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any(), gomock.Any()).Return(p, err)
+				p, err := tc.mockAgentPoolResp(tc.machine, mockHandler)
+				agentPoolMocks.EXPECT().BeginCreateOrUpdate(gomock.Any(), gomock.Any(), gomock.Any(), tc.machine.Name, gomock.Any(), gomock.Any()).Return(p, err)
 			}
 
 			mockK8sClient := fake.NewClient()
@@ -660,13 +611,8 @@ func TestCreateFailure(t *testing.T) {
 
 			instance, err := p.Create(context.Background(), tc.machine)
 
-			if tc.expectedError == nil {
-				assert.NoError(t, err, "Not expected to return error")
-				assert.NotNil(t, instance, "Response instance should not be nil")
-				assert.Equal(t, &tc.machine.Name, instance.Name, "Instance name should be same as machine name")
-			} else {
-				assert.Contains(t, err.Error(), tc.expectedError.Error())
-			}
+			assert.Contains(t, err.Error(), tc.expectedError.Error())
+			assert.Nil(t, instance, "Response instance should be nil")
 		})
 	}
 }
