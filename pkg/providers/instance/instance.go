@@ -199,9 +199,7 @@ func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontai
 	if err != nil {
 		return nil, err
 	}
-	if subID == nil {
-		return nil, fmt.Errorf("subscription ID cannot be nil, agentpool: %s", lo.FromPtr(apObj.Name))
-	}
+
 	node, err := p.getNodeByName(ctx, lo.FromPtr(apObj.Name))
 	if err != nil {
 		return nil, err

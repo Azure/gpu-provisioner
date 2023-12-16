@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -345,7 +346,7 @@ func TestList(t *testing.T) {
 			name: "Successfully list instances",
 			mockAgentPoolList: func() []*armcontainerservice.AgentPool {
 				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
-				ap1 := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap1 := tests.GetAgentPoolObjWithName("agentpool1", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
 
 				return []*armcontainerservice.AgentPool{
 					&ap, &ap1,
@@ -394,7 +395,7 @@ func TestList(t *testing.T) {
 					},
 				})
 			},
-			expectedError: errors.New("Failed to fetch page"),
+			expectedError: errors.New("agentPool.NewListPager failed: Failed to fetch page"),
 		},
 	}
 
@@ -428,7 +429,7 @@ func TestList(t *testing.T) {
 					assert.Equal(t, tc.mockAgentPoolList()[i].Properties.VMSize, instanceList[i].Type, "Instance type should be same as agent pool's vm size")
 				}
 			} else {
-				assert.Contains(t, err.Error(), tc.expectedError.Error())
+				assert.EqualError(t, err, tc.expectedError.Error())
 			}
 		})
 	}
@@ -437,26 +438,32 @@ func TestList(t *testing.T) {
 func TestFromAPListToInstanceFailure(t *testing.T) {
 	testCases := []struct {
 		name              string
-		mockAgentPoolList func() []*armcontainerservice.AgentPool
-		expectedError     error
+		id                string
+		mockAgentPoolList func(id string) []*armcontainerservice.AgentPool
+		expectedError     func(err string) error
 	}{
 		{
 			name: "Fail to get instance from agent pool list because no agentpools are found",
-			mockAgentPoolList: func() []*armcontainerservice.AgentPool {
+			mockAgentPoolList: func(id string) []*armcontainerservice.AgentPool {
 				return []*armcontainerservice.AgentPool{}
 			},
-			expectedError: errors.New("no agentpools found"),
+			expectedError: func(err string) error {
+				return errors.New("no agentpools found")
+			},
 		},
 		{
-			name: "Fail to get instance from agent pool list because ",
-			mockAgentPoolList: func() []*armcontainerservice.AgentPool {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+			name: "Fail to get instance from agent pool list because agentpool subId can't be parsed",
+			id:   "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss",
+			mockAgentPoolList: func(id string) []*armcontainerservice.AgentPool {
+				ap := tests.GetAgentPoolObjWithName("agentpool0", id, "Standard_NC6s_v3")
 
 				return []*armcontainerservice.AgentPool{
 					&ap,
 				}
 			},
-			expectedError: errors.New("id does not match the regxp for ParseSubIDFromID"),
+			expectedError: func(err string) error {
+				return fmt.Errorf("id does not match the regxp for ParseSubIDFromID %s", err)
+			},
 		},
 	}
 
@@ -470,9 +477,9 @@ func TestFromAPListToInstanceFailure(t *testing.T) {
 
 			p := createTestProvider(agentPoolMocks, mockK8sClient)
 
-			instanceList, err := p.fromAPListToInstances(context.Background(), tc.mockAgentPoolList())
+			instanceList, err := p.fromAPListToInstances(context.Background(), tc.mockAgentPoolList(tc.id))
 
-			assert.Contains(t, err.Error(), tc.expectedError.Error())
+			assert.EqualError(t, err, tc.expectedError(tc.id).Error())
 			assert.Nil(t, instanceList, "Response instance list should be nil")
 		})
 	}
