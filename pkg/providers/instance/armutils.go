@@ -16,7 +16,6 @@ package instance
 
 import (
 	"context"
-	"log"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
@@ -72,7 +71,6 @@ func listAgentPools(ctx context.Context, client AgentPoolsAPI, rg, clusterName s
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			log.Fatalf("failed to advance page: %v", err)
 			return nil, err
 		}
 		apList = append(apList, page.Value...)
