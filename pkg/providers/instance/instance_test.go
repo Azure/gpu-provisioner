@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -329,6 +330,157 @@ func TestDelete(t *testing.T) {
 			} else {
 				assert.Contains(t, err.Error(), tc.expectedError.Error())
 			}
+		})
+	}
+}
+
+func TestList(t *testing.T) {
+	testCases := []struct {
+		name              string
+		mockAgentPoolList func() []*armcontainerservice.AgentPool
+		mockAgentPoolResp func(apList []*armcontainerservice.AgentPool) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse]
+		callK8sMocks      func(c *fake.MockClient)
+		expectedError     error
+	}{
+		{
+			name: "Successfully list instances",
+			mockAgentPoolList: func() []*armcontainerservice.AgentPool {
+				ap := tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap1 := tests.GetAgentPoolObjWithName("agentpool1", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+
+				return []*armcontainerservice.AgentPool{
+					&ap, &ap1,
+				}
+			},
+			mockAgentPoolResp: func(apList []*armcontainerservice.AgentPool) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse] {
+				return runtime.NewPager(runtime.PagingHandler[armcontainerservice.AgentPoolsClientListResponse]{
+					More: func(page armcontainerservice.AgentPoolsClientListResponse) bool {
+						return false
+					},
+					Fetcher: func(ctx context.Context, page *armcontainerservice.AgentPoolsClientListResponse) (armcontainerservice.AgentPoolsClientListResponse, error) {
+						return armcontainerservice.AgentPoolsClientListResponse{
+							AgentPoolListResult: armcontainerservice.AgentPoolListResult{
+								Value: apList,
+							},
+						}, nil
+					},
+				})
+			},
+			callK8sMocks: func(c *fake.MockClient) {
+				nodeList := tests.GetNodeList([]v1.Node{tests.ReadyNode})
+				relevantMap := c.CreateMapWithType(nodeList)
+				//insert node objects into the map
+				for _, obj := range nodeList.Items {
+					n := obj
+					objKey := client.ObjectKeyFromObject(&n)
+
+					relevantMap[objKey] = &n
+				}
+
+				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(nil)
+			},
+		},
+		{
+			name: "Fail to list instances because pager fails to fetch page",
+			mockAgentPoolList: func() []*armcontainerservice.AgentPool {
+				return []*armcontainerservice.AgentPool{}
+			},
+			mockAgentPoolResp: func(apList []*armcontainerservice.AgentPool) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse] {
+				return runtime.NewPager(runtime.PagingHandler[armcontainerservice.AgentPoolsClientListResponse]{
+					More: func(page armcontainerservice.AgentPoolsClientListResponse) bool {
+						return false
+					},
+					Fetcher: func(ctx context.Context, page *armcontainerservice.AgentPoolsClientListResponse) (armcontainerservice.AgentPoolsClientListResponse, error) {
+						return armcontainerservice.AgentPoolsClientListResponse{}, errors.New("Failed to fetch page")
+					},
+				})
+			},
+			expectedError: errors.New("agentPool.NewListPager failed: Failed to fetch page"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+			if tc.mockAgentPoolResp != nil {
+				pager := tc.mockAgentPoolResp(tc.mockAgentPoolList())
+				agentPoolMocks.EXPECT().NewListPager(gomock.Any(), gomock.Any(), gomock.Any()).Return(pager)
+			}
+
+			mockK8sClient := fake.NewClient()
+			if tc.callK8sMocks != nil {
+				tc.callK8sMocks(mockK8sClient)
+			}
+
+			p := createTestProvider(agentPoolMocks, mockK8sClient)
+
+			instanceList, err := p.List(context.Background())
+
+			if tc.expectedError == nil {
+				assert.NoError(t, err, "Not expected to return error")
+				assert.NotNil(t, instanceList, "Response instance list should not be nil")
+				assert.Equal(t, len(tc.mockAgentPoolList()), len(instanceList), "Number of Instances should be same as number of agent pools")
+
+				for i := range tc.mockAgentPoolList() {
+					assert.Equal(t, tc.mockAgentPoolList()[i].Name, instanceList[i].Name, "Instance name should be same as agent pool")
+					assert.Equal(t, tc.mockAgentPoolList()[i].Properties.VMSize, instanceList[i].Type, "Instance type should be same as agent pool's vm size")
+				}
+			} else {
+				assert.EqualError(t, err, tc.expectedError.Error())
+			}
+		})
+	}
+}
+
+func TestFromAPListToInstanceFailure(t *testing.T) {
+	testCases := []struct {
+		name              string
+		id                string
+		mockAgentPoolList func(id string) []*armcontainerservice.AgentPool
+		expectedError     func(err string) error
+	}{
+		{
+			name: "Fail to get instance from agent pool list because no agentpools are found",
+			mockAgentPoolList: func(id string) []*armcontainerservice.AgentPool {
+				return []*armcontainerservice.AgentPool{}
+			},
+			expectedError: func(err string) error {
+				return errors.New("no agentpools found")
+			},
+		},
+		{
+			name: "Fail to get instance from agent pool list because agentpool subId can't be parsed",
+			id:   "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss",
+			mockAgentPoolList: func(id string) []*armcontainerservice.AgentPool {
+				ap := tests.GetAgentPoolObjWithName("agentpool0", id, "Standard_NC6s_v3")
+
+				return []*armcontainerservice.AgentPool{
+					&ap,
+				}
+			},
+			expectedError: func(err string) error {
+				return fmt.Errorf("id does not match the regxp for ParseSubIDFromID %s", err)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+			mockK8sClient := fake.NewClient()
+
+			p := createTestProvider(agentPoolMocks, mockK8sClient)
+
+			instanceList, err := p.fromAPListToInstances(context.Background(), tc.mockAgentPoolList(tc.id))
+
+			assert.EqualError(t, err, tc.expectedError(tc.id).Error())
+			assert.Nil(t, instanceList, "Response instance list should be nil")
 		})
 	}
 }
