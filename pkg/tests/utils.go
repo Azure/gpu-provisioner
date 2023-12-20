@@ -9,16 +9,16 @@ import (
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func GetMachineObj(labels map[string]string, taints []v1.Taint, resource v1alpha5.ResourceRequirements) *v1alpha5.Machine {
+func GetMachineObj(name string, labels map[string]string, taints []v1.Taint, resource v1alpha5.ResourceRequirements, req []v1.NodeSelectorRequirement) *v1alpha5.Machine {
 	return &v1alpha5.Machine{
 		ObjectMeta: v12.ObjectMeta{
-			Name:      "machine-test",
+			Name:      name,
 			Namespace: "machine-ns",
 			Labels:    labels,
 		},
 		Spec: v1alpha5.MachineSpec{
 			Resources:          resource,
-			Requirements:       []v1.NodeSelectorRequirement{},
+			Requirements:       req,
 			MachineTemplateRef: &v1alpha5.MachineTemplateRef{},
 			Taints:             taints,
 		},
