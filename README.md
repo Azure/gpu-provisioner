@@ -1,24 +1,11 @@
 # Azure GPU VM Provisioner
-This is a fork of the `Karpenter` machine controller. It leverage the `machine` CRD introduced by `Karpenter` to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
+[![Go Report Card](https://goreportcard.com/badge/github.com/Azure/gpu-provisioner)](https://goreportcard.com/report/github.com/Azure/gpu-provisioner)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/Azure/gpu-provisioner)
+[![codecov](https://codecov.io/gh/Azure/gpu-provisioner/graph/badge.svg?token=XAQLLPB2AR)](https://codecov.io/gh/Azure/gpu-provisioner)
+
+GPU-Provisioner is an Azure Karpenter implementation for `Karpenter` machine API. It leverage the `machine` CRD introduced by `Karpenter` to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
 It implements the cloud provider interfaces to realize the following abstraction:
 `machine` -> `AKS agent pool` (with vmss and a hard limit of VM count to 1)
-
-## How to clone
-After cloning the repo from `https://github.com/Azure/karpenter`,
-### Rename the module
-```
-for each in $(find pkg/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-provisioner/g" -i $each;done;
-for each in $(find cmd/ -type f -follow -print); do sed "s/github.com\/Azure\/karpenter/github.com\/gpu-provisioner/g" -i $each;done;
-```
-### Edit the `go.mod`
-Remove `github.com/Azure/karpenter` and change the module name to `github.com/azure/gpu-provisioner`.
-
-### Vendor all modules
-Change vendor code to disable controllers from the karpenter-core package.
-
-## How to build
-
-For now, all required steps are mentioned in `Makefile-az.mk`.
 
 ```
 VERSION=v0.1.0 make docker-build
@@ -36,3 +23,38 @@ After deploying the controller successfully, one can apply the yaml in `/example
 ## Important note
 - The gpu-provisioner assumes the Machine CR name is **equal** to the agent pool name. Hence, **the machine CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.
 - The machine CR needs to have a label with key `kaito.sh/workspace`.
+
+## Contributing
+
+[Read more](CONTRIBUTING.md)
+<!-- markdown-link-check-disable -->
+This project welcomes contributions and suggestions.  Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit <https://cla.opensource.microsoft.com>.
+
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+## Trademarks
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.
+
+## License
+
+See [LICENSE](LICENSE).
+
+## Code of Conduct
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+<!-- markdown-link-check-enable -->
+## Contact
+
+"Kaito devs" <kaito@microsoft.com>
