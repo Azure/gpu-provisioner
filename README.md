@@ -24,6 +24,17 @@ After deploying the controller successfully, one can apply the yaml in `/example
 - The gpu-provisioner assumes the Machine CR name is **equal** to the agent pool name. Hence, **the machine CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.
 - The machine CR needs to have a label with key `kaito.sh/workspace`.
 
+---
+
+### Source Attribution
+
+Notice: Files in this source code originated from a fork of https://github.com/aws/karpenter
+which is under an Apache 2.0 license. Those files have been modified to reflect environmental requirements in AKS and Azure.
+
+Many thanks to @ellistarn, @jonathan-innis, @tzneal, @bwagner5, @njtran, and many other developers active in the Karpenter community for laying the foundations of a Karpenter provider ecosystem!
+
+Many thanks to @Bryce-Soghigian, @rakechill, @charliedmcb, @jackfrancis, @comtalyst, @aagusuab, @matthchr, @gandhipr, @dtzar for contributing to AKS Karpenter Provider!
+
 ## Contributing
 
 [Read more](CONTRIBUTING.md)
