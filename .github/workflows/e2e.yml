@@ -5,15 +5,16 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  workflow_dispatch: {}
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  repository_dispatch:
+    types: [ release-tag ]
+    branches: [ release-** ]
 
 env:
   GO_VERSION: "1.20"
-  E2E_IMG_TAG: "e2e-gpu"
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -28,15 +29,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION  }}
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
-
       - name: Shorten SHA
+        if: ${{ !github.event.client_payload.isRelease }}
         id: vars
-        run: echo "::set-output name=pr_sha_short::$(git rev-parse --short ${{ github.event.pull_request.head.sha }} )"
+        run: echo "pr_sha_short=$(git rev-parse --short ${{ github.event.pull_request.head.sha }})" >> $GITHUB_OUTPUT
 
       - name: Set e2e Resource and Cluster Name
         run: |
@@ -48,6 +44,28 @@ jobs:
 
           echo "VERSION=${rand}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
+          echo "REGISTRY=kaito${rand}.azurecr.io" >> $GITHUB_ENV
+
+      - name: Set Registry
+        if: ${{ github.event.client_payload.isRelease }}
+        run: |
+          echo "REGISTRY=${{ github.event.client_payload.registry }}" >> $GITHUB_ENV
+          echo "VERSION=$(echo ${{ github.event.client_payload.tag }} | tr -d v)" >> $GITHUB_ENV
+
+      - name: Checkout
+        if: ${{ !github.event.client_payload.isRelease }}
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: ${{ github.event.client_payload.isRelease }}
+        with:
+          fetch-depth: 0
+          submodules: true
+          ref: ${{ env.REPO_TAG }}
 
       - uses: azure/login@v1.6.1
         with:
@@ -76,6 +94,7 @@ jobs:
             az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
 
       - name: Build gpu-provisioner image
+        if: ${{ !github.event.client_payload.isRelease }}
         shell: bash
         run: |
           make docker-build
