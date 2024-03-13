@@ -122,6 +122,8 @@ controller:
       value:
     - name: LEADER_ELECT # disable leader election for better debugging experience
       value: "false"
+    - name: E2E_TEST_MODE
+      value: "false"
   envFrom: []
   # -- Resources for the controller pod.
   resources:
