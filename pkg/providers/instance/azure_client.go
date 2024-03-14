@@ -17,8 +17,16 @@ package instance
 
 import (
 	"context"
+	"maps"
+	"net/http"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/aws/karpenter-core/pkg/utils/env"
+	"github.com/google/uuid"
+
 	// nolint SA1019 - deprecated package
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
 	"github.com/Azure/skewer"
@@ -29,6 +37,10 @@ import (
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
 	klog "k8s.io/klog/v2"
+)
+
+const (
+	RPReferer = "rp.e2e.ig.e2e-aks.azure.com"
 )
 
 type AgentPoolsAPI interface {
@@ -80,7 +92,7 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		return nil, err
 	}
 
-	opts := armopts.DefaultArmOpts()
+	opts := setArmClientOptions()
 
 	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
@@ -103,4 +115,43 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		agentPoolsClient: agentPoolClient,
 		SKUClient:        skuClient,
 	}, nil
+}
+
+func setArmClientOptions() *arm.ClientOptions {
+
+	opt := new(arm.ClientOptions)
+
+	isE2E := env.WithDefaultBool("E2E_TEST_MODE", false)
+
+	//	If not E2E, we use the default options
+	if !isE2E {
+		return armopts.DefaultArmOpts()
+	}
+
+	opt.PerCallPolicies = append(opt.PerCallPolicies,
+		PolicySetHeaders{
+			"Referer": []string{RPReferer},
+		},
+		PolicySetHeaders{
+			"x-ms-correlation-request-id": []string{uuid.New().String()},
+		},
+	)
+	opt.Cloud.Services = maps.Clone(opt.Cloud.Services) // we need this because map is a reference type
+	opt.Cloud.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
+		Audience: cloud.AzurePublic.Services[cloud.ResourceManager].Audience,
+		Endpoint: "https://" + RPReferer,
+	}
+	return opt
+
+}
+
+// PolicySetHeaders sets http header
+type PolicySetHeaders http.Header
+
+func (p PolicySetHeaders) Do(req *policy.Request) (*http.Response, error) {
+	header := req.Raw().Header
+	for k, v := range p {
+		header[k] = v
+	}
+	return req.Next()
 }
