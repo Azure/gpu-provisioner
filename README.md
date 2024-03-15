@@ -8,7 +8,7 @@ It implements the cloud provider interfaces to realize the following abstraction
 `machine` -> `AKS agent pool` (with vmss and a hard limit of VM count to 1)
 
 ```
-VERSION=v0.1.0 make docker-build
+VERSION=v0.2.0 make docker-build
 make az-identity-perm
 make az-patch-helm
 helm install gpu-provisioner /charts/gpu-provisioner
