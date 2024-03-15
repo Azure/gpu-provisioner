@@ -18,7 +18,7 @@ env:
 jobs:
   check-tag:
     runs-on:
-      labels: [ self-hosted, "1ES.Pool=${{ matrix.runner }}" ]
+      labels: [ "self-hosted", "1ES.Pool=1es-aks-gpu-provisioner-agent-pool-ubuntu" ]
     outputs:
       tag: ${{ steps.get-tag.outputs.tag }}
     steps:
