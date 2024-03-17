@@ -19,6 +19,7 @@ jobs:
   check-tag:
     runs-on:
       labels: [ "self-hosted", "1ES.Pool=1es-aks-gpu-provisioner-agent-pool-ubuntu" ]
+    environment: publish-mcr
     outputs:
       tag: ${{ steps.get-tag.outputs.tag }}
     steps:
