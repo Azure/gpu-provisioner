@@ -108,6 +108,7 @@ jobs:
       - name: Authenticate to ACR
         run: |
           az login --identity
+          az acr login -n ${{ secrets.KAITO_MCR_REGISTRY }}
 
       - name: 'Publish to ACR'
         id: Publish
