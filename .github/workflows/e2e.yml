@@ -7,8 +7,10 @@ concurrency:
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**.md', '**.mdx', '**.png', '**.jpg']
   pull_request:
     branches: [main]
+    paths-ignore: ['docs/**', '**.md', '**.mdx', '**.png', '**.jpg']
   repository_dispatch:
     types: [ release-tag ]
     branches: [ release-** ]
@@ -44,7 +46,7 @@ jobs:
 
           echo "VERSION=${rand}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
-          echo "REGISTRY=kaito${rand}.azurecr.io" >> $GITHUB_ENV
+          echo "REGISTRY=gpuprov${rand}.azurecr.io" >> $GITHUB_ENV
 
       - name: Set Registry
         if: ${{ github.event.client_payload.isRelease }}
@@ -99,7 +101,7 @@ jobs:
         run: |
           make docker-build
         env:
-          REGISTRY: ${{ env.CLUSTER_NAME }}.azurecr.io
+          REGISTRY: ${{ env.REGISTRY }}
           VERSION: ${{ env.VERSION }}
 
       - name: Create cluster
@@ -122,7 +124,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
           AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-          REGISTRY: ${{ env.CLUSTER_NAME }}.azurecr.io
+          REGISTRY: ${{ env.REGISTRY }}
           VERSION: ${{ env.VERSION }}
 
       - uses: azure/login@v2.0.0
