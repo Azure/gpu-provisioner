@@ -46,7 +46,7 @@ jobs:
 
           echo "VERSION=${rand}" >> $GITHUB_ENV
           echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
-          echo "REGISTRY=kaito${rand}.azurecr.io" >> $GITHUB_ENV
+          echo "REGISTRY=gpuprov${rand}.azurecr.io" >> $GITHUB_ENV
 
       - name: Set Registry
         if: ${{ github.event.client_payload.isRelease }}
