@@ -3,7 +3,7 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/Azure/gpu-provisioner)
 [![codecov](https://codecov.io/gh/Azure/gpu-provisioner/graph/badge.svg?token=b7B1G5dtk1)](https://codecov.io/gh/Azure/gpu-provisioner)
 
-gpu-Provisioner is an [Azure Karpenter provider](https://github.com/Azure/karpenter-provider-azure) implementation for [Karpenter](https://karpenter.sh/) machine API. It leverage the `machine` CRD introduced by [Karpenter](https://karpenter.sh/) to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
+gpu-Provisioner is an [Azure Karpenter provider](https://github.com/Azure/karpenter-provider-azure) implementation for [Karpenter](https://karpenter.sh/) machine API. It leverages the `machine` CRD introduced by [Karpenter](https://karpenter.sh/) to orchestrate the GPU VM provisioning and its lifecycle management in a standard AKS cluster.
 It implements the cloud provider interfaces to realize the following abstraction:
 `machine` -> `AKS agent pool` (with vmss and a hard limit of VM count to 1)
 
