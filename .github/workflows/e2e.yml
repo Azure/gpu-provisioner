@@ -118,7 +118,7 @@ jobs:
         run: |
           echo "IDENTITY_CLIENT_ID=$(az identity show --name gpuIdentity -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
           make az-patch-helm
-          helm install gpu-provisioner ./charts/gpu-provisioner
+          helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
           kubectl wait --for=condition=available deploy "gpu-provisioner" -n gpu-provisioner --timeout=300s
         env:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}

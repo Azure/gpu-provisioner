@@ -11,9 +11,8 @@ It implements the cloud provider interfaces to realize the following abstraction
 VERSION=v0.2.0 make docker-build
 make az-identity-perm
 make az-patch-helm
-helm install gpu-provisioner /charts/gpu-provisioner
+helm install gpu-provisioner /charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
 make az-federated-credential
-
 ```
 You should have a running controller in `gpu-provisioner` namespace.
 
