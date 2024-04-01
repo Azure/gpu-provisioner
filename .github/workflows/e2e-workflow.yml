@@ -1,0 +1,170 @@
+name: gpu-provisioner-e2e-workflow
+
+on:
+  workflow_call:
+    inputs:
+      git_sha:
+        type: string
+        required: true
+      tag:
+        type: string
+      isRelease:
+        type: boolean
+        default: false
+      registry:
+        type: string
+      region:
+        type: string
+        description: "the azure location to run the e2e test in"
+        default: "eastus"
+      k8s_version:
+        type: string
+        default: "1.27"
+    secrets:
+      E2E_CLIENT_ID:
+        required: true
+      E2E_TENANT_ID:
+        required: true
+      E2E_SUBSCRIPTION_ID:
+        required: true
+
+permissions:
+  contents: read # This is required for actions/checkout
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # This is required for requesting the JWT
+    environment: e2e-test
+    env:
+      GO_VERSION: "1.21"
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142 # v2.7.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: ${{ inputs.git_sha }}
+
+      - name: Set e2e Resource and Cluster Name
+        run: |
+          rand=$(git rev-parse --short ${{ inputs.git_sha }})
+
+          if [ "$rand" = "" ]; then
+             rand=$RANDOM
+          fi
+
+          echo "VERSION=${rand}" >> $GITHUB_ENV
+          echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
+          echo "REGISTRY=gpuprov${rand}.azurecr.io" >> $GITHUB_ENV
+
+      - name: Set Registry
+        if: ${{ inputs.isRelease }}
+        run: |
+          echo "REGISTRY=${{ inputs.registry }}" >> $GITHUB_ENV
+          echo "VERSION=$(echo ${{ inputs.tag }} | tr -d v)" >> $GITHUB_ENV
+
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION  }}
+
+      - name: Az login
+        uses: azure/login@8c334a195cbb38e46038007b304988d888bf676a # v2.0.0
+        with:
+          client-id: ${{ secrets.E2E_CLIENT_ID }}
+          tenant-id: ${{ secrets.E2E_TENANT_ID }}
+          subscription-id: ${{ secrets.E2E_SUBSCRIPTION_ID }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+        id: install
+
+      - name: Create ACR
+        shell: bash
+        run: |
+          make az-mkacr
+        env:
+          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
+          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
+
+      - name: Create Azure Identity
+        uses: azure/CLI@v2.0.0
+        with:
+          inlineScript: |
+            az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
+
+      - name: Build gpu-provisioner image
+        if: ${{ !github.event.client_payload.isRelease }}
+        shell: bash
+        run: |
+          make docker-build
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          VERSION: ${{ env.VERSION }}
+
+      - name: create cluster
+        shell: bash
+        run: |
+          make az-mkaks
+        env:
+          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
+          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
+          AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          AZURE_LOCATION: ${{ inputs.region }}
+          AKS_K8S_VERSION: ${{ inputs.k8s_version }}
+
+      - name: Install GPU-Provisioner helm chart
+        shell: bash
+        run: |
+          echo "IDENTITY_CLIENT_ID=$(az identity show --name gpuIdentity -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
+          make az-patch-helm
+          helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
+          kubectl wait --for=condition=available deploy "gpu-provisioner" -n gpu-provisioner --timeout=300s
+        env:
+          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
+          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
+          AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          REGISTRY: ${{ env.REGISTRY }}
+          VERSION: ${{ env.VERSION }}
+
+      - uses: azure/login@8c334a195cbb38e46038007b304988d888bf676a # v2.0.0
+        with:
+          client-id: ${{ secrets.E2E_CLIENT_ID }}
+          tenant-id: ${{ secrets.E2E_TENANT_ID }}
+          subscription-id: ${{ secrets.E2E_SUBSCRIPTION_ID }}
+
+      - name: Create Role Assignment
+        uses: azure/CLI@v2.0.0
+        with:
+          inlineScript: |
+            IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
+            az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.E2E_SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}"  --role "Contributor"
+
+      - name: Create Azure Federated Identity
+        uses: azure/CLI@v2.0.0
+        with:
+          inlineScript: |
+            AKS_OIDC_ISSUER="$(az aks show -n "${{ env.CLUSTER_NAME }}" -g "${{ env.CLUSTER_NAME }}" --query 'oidcIssuerProfile.issuerUrl' -otsv)"
+            az identity federated-credential create --name gpu-fed-credential --identity-name gpuIdentity --resource-group "${{ env.CLUSTER_NAME }}" \
+            --issuer "${AKS_OIDC_ISSUER}" --subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange
+
+      - name: Run e2e test
+        run: |
+          make e2etests
+
+      - name: Cleanup e2e resources
+        if: ${{ always() }}
+        uses: azure/CLI@v2.0.0
+        with:
+          inlineScript: |
+            set +e
+            az group delete --name "${{ env.CLUSTER_NAME }}" --yes --no-wait || true

@@ -1,19 +1,12 @@
-name: e2e-test
+name: pr-e2e-test
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['docs/**', '**.md', '**.mdx', '**.png', '**.jpg']
   pull_request:
-    branches: [main]
-    paths-ignore: ['docs/**', '**.md', '**.mdx', '**.png', '**.jpg']
-  repository_dispatch:
-    types: [ release-tag ]
-    branches: [ release-** ]
+    paths-ignore: ["docs/**", "**.md", "**.mdx", "**.png", "**.jpg"]
 
 env:
   GO_VERSION: "1.21"
@@ -21,141 +14,13 @@ env:
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read # This is required for actions/checkout
+
 jobs:
-  e2e-tests:
-    runs-on: ubuntu-latest
-    environment: e2e-test
-    steps:
-      - name: Set up Go ${{ env.GO_VERSION }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION  }}
-
-      - name: Shorten SHA
-        if: ${{ !github.event.client_payload.isRelease }}
-        id: vars
-        run: echo "pr_sha_short=$(git rev-parse --short ${{ github.event.pull_request.head.sha }})" >> $GITHUB_OUTPUT
-
-      - name: Set e2e Resource and Cluster Name
-        run: |
-          rand=${{ steps.vars.outputs.pr_sha_short }}
-
-          if [ "$rand" = "" ]; then
-             rand=$RANDOM
-          fi
-
-          echo "VERSION=${rand}" >> $GITHUB_ENV
-          echo "CLUSTER_NAME=gpuprov${rand}" >> $GITHUB_ENV
-          echo "REGISTRY=gpuprov${rand}.azurecr.io" >> $GITHUB_ENV
-
-      - name: Set Registry
-        if: ${{ github.event.client_payload.isRelease }}
-        run: |
-          echo "REGISTRY=${{ github.event.client_payload.registry }}" >> $GITHUB_ENV
-          echo "VERSION=$(echo ${{ github.event.client_payload.tag }} | tr -d v)" >> $GITHUB_ENV
-
-      - name: Checkout
-        if: ${{ !github.event.client_payload.isRelease }}
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        if: ${{ github.event.client_payload.isRelease }}
-        with:
-          fetch-depth: 0
-          submodules: true
-          ref: ${{ env.REPO_TAG }}
-
-      - uses: azure/login@v2.0.0
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-        id: install
-
-      - name: Create ACR
-        shell: bash
-        run: |
-          make az-mkacr
-        env:
-          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
-          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
-
-      - name: Create Azure Identity
-        uses: azure/CLI@v2.0.0
-        with:
-          inlineScript: |
-            az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
-
-      - name: Build gpu-provisioner image
-        if: ${{ !github.event.client_payload.isRelease }}
-        shell: bash
-        run: |
-          make docker-build
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          VERSION: ${{ env.VERSION }}
-
-      - name: Create cluster
-        shell: bash
-        run: |
-          make az-mkaks
-        env:
-          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
-          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
-          AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-
-      - name: Install GPU-Provisioner helm chart
-        shell: bash
-        run: |
-          echo "IDENTITY_CLIENT_ID=$(az identity show --name gpuIdentity -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
-          make az-patch-helm
-          helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
-          kubectl wait --for=condition=available deploy "gpu-provisioner" -n gpu-provisioner --timeout=300s
-        env:
-          AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
-          AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
-          AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
-          REGISTRY: ${{ env.REGISTRY }}
-          VERSION: ${{ env.VERSION }}
-
-      - uses: azure/login@v2.0.0
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Create Role Assignment
-        uses: azure/CLI@v2.0.0
-        with:
-          inlineScript: |
-            IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
-            az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}/providers/Microsoft.ContainerService/managedClusters/${{ env.CLUSTER_NAME }}"  --role "Contributor"
-
-      - name: Create Azure Federated Identity
-        uses: azure/CLI@v2.0.0
-        with:
-          inlineScript: |
-            AKS_OIDC_ISSUER="$(az aks show -n "${{ env.CLUSTER_NAME }}" -g "${{ env.CLUSTER_NAME }}" --query 'oidcIssuerProfile.issuerUrl' -otsv)"
-            az identity federated-credential create --name gpu-fed-credential --identity-name gpuIdentity --resource-group "${{ env.CLUSTER_NAME }}" \
-             --issuer "${AKS_OIDC_ISSUER}" --subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange
-
-      - name: Run e2e test
-        run: |
-         make e2etests
-
-      - name: Cleanup e2e resources
-        if: ${{ always() }}
-        uses: azure/CLI@v2.0.0
-        with:
-          inlineScript: |
-            set +e
-            az group delete --name "${{ env.CLUSTER_NAME }}" --yes --no-wait || true
+  run-e2e:
+    uses: ./.github/workflows/e2e-workflow.yml
+    with:
+      git_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      E2E_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      E2E_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      E2E_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

@@ -43,6 +43,7 @@ LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_V
 # AKS INT/Staging Test
 AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
 AZURE_LOCATION=eastus
+AKS_K8S_VERSION ?= 1.27.2
 AZURE_RESOURCE_GROUP ?= <YOUR RG>
 AZURE_ACR_NAME ?= <YOUR ACR>
 AZURE_CLUSTER_NAME ?= <YOUR CLUSTER>
@@ -62,7 +63,8 @@ az-mkacr: az-mkrg ## Create test ACR
 
 az-mkaks: az-mkacr ## Create test AKS cluster (with msi, oidc and workload identity enabled)
 	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
-	--node-count 1 --generate-ssh-keys --enable-managed-identity  --enable-workload-identity --enable-oidc-issuer -o none
+	--kubernetes-version $(AKS_K8S_VERSION) --node-count 1 --generate-ssh-keys \
+	--enable-managed-identity  --enable-workload-identity --enable-oidc-issuer -o none
 	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
 
 az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
@@ -157,6 +159,7 @@ lint: $(GOLANGCI_LINT)
 .PHONY: release-manifest
 release-manifest:
 	@sed -i -e 's/^VERSION ?= .*/VERSION ?= ${VERSION}/' ./Makefile
+	@sed -i -e "s/version: .*/version: ${IMG_TAG}/" ./charts/gpu-provisioner/Chart.yaml
 	@sed -i -e "s/appVersion: .*/appVersion: ${IMG_TAG}/" ./charts/gpu-provisioner/Chart.yaml
 	@sed -i -e "s/tag: .*/tag: ${IMG_TAG}/" ./charts/gpu-provisioner/values.yaml
 	@sed -i -e 's/gpu-provisioner: .*/gpu-provisioner:${IMG_TAG}/' ./charts/gpu-provisioner/README.md
