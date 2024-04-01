@@ -24,7 +24,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/internal/uuid"
 )
 
 // Base64Encoding is usesd to specify which base-64 encoder/decoder to use when
@@ -264,12 +263,3 @@ func SkipBodyDownload(req *policy.Request) {
 
 // CtxAPINameKey is used as a context key for adding/retrieving the API name.
 type CtxAPINameKey = shared.CtxAPINameKey
-
-// NewUUID returns a new UUID using the RFC4122 algorithm.
-func NewUUID() (string, error) {
-	u, err := uuid.New()
-	if err != nil {
-		return "", err
-	}
-	return u.String(), nil
-}

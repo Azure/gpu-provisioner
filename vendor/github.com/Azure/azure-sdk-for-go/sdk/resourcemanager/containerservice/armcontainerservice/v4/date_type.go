@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -46,7 +47,7 @@ func populateDateType(m map[string]any, k string, t *time.Time) {
 }
 
 func unpopulateDateType(data json.RawMessage, fn string, t **time.Time) error {
-	if data == nil || string(data) == "null" {
+	if data == nil || strings.EqualFold(string(data), "null") {
 		return nil
 	}
 	var aux dateType

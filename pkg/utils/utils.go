@@ -58,3 +58,17 @@ func WithDefaultBool(key string, def bool) bool {
 	}
 	return parsedVal
 }
+
+// WithDefaultBool returns the boolean value of the supplied environment variable or, if not present,
+// the supplied default value.
+func WithDefaultBool(key string, def bool) bool {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return def
+	}
+	parsedVal, err := strconv.ParseBool(val)
+	if err != nil {
+		return def
+	}
+	return parsedVal
+}

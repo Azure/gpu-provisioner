@@ -27,71 +27,60 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
-	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/to"
+	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
-	"github.com/azure/gpu-provisioner/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 const (
-	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
+	e2eOverlayResourceVersionKey = "AKS_E2E_BUILD_VERSION"
 )
 
 // ClientAssertionCredential authenticates an application with assertions provided by a callback function.
 type ClientAssertionCredential struct {
-	assertion, file string
-	client          confidential.Client
-	lastRead        time.Time
+	assertion, file    string
+	ConfidentialClient confidential.Client
+	lastRead           time.Time
 }
 
 // NewCredential provides a token credential for msi and service principal auth
-func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCredential, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("failed to create credential, nil config provided")
-	}
-
+func NewCredential(cfg *Config) (azcore.TokenCredential, error) {
 	// Azure AD Workload Identity webhook will inject the following env vars:
 	// 	AZURE_FEDERATED_TOKEN_FILE is the service account token path
 	// 	AZURE_AUTHORITY_HOST is the AAD authority hostname
 
 	tokenFilePath := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	if tokenFilePath == "" {
+		return nil, fmt.Errorf("required environment variable is not set, AZURE_FEDERATED_TOKEN_FILE: %s", tokenFilePath)
+	}
+	clientAssertionCredential := &ClientAssertionCredential{file: tokenFilePath}
+
+	confidentialClientApp, err := GetConfidentialCertificate(cfg, clientAssertionCredential)
+	if err != nil {
+		fmt.Printf(" error from GetConfidentialCertificate: %s/n", err)
+		return nil, err
+	}
+
+	clientAssertionCredential.ConfidentialClient = confidentialClientApp
+
+	return clientAssertionCredential, nil
+}
+
+func GetConfidentialCertificate(cfg *Config, client *ClientAssertionCredential) (confidential.Client, error) {
+	fmt.Println("inside	GetConfidentialCertificate")
+	if cfg == nil {
+		return confidential.Client{}, fmt.Errorf("failed to create credential, nil config provided")
+	}
 	authority := os.Getenv("AZURE_AUTHORITY_HOST")
-
-	if tokenFilePath == "" || authority == "" {
-		return nil, fmt.Errorf("required environment variables not set, AZURE_FEDERATED_TOKEN_FILE: %s, AZURE_AUTHORITY_HOST: %s", tokenFilePath, authority)
+	if authority == "" {
+		return confidential.Client{}, fmt.Errorf("required environment variable is not set AZURE_AUTHORITY_HOST: %s", authority)
 	}
-	c := &ClientAssertionCredential{file: tokenFilePath}
 
-	var cred confidential.Credential
-	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
-	if isE2E {
-		armClientCert, err := getE2ETestingCert(authorizer)
-		if err != nil {
-			return nil, err
-		}
-		certPEM, keyPEM := splitPEMBlock([]byte(to.String(armClientCert)))
-		if len(certPEM) == 0 {
-			return nil, errors.New("malformed cert pem format")
-		}
-
-		// Load client cert
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			return nil, err
-		}
-		leafCert := []tls.Certificate{cert}
-		cred, err = confidential.NewCredFromCert([]*x509.Certificate{leafCert[0].Leaf}, keyPEM)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		cred = confidential.NewCredFromAssertionCallback(
-			func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
-				return c.readJWTFromFS()
-			},
-		)
-	}
+	cred := confidential.NewCredFromAssertionCallback(
+		func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
+			return client.readJWTFromFS()
+		},
+	)
+	fmt.Println("confidential.NewCredFromAssertionCallback: ", cred)
 
 	// create the confidential client to request an AAD token
 	confidentialClientApp, err := confidential.New(
@@ -99,17 +88,15 @@ func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCre
 		cfg.UserAssignedIdentityID,
 		cred)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create confidential client app: %w", err)
+		fmt.Printf(" error from confidential.New: %s", err)
+		return confidential.Client{}, fmt.Errorf("failed to create confidential client app: %w", err)
 	}
-	c.client = confidentialClientApp
-
-	return c, nil
+	return confidentialClientApp, nil
 }
 
 // GetToken implements the TokenCredential interface
 func (c *ClientAssertionCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	// get the token from the confidential client
-	token, err := c.client.AcquireTokenByCredential(ctx, opts.Scopes)
+	token, err := c.ConfidentialClient.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		return azcore.AccessToken{}, err
 	}
@@ -134,37 +121,30 @@ func (c *ClientAssertionCredential) readJWTFromFS() (string, error) {
 	return c.assertion, nil
 }
 
-func getE2ETestingCert(authorizer autorest.Authorizer) (*string, error) {
-	e2eOverlayResourceVersion := os.Getenv(e2eOverlayResourceVersionKey)
+func getE2ETestingCert() (string, error) {
+	fmt.Println(" inside getE2ETestingCert")
+	e2eOverlayResourceVersion := "r1dhndms2" //os.Getenv(e2eOverlayResourceVersionKey)
 	if e2eOverlayResourceVersion == "" {
-		return nil, fmt.Errorf("E2E overlay resource version is not set")
+		return "", fmt.Errorf("E2E overlay resource version is not set")
 	}
 
 	keyVaultUrl := fmt.Sprintf("https://hcp%s.vault.azure.net/", e2eOverlayResourceVersion)
+	authorizer, err := kvauth.NewAuthorizerFromEnvironment()
+	if err != nil {
+		fmt.Printf(" error from kvauth.NewAuthorizerFromEnvironment: %s/n", err)
+		return "", err
+	}
+
+	// Establish a connection to the Key Vault client
 	client := keyvault.New()
 	client.Authorizer = authorizer
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	result, err := client.GetSecret(ctx, keyVaultUrl, "e2e-arm-client-cert", "")
 	if err != nil { //+gocover:ignore:block keyvault fetch
-		return nil, err
+		fmt.Printf(" error from client.GetSecret: %s/n", err)
+		return "", err
 	}
-	return result.Value, nil
-}
-
-// split the pem block to cert/key
-func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
-	for {
-		var derBlock *pem.Block
-		derBlock, pemBlock = pem.Decode(pemBlock)
-		if derBlock == nil {
-			break
-		}
-		if derBlock.Type == "CERTIFICATE" {
-			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
-		} else if derBlock.Type == "PRIVATE KEY" {
-			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
-		}
-	}
-	return certPEM, keyPEM
+	fmt.Println("keyvault secret result.Value: ", *result.Value)
+	return *result.Value, nil
 }

@@ -16,11 +16,12 @@ limitations under the License.
 package opts
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/azure/gpu-provisioner/pkg/auth"
+	"github.com/azure/gpu-provisioner/pkg/utils/project"
 )
 
 func DefaultArmOpts() *arm.ClientOptions {
@@ -41,6 +42,6 @@ func DefaultRetryOpts() policy.RetryOptions {
 
 func DefaultTelemetryOpts() policy.TelemetryOptions {
 	return policy.TelemetryOptions{
-		ApplicationID: auth.GetUserAgentExtension(),
+		ApplicationID: fmt.Sprintf("gpu-provisioner-aks/v%s", project.Version),
 	}
 }

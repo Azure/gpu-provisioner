@@ -20,7 +20,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -57,21 +56,6 @@ type Config struct {
 
 	// enableDynamicSKUCache defines whether to enable dynamic instance workflow for instance information check
 	EnableDynamicSKUCache bool `json:"enableDynamicSKUCache,omitempty" yaml:"enableDynamicSKUCache,omitempty"`
-	// EnableDetailedCSEMessage defines whether to emit error messages in the CSE error body info
-	EnableDetailedCSEMessage bool `json:"enableDetailedCSEMessage,omitempty" yaml:"enableDetailedCSEMessage,omitempty"`
-
-	// EnableForceDelete defines whether to enable force deletion on the APIs
-	EnableForceDelete bool `json:"enableForceDelete,omitempty" yaml:"enableForceDelete,omitempty"`
-
-	// EnableGetVmss defines whether to enable making a call to GET VMSS to fetch fresh capacity info
-	// The TTL for this cache is controlled by the GetVmssSizeRefreshPeriod interval
-	EnableGetVmss bool `json:"enableGetVmss,omitempty" yaml:"enableGetVmss,omitempty"`
-
-	// GetVmssSizeRefreshPeriod defines how frequently to call GET VMSS API to fetch VMSS info per nodegroup instance
-	GetVmssSizeRefreshPeriod time.Duration `json:"getVmssSizeRefreshPeriod,omitempty" yaml:"getVmssSizeRefreshPeriod,omitempty"`
-
-	// EnablePartialScaling defines whether to enable partial scaling based on quota limits
-	EnablePartialScaling bool `json:"enablePartialScaling,omitempty" yaml:"enablePartialScaling,omitempty"`
 }
 
 func (cfg *Config) BaseVars() {
