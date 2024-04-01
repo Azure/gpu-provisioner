@@ -1,4 +1,5 @@
 # Azure GPU Provisioner
+![GitHub Release](https://img.shields.io/github/v/release/Azure/gpu-provisioner)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Azure/gpu-provisioner)](https://goreportcard.com/report/github.com/Azure/gpu-provisioner)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/Azure/gpu-provisioner)
 [![codecov](https://codecov.io/gh/Azure/gpu-provisioner/graph/badge.svg?token=b7B1G5dtk1)](https://codecov.io/gh/Azure/gpu-provisioner)
