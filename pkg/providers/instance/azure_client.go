@@ -24,7 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/aws/karpenter-core/pkg/utils/env"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/google/uuid"
 
 	// nolint SA1019 - deprecated package
@@ -36,7 +36,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
-	klog "k8s.io/klog/v2"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -87,12 +87,21 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 
 	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
 	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg, env)
+	cred, err := auth.NewCredential(cfg, azClientConfig.Authorizer)
 	if err != nil {
 		return nil, err
 	}
 
-	opts := setArmClientOptions()
+	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
+	//	If not E2E, we use the default options
+	opts := armopts.DefaultArmOpts()
+	if isE2E {
+		opts = setArmClientOptions()
+	}
+
+	if err != nil {
+		klog.Errorf("Failed to get E2E testing cert: %v", err)
+	}
 
 	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
@@ -118,15 +127,7 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 }
 
 func setArmClientOptions() *arm.ClientOptions {
-
 	opt := new(arm.ClientOptions)
-
-	isE2E := env.WithDefaultBool("E2E_TEST_MODE", false)
-
-	//	If not E2E, we use the default options
-	if !isE2E {
-		return armopts.DefaultArmOpts()
-	}
 
 	opt.PerCallPolicies = append(opt.PerCallPolicies,
 		PolicySetHeaders{
@@ -142,7 +143,6 @@ func setArmClientOptions() *arm.ClientOptions {
 		Endpoint: "https://" + RPReferer,
 	}
 	return opt
-
 }
 
 // PolicySetHeaders sets http header

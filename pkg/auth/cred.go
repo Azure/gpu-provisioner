@@ -17,14 +17,26 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
+	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
+	"github.com/azure/gpu-provisioner/pkg/utils"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
 )
 
 // ClientAssertionCredential authenticates an application with assertions provided by a callback function.
@@ -35,7 +47,7 @@ type ClientAssertionCredential struct {
 }
 
 // NewCredential provides a token credential for msi and service principal auth
-func NewCredential(cfg *Config, env *azure.Environment) (azcore.TokenCredential, error) {
+func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCredential, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("failed to create credential, nil config provided")
 	}
@@ -52,11 +64,35 @@ func NewCredential(cfg *Config, env *azure.Environment) (azcore.TokenCredential,
 	}
 	c := &ClientAssertionCredential{file: tokenFilePath}
 
-	cred := confidential.NewCredFromAssertionCallback(
-		func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
-			return c.readJWTFromFS()
-		},
-	)
+	var cred confidential.Credential
+	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
+	if isE2E {
+		armClientCert, err := getE2ETestingCert(authorizer)
+		if err != nil {
+			return nil, err
+		}
+		certPEM, keyPEM := splitPEMBlock([]byte(to.String(armClientCert)))
+		if len(certPEM) == 0 {
+			return nil, errors.New("malformed cert pem format")
+		}
+
+		// Load client cert
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return nil, err
+		}
+		leafCert := []tls.Certificate{cert}
+		cred, err = confidential.NewCredFromCert([]*x509.Certificate{leafCert[0].Leaf}, keyPEM)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cred = confidential.NewCredFromAssertionCallback(
+			func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
+				return c.readJWTFromFS()
+			},
+		)
+	}
 
 	// create the confidential client to request an AAD token
 	confidentialClientApp, err := confidential.New(
@@ -97,4 +133,39 @@ func (c *ClientAssertionCredential) readJWTFromFS() (string, error) {
 		c.lastRead = now
 	}
 	return c.assertion, nil
+}
+
+func getE2ETestingCert(authorizer autorest.Authorizer) (*string, error) {
+	e2eOverlayResourceVersion := os.Getenv(e2eOverlayResourceVersionKey)
+	if e2eOverlayResourceVersion == "" {
+		return nil, fmt.Errorf("E2E overlay resource version is not set")
+	}
+
+	keyVaultUrl := fmt.Sprintf("https://hcp%s.vault.azure.net/", e2eOverlayResourceVersion)
+	client := keyvault.New()
+	client.Authorizer = authorizer
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	result, err := client.GetSecret(ctx, keyVaultUrl, "e2e-arm-client-cert", "")
+	if err != nil { //+gocover:ignore:block keyvault fetch
+		return nil, err
+	}
+	return result.Value, nil
+}
+
+// split the pem block to cert/key
+func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
+	for {
+		var derBlock *pem.Block
+		derBlock, pemBlock = pem.Decode(pemBlock)
+		if derBlock == nil {
+			break
+		}
+		if derBlock.Type == "CERTIFICATE" {
+			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
+		} else if derBlock.Type == "PRIVATE KEY" {
+			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
+		}
+	}
+	return certPEM, keyPEM
 }

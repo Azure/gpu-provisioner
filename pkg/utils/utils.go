@@ -17,7 +17,9 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
@@ -72,4 +74,18 @@ func GetAllSingleValuedRequirementLabels(instanceType *cloudprovider.InstanceTyp
 		}
 	}
 	return labels
+}
+
+// WithDefaultBool returns the boolean value of the supplied environment variable or, if not present,
+// the supplied default value.
+func WithDefaultBool(key string, def bool) bool {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return def
+	}
+	parsedVal, err := strconv.ParseBool(val)
+	if err != nil {
+		return def
+	}
+	return parsedVal
 }
