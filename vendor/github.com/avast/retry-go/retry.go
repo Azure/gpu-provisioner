@@ -3,7 +3,7 @@ Simple library for retry mechanism
 
 slightly inspired by [Try::Tiny::Retry](https://metacpan.org/pod/Try::Tiny::Retry)
 
-SYNOPSIS
+# SYNOPSIS
 
 http get with retry:
 
@@ -30,8 +30,7 @@ http get with retry:
 
 [next examples](https://github.com/avast/retry-go/tree/master/examples)
 
-
-SEE ALSO
+# SEE ALSO
 
 * [giantswarm/retry-go](https://github.com/giantswarm/retry-go) - slightly complicated interface.
 
@@ -43,13 +42,11 @@ SEE ALSO
 
 * [matryer/try](https://github.com/matryer/try) - very popular package, nonintuitive interface (for me)
 
-
-BREAKING CHANGES
+# BREAKING CHANGES
 
 3.0.0
 
 * `DelayTypeFunc` accepts a new parameter `err` - this breaking change affects only your custom Delay Functions. This change allow [make delay functions based on error](examples/delay_based_on_error_test.go).
-
 
 1.0.2 -> 2.0.0
 
@@ -59,14 +56,11 @@ BREAKING CHANGES
 
 * [more about this breaking change](https://github.com/avast/retry-go/issues/7)
 
-
 0.3.0 -> 1.0.0
 
 * `retry.Retry` function are changed to `retry.Do` function
 
 * `retry.RetryCustom` (OnRetry) and `retry.RetryCustomWithOpts` functions are now implement via functions produces Options (aka `retry.OnRetry`)
-
-
 */
 package retry
 

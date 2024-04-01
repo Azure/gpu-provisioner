@@ -17,6 +17,7 @@ package instance
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/http"
 
@@ -24,7 +25,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/aws/karpenter-core/pkg/utils/env"
+	"github.com/azure/gpu-provisioner/pkg/utils"
+	"github.com/azure/gpu-provisioner/pkg/utils/project"
 	"github.com/google/uuid"
 
 	// nolint SA1019 - deprecated package
@@ -36,11 +38,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
-	klog "k8s.io/klog/v2"
-)
-
-const (
-	RPReferer = "rp.e2e.ig.e2e-aks.azure.com"
+	"k8s.io/klog/v2"
 )
 
 type AgentPoolsAPI interface {
@@ -85,14 +83,19 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		return nil, err
 	}
 
+	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
+	//	If not E2E, we use the default options
+	opts := armopts.DefaultArmOpts()
+	if isE2E {
+		opts = setArmClientOptions()
+	}
+
 	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
-	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg, env)
+	azClientConfig.UserAgent = fmt.Sprintf("gpu-provisioner-aks/v%s", project.Version)
+	cred, err := auth.NewCredential(cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	opts := setArmClientOptions()
 
 	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
@@ -118,19 +121,11 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 }
 
 func setArmClientOptions() *arm.ClientOptions {
-
 	opt := new(arm.ClientOptions)
-
-	isE2E := env.WithDefaultBool("E2E_TEST_MODE", false)
-
-	//	If not E2E, we use the default options
-	if !isE2E {
-		return armopts.DefaultArmOpts()
-	}
 
 	opt.PerCallPolicies = append(opt.PerCallPolicies,
 		PolicySetHeaders{
-			"Referer": []string{RPReferer},
+			"Referer": []string{auth.E2ERPRefererEndpoint},
 		},
 		PolicySetHeaders{
 			"x-ms-correlation-request-id": []string{uuid.New().String()},
@@ -139,10 +134,9 @@ func setArmClientOptions() *arm.ClientOptions {
 	opt.Cloud.Services = maps.Clone(opt.Cloud.Services) // we need this because map is a reference type
 	opt.Cloud.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
 		Audience: cloud.AzurePublic.Services[cloud.ResourceManager].Audience,
-		Endpoint: "https://" + RPReferer,
+		Endpoint: "https://" + auth.E2ERPRefererEndpoint,
 	}
 	return opt
-
 }
 
 // PolicySetHeaders sets http header
