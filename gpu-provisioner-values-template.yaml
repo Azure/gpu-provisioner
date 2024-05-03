@@ -1,0 +1,23 @@
+
+replicas: 1 # for better debugging experience
+controller:
+  env:
+    # Azure client settings
+    - name: ARM_SUBSCRIPTION_ID
+      value: ${AZURE_SUBSCRIPTION_ID}
+    - name: LOCATION
+      value: ${AZURE_LOCATION}
+    - name: AZURE_CLUSTER_NAME
+      value: ${CLUSTER_NAME}
+    - name: AZURE_NODE_RESOURCE_GROUP
+      value: ${AZURE_RESOURCE_GROUP_MC}
+    - name: ARM_RESOURCE_GROUP
+      value: ${AZURE_RESOURCE_GROUP}
+    - name: LEADER_ELECT # disable leader election for better debugging experience
+      value: "false"
+    - name: E2E_TEST_MODE
+      value: "false"
+
+workloadIdentity:
+  clientId: ${GPU_PROVISIONER_USER_ASSIGNED_CLIENT_ID}
+  tenantId: ${AZURE_TENANT_ID}
