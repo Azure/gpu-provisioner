@@ -1,7 +1,7 @@
-// https://github.com/Azure/karpenter-provider-azure/blob/2beb773cbd3134eeabb8c96b72a130b86b1a91e1/hack/deploy/configure-values.sh
-
 #!/usr/bin/env bash
 set -euo pipefail
+
+# https://github.com/Azure/karpenter-provider-azure/blob/2beb773cbd3134eeabb8c96b72a130b86b1a91e1/hack/deploy/configure-values.sh
 
 # This script interrogates the AKS cluster and Azure resources to generate
 # the gpu-provisioner-values.yaml file using the gpu-provisioner-values-template.yaml file as a template.
