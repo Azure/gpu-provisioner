@@ -9,7 +9,20 @@ A Helm chart for gpu-provisioner
 To install the chart with the release name `gpu-provisioner`:
 
 ```bash
-helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
+export CHART_VERSION=0.2.0
+export CLUSTER_NAME=my-cluster
+export AZURE_RESOURCE_GROUP=my-rg
+export AZURE_SUBSCRIPTION_ID=my-subscription-id
+export MSI_NAME=gpuIdentity
+
+az identity create --name $MSI_NAME --resource-group $CLUSTER_NAME
+
+./hack/deploy/configure-helm-values.sh $CLUSTER_NAME $AZURE_RESOURCE_GROUP $MSI_NAME
+
+helm install gpu-provisioner \
+      https://github.com/Azure/gpu-provisioner/raw/gh-pages/charts/gpu-provisioner-$CHART_VERSION.tgz \
+      --values gpu-provisioner-values.yaml --namespace gpu-provisioner --create-namespace --wait
+make az-federated-credential
 ```
 
 ## Values
@@ -47,7 +60,7 @@ helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisione
 | podLabels                          | object | `{}`                                                                                                                                                                                   | Additional labels for the pod.                                                                                         |
 | podSecurityContext                 | object | `{"fsGroup":1000}`                                                                                                                                                                     | SecurityContext for the pod.                                                                                           |
 | priorityClassName                  | string | `"system-cluster-critical"`                                                                                                                                                            | PriorityClass name for the pod.                                                                                        |
-| replicas                           | int    | `2`                                                                                                                                                                                    | Number of replicas.                                                                                                    |
+| replicas                           | int    | `1`                                                                                                                                                                                    | Number of replicas.                                                                                                    |
 | revisionHistoryLimit               | int    | `10`                                                                                                                                                                                   | The number of old ReplicaSets to retain to allow rollback.                                                             |
 | serviceAccount.annotations         | object | `{}`                                                                                                                                                                                   | Additional annotations for the ServiceAccount.                                                                         |
 | serviceAccount.create              | bool   | `true`                                                                                                                                                                                 | Specifies if a ServiceAccount should be created.                                                                       |
