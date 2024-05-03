@@ -8,15 +8,15 @@ gpu-Provisioner is an [Azure Karpenter provider](https://github.com/Azure/karpen
 It implements the cloud provider interfaces to realize the following abstraction:
 `machine` -> `AKS agent pool` (with vmss and a hard limit of VM count to 1)
 
-```
-VERSION=v0.2.0 make docker-build
-make az-identity-perm
-make az-patch-helm
-helm install gpu-provisioner /charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
-make az-federated-credential
-```
-You should have a running controller in `gpu-provisioner` namespace.
+## Prerequisites
+- An Azure subscription.
+- An AKS cluster with [OIDC](https://learn.microsoft.com/en-us/azure/aks/use-oidc-issuer) addon installed. Please refer to the [Karpenter installation guide](https://karpenter.sh/docs/installation/) for more details.
+- 
+## Install gpu-provisioner
 
+Please check the installation guidance [here](./charts/gpu-provisioner/README.md).
+
+```shell
 ## How to test
 After deploying the controller successfully, one can apply the yaml in `/examples` to create a machine CR. A real node will be created and added to the cluster by the controller.
 
