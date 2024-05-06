@@ -77,7 +77,7 @@ func (m *MockPollingHandler[T]) Result(ctx context.Context, out *T) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Result", ctx, out)
 	err, ok := ret[0].(error)
-	
+
 	if !ok {
 		return nil
 	}
