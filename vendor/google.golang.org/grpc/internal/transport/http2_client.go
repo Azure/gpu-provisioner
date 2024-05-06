@@ -38,7 +38,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/internal/channelz"
 	icredentials "google.golang.org/grpc/internal/credentials"
-	"google.golang.org/grpc/internal/grpclog"
 	"google.golang.org/grpc/internal/grpcsync"
 	"google.golang.org/grpc/internal/grpcutil"
 	imetadata "google.golang.org/grpc/internal/metadata"
@@ -146,7 +145,6 @@ type http2Client struct {
 	bufferPool *bufferPool
 
 	connectionID uint64
-	logger       *grpclog.PrefixLogger
 }
 
 func dial(ctx context.Context, fn func(context.Context, string) (net.Conn, error), addr resolver.Address, useProxy bool, grpcUA string) (net.Conn, error) {
@@ -246,7 +244,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		if err := connectCtx.Err(); err != nil {
 			// connectCtx expired before exiting the function.  Hard close the connection.
 			if logger.V(logLevel) {
-				logger.Infof("Aborting due to connect deadline expiring: %v", err)
+				logger.Infof("newClientTransport: aborting due to connectCtx: %v", err)
 			}
 			conn.Close()
 		}
@@ -348,7 +346,6 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		bufferPool:            newBufferPool(),
 		onClose:               onClose,
 	}
-	t.logger = prefixLoggerForClientTransport(t)
 	// Add peer information to the http2client context.
 	t.ctx = peer.NewContext(t.ctx, t.getPeer())
 
@@ -447,8 +444,15 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		return nil, err
 	}
 	go func() {
-		t.loopy = newLoopyWriter(clientSide, t.framer, t.controlBuf, t.bdpEst, t.conn, t.logger)
-		t.loopy.run()
+		t.loopy = newLoopyWriter(clientSide, t.framer, t.controlBuf, t.bdpEst)
+		err := t.loopy.run()
+		if logger.V(logLevel) {
+			logger.Infof("transport: loopyWriter exited. Closing connection. Err: %v", err)
+		}
+		// Do not close the transport.  Let reader goroutine handle it since
+		// there might be data in the buffers.
+		t.conn.Close()
+		t.controlBuf.finish()
 		close(t.writerDone)
 	}()
 	return t, nil
@@ -785,7 +789,7 @@ func (t *http2Client) NewStream(ctx context.Context, callHdr *CallHdr) (*Stream,
 		s.id = h.streamID
 		s.fc = &inFlow{limit: uint32(t.initialWindowSize)}
 		t.mu.Lock()
-		if t.state == draining || t.activeStreams == nil { // Can be niled from Close().
+		if t.activeStreams == nil { // Can be niled from Close().
 			t.mu.Unlock()
 			return false // Don't create a stream if the transport is already closed.
 		}
@@ -862,8 +866,8 @@ func (t *http2Client) NewStream(ctx context.Context, callHdr *CallHdr) (*Stream,
 		}
 	}
 	if transportDrainRequired {
-		if t.logger.V(logLevel) {
-			t.logger.Infof("Draining transport: t.nextID > MaxStreamID")
+		if logger.V(logLevel) {
+			logger.Infof("transport: t.nextID > MaxStreamID. Draining")
 		}
 		t.GracefulClose()
 	}
@@ -955,8 +959,8 @@ func (t *http2Client) Close(err error) {
 		t.mu.Unlock()
 		return
 	}
-	if t.logger.V(logLevel) {
-		t.logger.Infof("Closing: %v", err)
+	if logger.V(logLevel) {
+		logger.Infof("transport: closing: %v", err)
 	}
 	// Call t.onClose ASAP to prevent the client from attempting to create new
 	// streams.
@@ -1012,8 +1016,8 @@ func (t *http2Client) GracefulClose() {
 		t.mu.Unlock()
 		return
 	}
-	if t.logger.V(logLevel) {
-		t.logger.Infof("GracefulClose called")
+	if logger.V(logLevel) {
+		logger.Infof("transport: GracefulClose called")
 	}
 	t.onClose(GoAwayInvalid)
 	t.state = draining
@@ -1177,8 +1181,8 @@ func (t *http2Client) handleRSTStream(f *http2.RSTStreamFrame) {
 	}
 	statusCode, ok := http2ErrConvTab[f.ErrCode]
 	if !ok {
-		if t.logger.V(logLevel) {
-			t.logger.Infof("Received a RST_STREAM frame with code %q, but found no mapped gRPC status", f.ErrCode)
+		if logger.V(logLevel) {
+			logger.Warningf("transport: http2Client.handleRSTStream found no mapped gRPC status for the received http2 error: %v", f.ErrCode)
 		}
 		statusCode = codes.Unknown
 	}
@@ -1260,12 +1264,10 @@ func (t *http2Client) handleGoAway(f *http2.GoAwayFrame) {
 		t.mu.Unlock()
 		return
 	}
-	if f.ErrCode == http2.ErrCodeEnhanceYourCalm && string(f.DebugData()) == "too_many_pings" {
-		// When a client receives a GOAWAY with error code ENHANCE_YOUR_CALM and debug
-		// data equal to ASCII "too_many_pings", it should log the occurrence at a log level that is
-		// enabled by default and double the configure KEEPALIVE_TIME used for new connections
-		// on that channel.
-		logger.Errorf("Client received GoAway with error code ENHANCE_YOUR_CALM and debug data equal to ASCII \"too_many_pings\".")
+	if f.ErrCode == http2.ErrCodeEnhanceYourCalm {
+		if logger.V(logLevel) {
+			logger.Infof("Client received GoAway with http2.ErrCodeEnhanceYourCalm.")
+		}
 	}
 	id := f.LastStreamID
 	if id > 0 && id%2 == 0 {
@@ -1337,7 +1339,7 @@ func (t *http2Client) handleGoAway(f *http2.GoAwayFrame) {
 
 // setGoAwayReason sets the value of t.goAwayReason based
 // on the GoAway frame received.
-// It expects a lock on transport's mutex to be held by
+// It expects a lock on transport's mutext to be held by
 // the caller.
 func (t *http2Client) setGoAwayReason(f *http2.GoAwayFrame) {
 	t.goAwayReason = GoAwayNoReason
