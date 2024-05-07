@@ -135,7 +135,6 @@ func (c *Controller) Builder(ctx context.Context, m manager.Manager) corecontrol
 				DeleteFunc: func(e event.DeleteEvent) bool { return false },
 			},
 		)).
-		WithEventFilter(machineutil.KaitoMachinePredicate).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},
 			machineutil.NodeEventHandler(ctx, c.kubeClient),
