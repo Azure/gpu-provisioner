@@ -152,8 +152,8 @@ func PopulateMachineDetails(machine, retrieved *v1alpha5.Machine) {
 }
 
 func truncateMessage(msg string) string {
-	if len(msg) < 800 {
+	if len(msg) < 300 {
 		return msg
 	}
-	return msg[:800] + "..."
+	return msg[:300] + "..."
 }
