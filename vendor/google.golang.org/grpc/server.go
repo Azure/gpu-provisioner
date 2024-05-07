@@ -43,8 +43,8 @@ import (
 	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/binarylog"
 	"google.golang.org/grpc/internal/channelz"
+	"google.golang.org/grpc/internal/grpcrand"
 	"google.golang.org/grpc/internal/grpcsync"
-	"google.golang.org/grpc/internal/grpcutil"
 	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
@@ -74,10 +74,10 @@ func init() {
 		srv.drainServerTransports(addr)
 	}
 	internal.AddGlobalServerOptions = func(opt ...ServerOption) {
-		globalServerOptions = append(globalServerOptions, opt...)
+		extraServerOptions = append(extraServerOptions, opt...)
 	}
 	internal.ClearGlobalServerOptions = func() {
-		globalServerOptions = nil
+		extraServerOptions = nil
 	}
 	internal.BinaryLogger = binaryLogger
 	internal.JoinServerOptions = newJoinServerOption
@@ -115,6 +115,12 @@ type serviceInfo struct {
 	mdata       interface{}
 }
 
+type serverWorkerData struct {
+	st     transport.ServerTransport
+	wg     *sync.WaitGroup
+	stream *transport.Stream
+}
+
 // Server is a gRPC server to serve RPC requests.
 type Server struct {
 	opts serverOptions
@@ -139,7 +145,7 @@ type Server struct {
 	channelzID *channelz.Identifier
 	czData     *channelzData
 
-	serverWorkerChannel chan func()
+	serverWorkerChannels []chan *serverWorkerData
 }
 
 type serverOptions struct {
@@ -171,14 +177,13 @@ type serverOptions struct {
 }
 
 var defaultServerOptions = serverOptions{
-	maxConcurrentStreams:  math.MaxUint32,
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout:     120 * time.Second,
 	writeBufferSize:       defaultWriteBufSize,
 	readBufferSize:        defaultReadBufSize,
 }
-var globalServerOptions []ServerOption
+var extraServerOptions []ServerOption
 
 // A ServerOption sets options such as credentials, codec and keepalive parameters, etc.
 type ServerOption interface {
@@ -382,9 +387,6 @@ func MaxSendMsgSize(m int) ServerOption {
 // MaxConcurrentStreams returns a ServerOption that will apply a limit on the number
 // of concurrent streams to each ServerTransport.
 func MaxConcurrentStreams(n uint32) ServerOption {
-	if n == 0 {
-		n = math.MaxUint32
-	}
 	return newFuncServerOption(func(o *serverOptions) {
 		o.maxConcurrentStreams = n
 	})
@@ -558,40 +560,47 @@ func NumStreamWorkers(numServerWorkers uint32) ServerOption {
 const serverWorkerResetThreshold = 1 << 16
 
 // serverWorkers blocks on a *transport.Stream channel forever and waits for
-// data to be fed by serveStreams. This allows multiple requests to be
+// data to be fed by serveStreams. This allows different requests to be
 // processed by the same goroutine, removing the need for expensive stack
 // re-allocations (see the runtime.morestack problem [1]).
 //
 // [1] https://github.com/golang/go/issues/18138
-func (s *Server) serverWorker() {
-	for completed := 0; completed < serverWorkerResetThreshold; completed++ {
-		f, ok := <-s.serverWorkerChannel
+func (s *Server) serverWorker(ch chan *serverWorkerData) {
+	// To make sure all server workers don't reset at the same time, choose a
+	// random number of iterations before resetting.
+	threshold := serverWorkerResetThreshold + grpcrand.Intn(serverWorkerResetThreshold)
+	for completed := 0; completed < threshold; completed++ {
+		data, ok := <-ch
 		if !ok {
 			return
 		}
-		f()
+		s.handleStream(data.st, data.stream, s.traceInfo(data.st, data.stream))
+		data.wg.Done()
 	}
-	go s.serverWorker()
+	go s.serverWorker(ch)
 }
 
-// initServerWorkers creates worker goroutines and a channel to process incoming
+// initServerWorkers creates worker goroutines and channels to process incoming
 // connections to reduce the time spent overall on runtime.morestack.
 func (s *Server) initServerWorkers() {
-	s.serverWorkerChannel = make(chan func())
+	s.serverWorkerChannels = make([]chan *serverWorkerData, s.opts.numServerWorkers)
 	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
-		go s.serverWorker()
+		s.serverWorkerChannels[i] = make(chan *serverWorkerData)
+		go s.serverWorker(s.serverWorkerChannels[i])
 	}
 }
 
 func (s *Server) stopServerWorkers() {
-	close(s.serverWorkerChannel)
+	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
+		close(s.serverWorkerChannels[i])
+	}
 }
 
 // NewServer creates a gRPC server which has no service registered and has not
 // started to accept requests yet.
 func NewServer(opt ...ServerOption) *Server {
 	opts := defaultServerOptions
-	for _, o := range globalServerOptions {
+	for _, o := range extraServerOptions {
 		o.apply(&opts)
 	}
 	for _, o := range opt {
@@ -888,7 +897,7 @@ func (s *Server) drainServerTransports(addr string) {
 	s.mu.Lock()
 	conns := s.conns[addr]
 	for st := range conns {
-		st.Drain("")
+		st.Drain()
 	}
 	s.mu.Unlock()
 }
@@ -936,26 +945,26 @@ func (s *Server) serveStreams(st transport.ServerTransport) {
 	defer st.Close(errors.New("finished serving streams for the server transport"))
 	var wg sync.WaitGroup
 
-	streamQuota := newHandlerQuota(s.opts.maxConcurrentStreams)
+	var roundRobinCounter uint32
 	st.HandleStreams(func(stream *transport.Stream) {
 		wg.Add(1)
-
-		streamQuota.acquire()
-		f := func() {
-			defer streamQuota.release()
-			defer wg.Done()
-			s.handleStream(st, stream, s.traceInfo(st, stream))
-		}
-
 		if s.opts.numServerWorkers > 0 {
+			data := &serverWorkerData{st: st, wg: &wg, stream: stream}
 			select {
-			case s.serverWorkerChannel <- f:
-				return
+			case s.serverWorkerChannels[atomic.AddUint32(&roundRobinCounter, 1)%s.opts.numServerWorkers] <- data:
 			default:
 				// If all stream workers are busy, fallback to the default code path.
+				go func() {
+					s.handleStream(st, stream, s.traceInfo(st, stream))
+					wg.Done()
+				}()
 			}
+		} else {
+			go func() {
+				defer wg.Done()
+				s.handleStream(st, stream, s.traceInfo(st, stream))
+			}()
 		}
-		go f()
 	}, func(ctx context.Context, method string) context.Context {
 		if !EnableTracing {
 			return ctx
@@ -1044,7 +1053,7 @@ func (s *Server) addConn(addr string, st transport.ServerTransport) bool {
 	if s.drain {
 		// Transport added after we drained our existing conns: drain it
 		// immediately.
-		st.Drain("")
+		st.Drain()
 	}
 
 	if s.conns[addr] == nil {
@@ -1243,7 +1252,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			logEntry.PeerAddr = peer.Addr
 		}
 		for _, binlog := range binlogs {
-			binlog.Log(ctx, logEntry)
+			binlog.Log(logEntry)
 		}
 	}
 
@@ -1254,7 +1263,6 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	var comp, decomp encoding.Compressor
 	var cp Compressor
 	var dc Decompressor
-	var sendCompressorName string
 
 	// If dc is set and matches the stream's compression, use it.  Otherwise, try
 	// to find a matching registered compressor for decomp.
@@ -1275,18 +1283,12 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	// NOTE: this needs to be ahead of all handling, https://github.com/grpc/grpc-go/issues/686.
 	if s.opts.cp != nil {
 		cp = s.opts.cp
-		sendCompressorName = cp.Type()
+		stream.SetSendCompress(cp.Type())
 	} else if rc := stream.RecvCompress(); rc != "" && rc != encoding.Identity {
 		// Legacy compressor not specified; attempt to respond with same encoding.
 		comp = encoding.GetCompressor(rc)
 		if comp != nil {
-			sendCompressorName = comp.Name()
-		}
-	}
-
-	if sendCompressorName != "" {
-		if err := stream.SetSendCompress(sendCompressorName); err != nil {
-			return status.Errorf(codes.Internal, "grpc: failed to set send compressor: %v", err)
+			stream.SetSendCompress(rc)
 		}
 	}
 
@@ -1310,12 +1312,11 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		}
 		for _, sh := range shs {
 			sh.HandleRPC(stream.Context(), &stats.InPayload{
-				RecvTime:         time.Now(),
-				Payload:          v,
-				Length:           len(d),
-				WireLength:       payInfo.compressedLength + headerLen,
-				CompressedLength: payInfo.compressedLength,
-				Data:             d,
+				RecvTime:   time.Now(),
+				Payload:    v,
+				WireLength: payInfo.wireLength + headerLen,
+				Data:       d,
+				Length:     len(d),
 			})
 		}
 		if len(binlogs) != 0 {
@@ -1323,7 +1324,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 				Message: d,
 			}
 			for _, binlog := range binlogs {
-				binlog.Log(stream.Context(), cm)
+				binlog.Log(cm)
 			}
 		}
 		if trInfo != nil {
@@ -1356,7 +1357,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 					Header: h,
 				}
 				for _, binlog := range binlogs {
-					binlog.Log(stream.Context(), sh)
+					binlog.Log(sh)
 				}
 			}
 			st := &binarylog.ServerTrailer{
@@ -1364,7 +1365,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 				Err:     appErr,
 			}
 			for _, binlog := range binlogs {
-				binlog.Log(stream.Context(), st)
+				binlog.Log(st)
 			}
 		}
 		return appErr
@@ -1374,11 +1375,6 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	}
 	opts := &transport.Options{Last: true}
 
-	// Server handler could have set new compressor by calling SetSendCompressor.
-	// In case it is set, we need to use it for compressing outbound message.
-	if stream.SendCompress() != sendCompressorName {
-		comp = encoding.GetCompressor(stream.SendCompress())
-	}
 	if err := s.sendResponse(t, stream, reply, cp, opts, comp); err != nil {
 		if err == io.EOF {
 			// The entire stream is done (for unary RPC only).
@@ -1406,8 +1402,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 				Err:     appErr,
 			}
 			for _, binlog := range binlogs {
-				binlog.Log(stream.Context(), sh)
-				binlog.Log(stream.Context(), st)
+				binlog.Log(sh)
+				binlog.Log(st)
 			}
 		}
 		return err
@@ -1421,8 +1417,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			Message: reply,
 		}
 		for _, binlog := range binlogs {
-			binlog.Log(stream.Context(), sh)
-			binlog.Log(stream.Context(), sm)
+			binlog.Log(sh)
+			binlog.Log(sm)
 		}
 	}
 	if channelz.IsOn() {
@@ -1434,16 +1430,17 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	// TODO: Should we be logging if writing status failed here, like above?
 	// Should the logging be in WriteStatus?  Should we ignore the WriteStatus
 	// error or allow the stats handler to see it?
+	err = t.WriteStatus(stream, statusOK)
 	if len(binlogs) != 0 {
 		st := &binarylog.ServerTrailer{
 			Trailer: stream.Trailer(),
 			Err:     appErr,
 		}
 		for _, binlog := range binlogs {
-			binlog.Log(stream.Context(), st)
+			binlog.Log(st)
 		}
 	}
-	return t.WriteStatus(stream, statusOK)
+	return err
 }
 
 // chainStreamServerInterceptors chains all stream server interceptors into one.
@@ -1577,7 +1574,7 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 			logEntry.PeerAddr = peer.Addr
 		}
 		for _, binlog := range ss.binlogs {
-			binlog.Log(stream.Context(), logEntry)
+			binlog.Log(logEntry)
 		}
 	}
 
@@ -1600,18 +1597,12 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 	// NOTE: this needs to be ahead of all handling, https://github.com/grpc/grpc-go/issues/686.
 	if s.opts.cp != nil {
 		ss.cp = s.opts.cp
-		ss.sendCompressorName = s.opts.cp.Type()
+		stream.SetSendCompress(s.opts.cp.Type())
 	} else if rc := stream.RecvCompress(); rc != "" && rc != encoding.Identity {
 		// Legacy compressor not specified; attempt to respond with same encoding.
 		ss.comp = encoding.GetCompressor(rc)
 		if ss.comp != nil {
-			ss.sendCompressorName = rc
-		}
-	}
-
-	if ss.sendCompressorName != "" {
-		if err := stream.SetSendCompress(ss.sendCompressorName); err != nil {
-			return status.Errorf(codes.Internal, "grpc: failed to set send compressor: %v", err)
+			stream.SetSendCompress(rc)
 		}
 	}
 
@@ -1649,16 +1640,16 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 			ss.trInfo.tr.SetError()
 			ss.mu.Unlock()
 		}
+		t.WriteStatus(ss.s, appStatus)
 		if len(ss.binlogs) != 0 {
 			st := &binarylog.ServerTrailer{
 				Trailer: ss.s.Trailer(),
 				Err:     appErr,
 			}
 			for _, binlog := range ss.binlogs {
-				binlog.Log(stream.Context(), st)
+				binlog.Log(st)
 			}
 		}
-		t.WriteStatus(ss.s, appStatus)
 		// TODO: Should we log an error from WriteStatus here and below?
 		return appErr
 	}
@@ -1667,16 +1658,17 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 		ss.trInfo.tr.LazyLog(stringer("OK"), false)
 		ss.mu.Unlock()
 	}
+	err = t.WriteStatus(ss.s, statusOK)
 	if len(ss.binlogs) != 0 {
 		st := &binarylog.ServerTrailer{
 			Trailer: ss.s.Trailer(),
 			Err:     appErr,
 		}
 		for _, binlog := range ss.binlogs {
-			binlog.Log(stream.Context(), st)
+			binlog.Log(st)
 		}
 	}
-	return t.WriteStatus(ss.s, statusOK)
+	return err
 }
 
 func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Stream, trInfo *traceInfo) {
@@ -1854,7 +1846,7 @@ func (s *Server) GracefulStop() {
 	if !s.drain {
 		for _, conns := range s.conns {
 			for st := range conns {
-				st.Drain("graceful_stop")
+				st.Drain()
 			}
 		}
 		s.drain = true
@@ -1943,60 +1935,6 @@ func SendHeader(ctx context.Context, md metadata.MD) error {
 	return nil
 }
 
-// SetSendCompressor sets a compressor for outbound messages from the server.
-// It must not be called after any event that causes headers to be sent
-// (see ServerStream.SetHeader for the complete list). Provided compressor is
-// used when below conditions are met:
-//
-//   - compressor is registered via encoding.RegisterCompressor
-//   - compressor name must exist in the client advertised compressor names
-//     sent in grpc-accept-encoding header. Use ClientSupportedCompressors to
-//     get client supported compressor names.
-//
-// The context provided must be the context passed to the server's handler.
-// It must be noted that compressor name encoding.Identity disables the
-// outbound compression.
-// By default, server messages will be sent using the same compressor with
-// which request messages were sent.
-//
-// It is not safe to call SetSendCompressor concurrently with SendHeader and
-// SendMsg.
-//
-// # Experimental
-//
-// Notice: This function is EXPERIMENTAL and may be changed or removed in a
-// later release.
-func SetSendCompressor(ctx context.Context, name string) error {
-	stream, ok := ServerTransportStreamFromContext(ctx).(*transport.Stream)
-	if !ok || stream == nil {
-		return fmt.Errorf("failed to fetch the stream from the given context")
-	}
-
-	if err := validateSendCompressor(name, stream.ClientAdvertisedCompressors()); err != nil {
-		return fmt.Errorf("unable to set send compressor: %w", err)
-	}
-
-	return stream.SetSendCompress(name)
-}
-
-// ClientSupportedCompressors returns compressor names advertised by the client
-// via grpc-accept-encoding header.
-//
-// The context provided must be the context passed to the server's handler.
-//
-// # Experimental
-//
-// Notice: This function is EXPERIMENTAL and may be changed or removed in a
-// later release.
-func ClientSupportedCompressors(ctx context.Context) ([]string, error) {
-	stream, ok := ServerTransportStreamFromContext(ctx).(*transport.Stream)
-	if !ok || stream == nil {
-		return nil, fmt.Errorf("failed to fetch the stream from the given context %v", ctx)
-	}
-
-	return strings.Split(stream.ClientAdvertisedCompressors(), ","), nil
-}
-
 // SetTrailer sets the trailer metadata that will be sent when an RPC returns.
 // When called more than once, all the provided metadata will be merged.
 //
@@ -2030,52 +1968,4 @@ type channelzServer struct {
 
 func (c *channelzServer) ChannelzMetric() *channelz.ServerInternalMetric {
 	return c.s.channelzMetric()
-}
-
-// validateSendCompressor returns an error when given compressor name cannot be
-// handled by the server or the client based on the advertised compressors.
-func validateSendCompressor(name, clientCompressors string) error {
-	if name == encoding.Identity {
-		return nil
-	}
-
-	if !grpcutil.IsCompressorNameRegistered(name) {
-		return fmt.Errorf("compressor not registered %q", name)
-	}
-
-	for _, c := range strings.Split(clientCompressors, ",") {
-		if c == name {
-			return nil // found match
-		}
-	}
-	return fmt.Errorf("client does not support compressor %q", name)
-}
-
-// atomicSemaphore implements a blocking, counting semaphore. acquire should be
-// called synchronously; release may be called asynchronously.
-type atomicSemaphore struct {
-	n    int64
-	wait chan struct{}
-}
-
-func (q *atomicSemaphore) acquire() {
-	if atomic.AddInt64(&q.n, -1) < 0 {
-		// We ran out of quota.  Block until a release happens.
-		<-q.wait
-	}
-}
-
-func (q *atomicSemaphore) release() {
-	// N.B. the "<= 0" check below should allow for this to work with multiple
-	// concurrent calls to acquire, but also note that with synchronous calls to
-	// acquire, as our system does, n will never be less than -1.  There are
-	// fairness issues (queuing) to consider if this was to be generalized.
-	if atomic.AddInt64(&q.n, 1) <= 0 {
-		// An acquire was waiting on us.  Unblock it.
-		q.wait <- struct{}{}
-	}
-}
-
-func newHandlerQuota(n uint32) *atomicSemaphore {
-	return &atomicSemaphore{n: int64(n), wait: make(chan struct{}, 1)}
 }
