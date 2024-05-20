@@ -112,6 +112,8 @@ controller:
   securityContext: {}
   # -- Additional environment variables for the controller pod.
   env:
+    - name: ARM_CLOUD
+      value: "AZUREPUBLICCLOUD"
     - name: ARM_SUBSCRIPTION_ID
       value:
     - name: LOCATION

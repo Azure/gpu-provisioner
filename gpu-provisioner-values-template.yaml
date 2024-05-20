@@ -3,6 +3,8 @@ replicas: 1 # for better debugging experience
 controller:
   env:
     # Azure client settings
+    - name: ARM_CLOUD
+      value: "AZUREPUBLICCLOUD"
     - name: ARM_SUBSCRIPTION_ID
       value: ${AZURE_SUBSCRIPTION_ID}
     - name: LOCATION

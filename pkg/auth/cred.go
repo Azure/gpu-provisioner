@@ -17,37 +17,41 @@ package auth
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
+	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
 	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 const (
 	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
 )
 
-// ClientAssertionCredential authenticates an application with assertions provided by a callback function.
-type ClientAssertionCredential struct {
-	assertion, file string
-	client          confidential.Client
-	lastRead        time.Time
+// CredentialAuth authenticates an application with assertions provided by a callback function.
+type CredentialAuth struct {
+	assertion, authFile string
+	client              confidential.Client
+	Authorizer          autorest.Authorizer
+	TokenCredential     azcore.AccessToken
+	lastRead            time.Time
 }
 
-// NewCredential provides a token credential for msi and service principal auth
-func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCredential, error) {
-	if cfg == nil {
+// NewCredentialAuth provides a token credential for msi and service principal auth
+func NewCredentialAuth(ctx context.Context, config *Config) (*CredentialAuth, error) {
+	klog.Infof("NewCredentialAuth: %v", config)
+	if config == nil {
 		return nil, fmt.Errorf("failed to create credential, nil config provided")
 	}
 
@@ -61,55 +65,87 @@ func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCre
 	if tokenFilePath == "" || authority == "" {
 		return nil, fmt.Errorf("required environment variables not set, AZURE_FEDERATED_TOKEN_FILE: %s, AZURE_AUTHORITY_HOST: %s", tokenFilePath, authority)
 	}
-	c := &ClientAssertionCredential{file: tokenFilePath}
+	credAuth := &CredentialAuth{authFile: tokenFilePath}
 
-	var cred confidential.Credential
+	tokenOpt := policy.TokenRequestOptions{
+		Scopes: []string{strings.TrimSuffix(config.getCloudConfiguration().Services[cloud.ResourceManager].Endpoint, "/") + "/.default"},
+	}
+	var token azcore.AccessToken
 	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
 	if isE2E {
-		armClientCert, err := getE2ETestingCert(authorizer)
+		armClientCert, err := getE2ETestingCert(ctx)
 		if err != nil {
 			return nil, err
-		}
-		certPEM, keyPEM := splitPEMBlock([]byte(to.String(armClientCert)))
-		if len(certPEM) == 0 {
-			return nil, errors.New("malformed cert pem format")
 		}
 
-		// Load client cert
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		cert, privateKey, err := azidentity.ParseCertificates([]byte(armClientCert), nil)
+		if err != nil {
+			klog.Fatal(err)
+		}
+		ClientCred, err := azidentity.NewClientCertificateCredential(config.TenantID, config.UserAssignedIdentityID, cert, privateKey, &azidentity.ClientCertificateCredentialOptions{
+			SendCertificateChain: true,
+		})
 		if err != nil {
 			return nil, err
 		}
-		leafCert := []tls.Certificate{cert}
-		cred, err = confidential.NewCredFromCert([]*x509.Certificate{leafCert[0].Leaf}, keyPEM)
+
+		token, err = ClientCred.GetToken(ctx, tokenOpt)
 		if err != nil {
-			return nil, err
+			klog.ErrorS(err, "failed to acquire token")
+			return &CredentialAuth{}, errors.Wrap(err, "failed to acquire token")
 		}
+		klog.Infof("token: %s", token)
+		credAuth.TokenCredential = token
+		//cert, privateKey, err := confidential.CertFromPEM([]byte(armClientCert), "")
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//klog.Infof("privateKey: %s", privateKey)
+		//cred, err = confidential.NewCredFromCert(cert, privateKey)
+		//if err != nil {
+		//	return nil, err
+		//}
 	} else {
-		cred = confidential.NewCredFromAssertionCallback(
+		cred := confidential.NewCredFromAssertionCallback(
 			func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
-				return c.readJWTFromFS()
+				return credAuth.readJWTFromFS()
 			},
 		)
+		// create the confidential client to request an AAD token
+		confidentialClientApp, err := confidential.New(
+			fmt.Sprintf("%s%s/oauth2/token", authority, config.TenantID),
+			config.UserAssignedIdentityID,
+			cred)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create confidential client app: %w", err)
+		}
+		// get the token and authorizer from the confidential client
+		credAuth.client = confidentialClientApp
+		token, err = credAuth.GetToken(ctx, tokenOpt)
+		if err != nil {
+			klog.ErrorS(err, "failed to acquire token")
+			return &CredentialAuth{}, errors.Wrap(err, "failed to acquire token")
+		}
+		klog.Infof("token: %s", token)
+		credAuth.TokenCredential = token
 	}
 
-	// create the confidential client to request an AAD token
-	confidentialClientApp, err := confidential.New(
-		fmt.Sprintf("%s%s/oauth2/token", authority, cfg.TenantID),
-		cfg.UserAssignedIdentityID,
-		cred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create confidential client app: %w", err)
-	}
-	c.client = confidentialClientApp
+	credAuth.Authorizer = autorest.NewBearerAuthorizer(credAuth)
+	klog.Infof("credAuth.Authorizer.WithAuthorization(): %p", credAuth.Authorizer.WithAuthorization())
 
-	return c, nil
+	return credAuth, nil
+}
+
+// OAuthToken implements the OAuthTokenProvider interface. It returns the current access token.
+func (ca *CredentialAuth) OAuthToken() string {
+	return ca.TokenCredential.Token
 }
 
 // GetToken implements the TokenCredential interface
-func (c *ClientAssertionCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+func (ca *CredentialAuth) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	klog.Infof("GetToken")
 	// get the token from the confidential client
-	token, err := c.client.AcquireTokenByCredential(ctx, opts.Scopes)
+	token, err := ca.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		return azcore.AccessToken{}, err
 	}
@@ -120,51 +156,46 @@ func (c *ClientAssertionCredential) GetToken(ctx context.Context, opts policy.To
 	}, nil
 }
 
-// readJWTFromFS reads the jwt from file system
+func (ca *CredentialAuth) WithAuthorization() autorest.PrepareDecorator {
+	return autorest.WithBearerAuthorization(ca.TokenCredential.Token)
+}
+
+// readJWTFromFS reads the jwt from authFile system
 // Source: https://github.com/Azure/azure-workload-identity/blob/d126293e3c7c669378b225ad1b1f29cf6af4e56d/examples/msal-go/token_credential.go#L88
-func (c *ClientAssertionCredential) readJWTFromFS() (string, error) {
-	if now := time.Now(); c.lastRead.Add(5 * time.Minute).Before(now) {
-		content, err := os.ReadFile(c.file)
+func (ca *CredentialAuth) readJWTFromFS() (string, error) {
+	klog.Infof("readJWTFromFS")
+	if now := time.Now(); ca.lastRead.Add(5 * time.Minute).Before(now) {
+		content, err := os.ReadFile(ca.authFile)
 		if err != nil {
 			return "", err
 		}
-		c.assertion = string(content)
-		c.lastRead = now
+		ca.assertion = string(content)
+		ca.lastRead = now
 	}
-	return c.assertion, nil
+	return ca.assertion, nil
 }
-
-func getE2ETestingCert(authorizer autorest.Authorizer) (*string, error) {
-	e2eOverlayResourceVersion := os.Getenv(e2eOverlayResourceVersionKey)
+func getE2ETestingCert(ctx context.Context) (string, error) {
+	klog.Info("getE2ETestingCert")
+	e2eOverlayResourceVersion := "rscazghj6" //os.Getenv(e2eOverlayResourceVersionKey)
 	if e2eOverlayResourceVersion == "" {
-		return nil, fmt.Errorf("E2E overlay resource version is not set")
+		return "", fmt.Errorf("E2E overlay resource version is not set")
 	}
 
 	keyVaultUrl := fmt.Sprintf("https://hcp%s.vault.azure.net/", e2eOverlayResourceVersion)
-	client := keyvault.New()
-	client.Authorizer = authorizer
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	result, err := client.GetSecret(ctx, keyVaultUrl, "e2e-arm-client-cert", "")
-	if err != nil { //+gocover:ignore:block keyvault fetch
-		return nil, err
-	}
-	return result.Value, nil
-}
 
-// split the pem block to cert/key
-func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
-	for {
-		var derBlock *pem.Block
-		derBlock, pemBlock = pem.Decode(pemBlock)
-		if derBlock == nil {
-			break
-		}
-		if derBlock.Type == "CERTIFICATE" {
-			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
-		} else if derBlock.Type == "PRIVATE KEY" {
-			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
-		}
+	client := keyvault.New()
+	kvAuth, err := kvauth.NewAuthorizerFromEnvironment()
+	if err != nil {
+		return "", err
 	}
-	return certPEM, keyPEM
+	client.Authorizer = kvAuth
+
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	defer cancel()
+	result, err1 := client.GetSecret(ctx, keyVaultUrl, "e2e-arm-client-cert", "")
+	if err1 != nil {
+		return "", err1
+	}
+	klog.Infof("Cert result: %s", *result.Value)
+	return *result.Value, nil
 }

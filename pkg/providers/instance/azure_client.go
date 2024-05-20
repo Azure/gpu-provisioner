@@ -24,8 +24,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
@@ -56,12 +55,10 @@ func NewAZClientFromAPI(
 	}
 }
 
-func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
-	// Defaulting env to Azure Public Cloud.
-	env := azure.PublicCloud
+func CreateAzClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 	var err error
 
-	azClient, err := NewAZClient(cfg, &env)
+	azClient, err := NewAZClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -69,15 +66,8 @@ func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
 	return azClient, nil
 }
 
-func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
-	authorizer, err := auth.NewAuthorizer(cfg, env)
-	if err != nil {
-		return nil, err
-	}
-
-	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
-	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg, azClientConfig.Authorizer)
+func NewAZClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
+	credAuth, err := auth.NewCredentialAuth(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -86,21 +76,32 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	//	If not E2E, we use the default options
 	opts := armopts.DefaultArmOpts()
 	if isE2E {
-		opts = setArmClientOptions()
+		opts = SetArmClientOptions()
 	}
 
-	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
+	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, credAuth, opts)
 	if err != nil {
 		return nil, err
 	}
 	klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
+	interfacesClient, err := armnetwork.NewInterfacesClient(cfg.SubscriptionID, credAuth, opts)
+	if err != nil {
+		return nil, err
+	}
+	klog.V(5).Infof("Created network interface client %v using token credential", interfacesClient)
+
+	// TODO: this one is not enabled for rate limiting / throttling ...
+	// TODO Move this over to track 2 when skewer is migrated
+	skuClient := compute.NewResourceSkusClient(cfg.SubscriptionID)
+	skuClient.Authorizer = credAuth.Authorizer
+	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
 
 	return &AZClient{
 		agentPoolsClient: agentPoolClient,
 	}, nil
 }
 
-func setArmClientOptions() *arm.ClientOptions {
+func SetArmClientOptions() *arm.ClientOptions {
 	opt := new(arm.ClientOptions)
 
 	opt.PerCallPolicies = append(opt.PerCallPolicies,
