@@ -129,7 +129,7 @@ func RequestedResourcesRegistered(node *v1.Node, machine *v1alpha5.Machine) (v1.
 		// annotation says the resource should be there, but it's zero'd in both then the device plugin hasn't
 		// registered it yet.
 		// We wait on allocatable since this is the value that is used in scheduling
-		if resourceName != v1.ResourceStorage && resources.IsZero(node.Status.Allocatable[resourceName]) {
+		if resources.IsZero(node.Status.Allocatable[resourceName]) {
 			return resourceName, false
 		}
 	}

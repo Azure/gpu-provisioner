@@ -106,7 +106,6 @@ func (c *Controller) Builder(ctx context.Context, m manager.Manager) corecontrol
 		NewControllerManagedBy(m).
 		For(&v1alpha5.Machine{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithEventFilter(machineutil.KaitoMachinePredicate).
 		Watches(
 			&source.Kind{Type: &v1.Node{}},
 			machineutil.NodeEventHandler(ctx, c.kubeClient),

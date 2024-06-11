@@ -70,10 +70,6 @@ func (r *Registration) Reconcile(ctx context.Context, machine *v1alpha5.Machine)
 	logging.FromContext(ctx).Debugf("registered machine")
 	machine.StatusConditions().MarkTrue(v1alpha5.MachineRegistered)
 	machine.Status.NodeName = node.Name
-	// gpu-provisioner: update allocatable and capactity from node as well
-	machine.Status.Allocatable = node.Status.Allocatable
-	machine.Status.Capacity = node.Status.Capacity
-
 	metrics.MachinesRegisteredCounter.With(prometheus.Labels{
 		metrics.ProvisionerLabel: machine.Labels[v1alpha5.ProvisionerNameLabelKey],
 	}).Inc()
