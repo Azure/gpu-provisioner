@@ -24,7 +24,15 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/azure/gpu-provisioner/pkg/auth/awesome"
+	"github.com/azure/gpu-provisioner/pkg/utils"
+	"github.com/google/uuid"
+
+	// nolint SA1019 - deprecated package
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
+	"github.com/Azure/skewer"
+
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
@@ -67,34 +75,50 @@ func CreateAzClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 }
 
 func NewAZClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
-	credAuth, err := auth.NewCredentialAuth(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
 
+	skuClient := compute.NewResourceSkusClient(cfg.SubscriptionID)
 	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
 	//	If not E2E, we use the default options
-	opts := armopts.DefaultArmOpts()
+	var agentPoolClient AgentPoolsAPI
 	if isE2E {
-		opts = SetArmClientOptions()
-	}
+		optionsToUse := &arm.ClientOptions{}
+		e2eCloudConfig := auth.CloneCloudConfiguration(&cloud.AzurePublic)
+		e2eCloudConfig.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
+			Audience: auth.E2E_SERVICE_CONFIGURATION_AUDIENCE,
+			Endpoint: auth.HTTPSPrefix + auth.E2E_RP_INGRESS_ENDPOINT,
+		}
+		optionsToUse.ClientOptions.Cloud = *e2eCloudConfig
 
-	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, credAuth, opts)
-	if err != nil {
-		return nil, err
-	}
-	klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
-	interfacesClient, err := armnetwork.NewInterfacesClient(cfg.SubscriptionID, credAuth, opts)
-	if err != nil {
-		return nil, err
-	}
-	klog.V(5).Infof("Created network interface client %v using token credential", interfacesClient)
+		httpClient, err := auth.BuildHTTPClient(ctx)
+		optionsToUse.Transport = httpClient
 
-	// TODO: this one is not enabled for rate limiting / throttling ...
-	// TODO Move this over to track 2 when skewer is migrated
-	skuClient := compute.NewResourceSkusClient(cfg.SubscriptionID)
-	skuClient.Authorizer = credAuth.Authorizer
-	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
+		if err != nil {
+			return nil, err
+		}
+		apClient, err := awesome.NewAgentPoolsClient(cfg.SubscriptionID, &auth.DummyCredential{}, optionsToUse)
+		if err != nil {
+			return nil, err
+		}
+		klog.V(5).Infof("Created awesome agent pool client %v", agentPoolClient)
+
+		agentPoolClient = apClient
+		skuClient.Authorizer = &auth.DummyCredential{}
+	} else {
+		credAuth, err := auth.NewCredentialAuth(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		agentPoolClient, err = armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, credAuth, armopts.DefaultArmOpts())
+		if err != nil {
+			return nil, err
+		}
+		klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
+		// TODO: this one is not enabled for rate limiting / throttling ...
+		// TODO Move this over to track 2 when skewer is migrated
+		skuClient.Authorizer = credAuth.Authorizer
+		klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
+
+	}
 
 	return &AZClient{
 		agentPoolsClient: agentPoolClient,

@@ -17,7 +17,12 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -25,18 +30,22 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
 	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/pkg/errors"
+	"golang.org/x/net/http2"
 	"k8s.io/klog/v2"
 )
 
 const (
-	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
+	e2eOverlayResourceVersionKey       = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
+	E2E_RP_INGRESS_ENDPOINT_ADDRESS    = "rp.e2e.ig.e2e-aks.azure.com"
+	E2E_SERVICE_CONFIGURATION_AUDIENCE = "https://management.core.windows.net/"
+	HTTPSPrefix                        = "https://"
+	E2E_RP_INGRESS_ENDPOINT            = "rp.e2e.ig.e2e-aks.azure.com"
 )
 
 // CredentialAuth authenticates an application with assertions provided by a callback function.
@@ -70,41 +79,15 @@ func NewCredentialAuth(ctx context.Context, config *Config) (*CredentialAuth, er
 	tokenOpt := policy.TokenRequestOptions{
 		Scopes: []string{strings.TrimSuffix(config.getCloudConfiguration().Services[cloud.ResourceManager].Endpoint, "/") + "/.default"},
 	}
-	var token azcore.AccessToken
 	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
 	if isE2E {
-		armClientCert, err := getE2ETestingCert(ctx)
+		dummy := DummyCredential{}
+		token, err := dummy.GetToken(ctx, tokenOpt)
 		if err != nil {
 			return nil, err
 		}
-
-		cert, privateKey, err := azidentity.ParseCertificates([]byte(armClientCert), nil)
-		if err != nil {
-			klog.Fatal(err)
-		}
-		ClientCred, err := azidentity.NewClientCertificateCredential(config.TenantID, config.UserAssignedIdentityID, cert, privateKey, &azidentity.ClientCertificateCredentialOptions{
-			SendCertificateChain: true,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		token, err = ClientCred.GetToken(ctx, tokenOpt)
-		if err != nil {
-			klog.ErrorS(err, "failed to acquire token")
-			return &CredentialAuth{}, errors.Wrap(err, "failed to acquire token")
-		}
-		klog.Infof("token: %s", token)
 		credAuth.TokenCredential = token
-		//cert, privateKey, err := confidential.CertFromPEM([]byte(armClientCert), "")
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//klog.Infof("privateKey: %s", privateKey)
-		//cred, err = confidential.NewCredFromCert(cert, privateKey)
-		//if err != nil {
-		//	return nil, err
-		//}
+		return credAuth, nil
 	} else {
 		cred := confidential.NewCredFromAssertionCallback(
 			func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
@@ -121,17 +104,16 @@ func NewCredentialAuth(ctx context.Context, config *Config) (*CredentialAuth, er
 		}
 		// get the token and authorizer from the confidential client
 		credAuth.client = confidentialClientApp
-		token, err = credAuth.GetToken(ctx, tokenOpt)
+		token, err := credAuth.GetToken(ctx, tokenOpt)
 		if err != nil {
 			klog.ErrorS(err, "failed to acquire token")
 			return &CredentialAuth{}, errors.Wrap(err, "failed to acquire token")
 		}
 		klog.Infof("token: %s", token)
 		credAuth.TokenCredential = token
+		credAuth.Authorizer = autorest.NewBearerAuthorizer(credAuth)
+		klog.Infof("credAuth.Authorizer.WithAuthorization(): %p", credAuth.Authorizer.WithAuthorization())
 	}
-
-	credAuth.Authorizer = autorest.NewBearerAuthorizer(credAuth)
-	klog.Infof("credAuth.Authorizer.WithAuthorization(): %p", credAuth.Authorizer.WithAuthorization())
 
 	return credAuth, nil
 }
@@ -198,4 +180,123 @@ func getE2ETestingCert(ctx context.Context) (string, error) {
 	}
 	klog.Infof("Cert result: %s", *result.Value)
 	return *result.Value, nil
+}
+
+type E2ELogfFunc func(message string, args ...interface{})
+
+func BuildHTTPClient(ctx context.Context) (*http.Client, error) {
+	armClientCert, err := getE2ETestingCert(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	certPEM, keyPEM := SplitPEMBlock([]byte(armClientCert))
+	if len(certPEM) == 0 {
+		return nil, errors.New("malformed cert pem format")
+	}
+
+	// Load client cert
+	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	ok := caCertPool.AppendCertsFromPEM([]byte(certPEM))
+	if !ok {
+		return nil, errors.New("")
+	}
+	// Setup HTTPS client
+	// #nosec G402 the https cert in e2e is a private cert
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            caCertPool,
+		InsecureSkipVerify: true,
+	}
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == E2E_RP_INGRESS_ENDPOINT_ADDRESS {
+				addr = fmt.Sprintf("%s%s", fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", "heelayotebld95054108", "eastus"), ":443")
+			}
+
+			return dialer.DialContext(ctx, network, addr)
+		},
+		// Configuring DialContext disables HTTP/2 by default.
+		// our use of DialContext does not impair the use of http/2 so we can force it.
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	if err = configureHTTP2Transport(transport); err != nil { //+gocover:ignore:block - can't make this fail.
+		return nil, err
+	}
+	client := &http.Client{
+		Transport: transport,
+	}
+	return client, nil
+}
+
+// if no frame is received for 30s, the transport will issue a ping health check to the server.
+const http2ReadIdleTimeout = 30 * time.Second
+
+// we give 10s to the server to respond to the ping. if no response is received,
+// the transport will close the connection, so that the next request will open a new connection, and not
+// hit a context deadline exceeded error.
+const http2PingTimeout = 10 * time.Second
+
+// configureHTTP2Transport ensures that our defaultTransport is configured
+// with the http2 additional settings that work around the issue described here:
+// https://github.com/golang/go/issues/59690
+// azure sdk related issue is here:
+// https://github.com/Azure/azure-sdk-for-go/issues/21346#issuecomment-1699665586
+// This is called by the package init to ensure that our defaultTransport is always configured
+// you should not call this anywhere else.
+func configureHTTP2Transport(t *http.Transport) error {
+	// htt2Trans holds a reference to the default transport and configures "h2" middlewares that
+	// will use the below settings, making the standard http.Transport behave correctly.
+	http2Trans, err := http2.ConfigureTransports(t)
+	if err == nil {
+		// if no frame is received for 30s, the transport will issue a ping health check to the server.
+		http2Trans.ReadIdleTimeout = http2ReadIdleTimeout
+		// we give 10s to the server to respond to the ping. if no response is received,
+		// the transport will close the connection, so that the next request will open a new connection, and not
+		// hit a context deadline exceeded error.
+		http2Trans.PingTimeout = http2PingTimeout
+	}
+	return err
+}
+
+// split the pem block to cert/key
+func SplitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
+	for {
+		var derBlock *pem.Block
+		derBlock, pemBlock = pem.Decode(pemBlock)
+		if derBlock == nil {
+			break
+		}
+		if derBlock.Type == "CERTIFICATE" {
+			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
+		} else if derBlock.Type == "PRIVATE KEY" {
+			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
+		}
+	}
+
+	return certPEM, keyPEM
+}
+
+func CloneCloudConfiguration(cloudConfig *cloud.Configuration) *cloud.Configuration {
+	clone := *cloudConfig
+	clone.Services = make(map[cloud.ServiceName]cloud.ServiceConfiguration)
+	for k, v := range cloudConfig.Services {
+		clone.Services[k] = v
+	}
+	return &clone
 }
