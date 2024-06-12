@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"k8s.io/klog/v2"
 
 	"net/http"
 	"net/url"
@@ -105,61 +106,6 @@ func (client *AgentPoolsClient) abortLatestOperation(ctx context.Context, resour
 // abortLatestOperationCreateRequest creates the AbortLatestOperation request.
 func (client *AgentPoolsClient) abortLatestOperationCreateRequest(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *armcontainerservice.AgentPoolsClientBeginAbortLatestOperationOptions) (*policy.Request, error) {
 	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedclusters/{resourceName}/agentPools/{agentPoolName}/abort"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	if resourceGroupName == "" {
-		return nil, errors.New("parameter resourceGroupName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
-	if resourceName == "" {
-		return nil, errors.New("parameter resourceName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceName}", url.PathEscape(resourceName))
-	if agentPoolName == "" {
-		return nil, errors.New("parameter agentPoolName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{agentPoolName}", url.PathEscape(agentPoolName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2024-03-02-preview")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	return req, nil
-}
-
-// CaptureSecurityVHDSnapshot - [Internal Only] Capture Security VHD Snapshot of an agent pool in the specified managed cluster.
-// If the operation fails it returns an *azcore.ResponseError type.
-//
-// Generated from API version 2024-03-02-preview
-func (client *AgentPoolsClient) captureSecurityVHDSnapshot(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *AgentPoolsClientBeginCaptureSecurityVHDSnapshotOptions) (*http.Response, error) {
-	var err error
-	const operationName = "AgentPoolsClient.BeginCaptureSecurityVHDSnapshot"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
-	defer func() { endSpan(err) }()
-	req, err := client.captureSecurityVHDSnapshotCreateRequest(ctx, resourceGroupName, resourceName, agentPoolName, options)
-	if err != nil {
-		return nil, err
-	}
-	httpResp, err := client.internal.Pipeline().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if !runtime.HasStatusCode(httpResp, http.StatusAccepted, http.StatusNoContent) {
-		err = runtime.NewResponseError(httpResp)
-		return nil, err
-	}
-	return httpResp, nil
-}
-
-// captureSecurityVHDSnapshotCreateRequest creates the CaptureSecurityVHDSnapshot request.
-func (client *AgentPoolsClient) captureSecurityVHDSnapshotCreateRequest(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *AgentPoolsClientBeginCaptureSecurityVHDSnapshotOptions) (*policy.Request, error) {
-	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}/captureSecurityVHDSnapshot"
 	if client.subscriptionID == "" {
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
@@ -353,64 +299,6 @@ func (client *AgentPoolsClient) deleteCreateRequest(ctx context.Context, resourc
 	return req, nil
 }
 
-// DeleteMachines - Deletes specific machines in an agent pool.
-// If the operation fails it returns an *azcore.ResponseError type.
-//
-// Generated from API version 2024-03-02-preview
-func (client *AgentPoolsClient) deleteMachines(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, machines AgentPoolDeleteMachinesParameter, options *AgentPoolsClientBeginDeleteMachinesOptions) (*http.Response, error) {
-	var err error
-	const operationName = "AgentPoolsClient.BeginDeleteMachines"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
-	defer func() { endSpan(err) }()
-	req, err := client.deleteMachinesCreateRequest(ctx, resourceGroupName, resourceName, agentPoolName, machines, options)
-	if err != nil {
-		return nil, err
-	}
-	httpResp, err := client.internal.Pipeline().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if !runtime.HasStatusCode(httpResp, http.StatusAccepted) {
-		err = runtime.NewResponseError(httpResp)
-		return nil, err
-	}
-	return httpResp, nil
-}
-
-// deleteMachinesCreateRequest creates the DeleteMachines request.
-func (client *AgentPoolsClient) deleteMachinesCreateRequest(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, machines AgentPoolDeleteMachinesParameter, options *AgentPoolsClientBeginDeleteMachinesOptions) (*policy.Request, error) {
-	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}/deleteMachines"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	if resourceGroupName == "" {
-		return nil, errors.New("parameter resourceGroupName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
-	if resourceName == "" {
-		return nil, errors.New("parameter resourceName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceName}", url.PathEscape(resourceName))
-	if agentPoolName == "" {
-		return nil, errors.New("parameter agentPoolName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{agentPoolName}", url.PathEscape(agentPoolName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2024-03-02-preview")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	if err := runtime.MarshalAsJSON(req, machines); err != nil {
-		return nil, err
-	}
-	return req, nil
-}
-
 // Get - Gets the specified managed cluster agent pool.
 // If the operation fails it returns an *azcore.ResponseError type.
 //
@@ -480,142 +368,6 @@ func (client *AgentPoolsClient) getHandleResponse(resp *http.Response) (armconta
 	return result, nil
 }
 
-// GetAvailableAgentPoolVersions - See supported Kubernetes versions [https://docs.microsoft.com/azure/aks/supported-kubernetes-versions]
-// for more details about the version lifecycle.
-// If the operation fails it returns an *azcore.ResponseError type.
-//
-// Generated from API version 2024-03-02-preview
-//   - resourceGroupName - The name of the resource group. The name is case insensitive.
-//   - resourceName - The name of the managed cluster resource.
-//   - options - AgentPoolsClientGetAvailableAgentPoolVersionsOptions contains the optional parameters for the AgentPoolsClient.GetAvailableAgentPoolVersions
-//     method.
-func (client *AgentPoolsClient) GetAvailableAgentPoolVersions(ctx context.Context, resourceGroupName string, resourceName string, options *AgentPoolsClientGetAvailableAgentPoolVersionsOptions) (AgentPoolsClientGetAvailableAgentPoolVersionsResponse, error) {
-	var err error
-	const operationName = "AgentPoolsClient.GetAvailableAgentPoolVersions"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
-	defer func() { endSpan(err) }()
-	req, err := client.getAvailableAgentPoolVersionsCreateRequest(ctx, resourceGroupName, resourceName, options)
-	if err != nil {
-		return AgentPoolsClientGetAvailableAgentPoolVersionsResponse{}, err
-	}
-	httpResp, err := client.internal.Pipeline().Do(req)
-	if err != nil {
-		return AgentPoolsClientGetAvailableAgentPoolVersionsResponse{}, err
-	}
-	if !runtime.HasStatusCode(httpResp, http.StatusOK) {
-		err = runtime.NewResponseError(httpResp)
-		return AgentPoolsClientGetAvailableAgentPoolVersionsResponse{}, err
-	}
-	resp, err := client.getAvailableAgentPoolVersionsHandleResponse(httpResp)
-	return resp, err
-}
-
-// getAvailableAgentPoolVersionsCreateRequest creates the GetAvailableAgentPoolVersions request.
-func (client *AgentPoolsClient) getAvailableAgentPoolVersionsCreateRequest(ctx context.Context, resourceGroupName string, resourceName string, options *AgentPoolsClientGetAvailableAgentPoolVersionsOptions) (*policy.Request, error) {
-	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/availableAgentPoolVersions"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	if resourceGroupName == "" {
-		return nil, errors.New("parameter resourceGroupName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
-	if resourceName == "" {
-		return nil, errors.New("parameter resourceName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceName}", url.PathEscape(resourceName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2024-03-02-preview")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	return req, nil
-}
-
-// getAvailableAgentPoolVersionsHandleResponse handles the GetAvailableAgentPoolVersions response.
-func (client *AgentPoolsClient) getAvailableAgentPoolVersionsHandleResponse(resp *http.Response) (AgentPoolsClientGetAvailableAgentPoolVersionsResponse, error) {
-	result := AgentPoolsClientGetAvailableAgentPoolVersionsResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.AgentPoolAvailableVersions); err != nil {
-		return AgentPoolsClientGetAvailableAgentPoolVersionsResponse{}, err
-	}
-	return result, nil
-}
-
-// GetUpgradeProfile - Gets the upgrade profile for an agent pool.
-// If the operation fails it returns an *azcore.ResponseError type.
-//
-// Generated from API version 2024-03-02-preview
-//   - resourceGroupName - The name of the resource group. The name is case insensitive.
-//   - resourceName - The name of the managed cluster resource.
-//   - agentPoolName - The name of the agent pool.
-//   - options - AgentPoolsClientGetUpgradeProfileOptions contains the optional parameters for the AgentPoolsClient.GetUpgradeProfile
-//     method.
-func (client *AgentPoolsClient) GetUpgradeProfile(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *AgentPoolsClientGetUpgradeProfileOptions) (AgentPoolsClientGetUpgradeProfileResponse, error) {
-	var err error
-	const operationName = "AgentPoolsClient.GetUpgradeProfile"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
-	defer func() { endSpan(err) }()
-	req, err := client.getUpgradeProfileCreateRequest(ctx, resourceGroupName, resourceName, agentPoolName, options)
-	if err != nil {
-		return AgentPoolsClientGetUpgradeProfileResponse{}, err
-	}
-	httpResp, err := client.internal.Pipeline().Do(req)
-	if err != nil {
-		return AgentPoolsClientGetUpgradeProfileResponse{}, err
-	}
-	if !runtime.HasStatusCode(httpResp, http.StatusOK) {
-		err = runtime.NewResponseError(httpResp)
-		return AgentPoolsClientGetUpgradeProfileResponse{}, err
-	}
-	resp, err := client.getUpgradeProfileHandleResponse(httpResp)
-	return resp, err
-}
-
-// getUpgradeProfileCreateRequest creates the GetUpgradeProfile request.
-func (client *AgentPoolsClient) getUpgradeProfileCreateRequest(ctx context.Context, resourceGroupName string, resourceName string, agentPoolName string, options *AgentPoolsClientGetUpgradeProfileOptions) (*policy.Request, error) {
-	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerService/managedClusters/{resourceName}/agentPools/{agentPoolName}/upgradeProfiles/default"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	if resourceGroupName == "" {
-		return nil, errors.New("parameter resourceGroupName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
-	if resourceName == "" {
-		return nil, errors.New("parameter resourceName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceName}", url.PathEscape(resourceName))
-	if agentPoolName == "" {
-		return nil, errors.New("parameter agentPoolName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{agentPoolName}", url.PathEscape(agentPoolName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2024-03-02-preview")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	return req, nil
-}
-
-// getUpgradeProfileHandleResponse handles the GetUpgradeProfile response.
-func (client *AgentPoolsClient) getUpgradeProfileHandleResponse(resp *http.Response) (AgentPoolsClientGetUpgradeProfileResponse, error) {
-	result := AgentPoolsClientGetUpgradeProfileResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.AgentPoolUpgradeProfile); err != nil {
-		return AgentPoolsClientGetUpgradeProfileResponse{}, err
-	}
-	return result, nil
-}
-
 // NewListPager - Gets a list of agent pools in the specified managed cluster.
 //
 // Generated from API version 2024-03-02-preview
@@ -623,6 +375,7 @@ func (client *AgentPoolsClient) getUpgradeProfileHandleResponse(resp *http.Respo
 //   - resourceName - The name of the managed cluster resource.
 //   - options - AgentPoolsClientListOptions contains the optional parameters for the AgentPoolsClient.NewListPager method.
 func (client *AgentPoolsClient) NewListPager(resourceGroupName string, resourceName string, options *armcontainerservice.AgentPoolsClientListOptions) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse] {
+	klog.Info("Awesome NewListPager")
 	return runtime.NewPager(runtime.PagingHandler[armcontainerservice.AgentPoolsClientListResponse]{
 		More: func(page armcontainerservice.AgentPoolsClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0

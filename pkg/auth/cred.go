@@ -41,11 +41,12 @@ import (
 )
 
 const (
-	e2eOverlayResourceVersionKey       = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
-	E2E_RP_INGRESS_ENDPOINT_ADDRESS    = "rp.e2e.ig.e2e-aks.azure.com"
-	E2E_SERVICE_CONFIGURATION_AUDIENCE = "https://management.core.windows.net/"
 	HTTPSPrefix                        = "https://"
+	E2E_SERVICE_CONFIGURATION_AUDIENCE = "https://management.core.windows.net/"
+	HTTPS_PORT                         = ":443"
 	E2E_RP_INGRESS_ENDPOINT            = "rp.e2e.ig.e2e-aks.azure.com"
+	E2E_RP_INGRESS_ENDPOINT_ADDRESS    = E2E_RP_INGRESS_ENDPOINT + HTTPS_PORT
+	e2eOverlayResourceVersionKey       = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
 )
 
 // CredentialAuth authenticates an application with assertions provided by a callback function.
@@ -158,7 +159,7 @@ func (ca *CredentialAuth) readJWTFromFS() (string, error) {
 }
 func getE2ETestingCert(ctx context.Context) (string, error) {
 	klog.Info("getE2ETestingCert")
-	e2eOverlayResourceVersion := "rscazghj6" //os.Getenv(e2eOverlayResourceVersionKey)
+	e2eOverlayResourceVersion := "rw9erfy9x" //os.Getenv(e2eOverlayResourceVersionKey)
 	if e2eOverlayResourceVersion == "" {
 		return "", fmt.Errorf("E2E overlay resource version is not set")
 	}
@@ -178,7 +179,6 @@ func getE2ETestingCert(ctx context.Context) (string, error) {
 	if err1 != nil {
 		return "", err1
 	}
-	klog.Infof("Cert result: %s", *result.Value)
 	return *result.Value, nil
 }
 
@@ -190,18 +190,18 @@ func BuildHTTPClient(ctx context.Context) (*http.Client, error) {
 		return nil, err
 	}
 
-	certPEM, keyPEM := SplitPEMBlock([]byte(armClientCert))
+	certPEM, keyPEM := splitPEMBlock([]byte(armClientCert))
 	if len(certPEM) == 0 {
 		return nil, errors.New("malformed cert pem format")
 	}
 
 	// Load client cert
-	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
 	}
 	caCertPool := x509.NewCertPool()
-	ok := caCertPool.AppendCertsFromPEM([]byte(certPEM))
+	ok := caCertPool.AppendCertsFromPEM(certPEM)
 	if !ok {
 		return nil, errors.New("")
 	}
@@ -216,14 +216,17 @@ func BuildHTTPClient(ctx context.Context) (*http.Client, error) {
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
+	rpIngressEndpoint := fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", "heelayotebld95712747", "eastus")
+	rpIngressAddress := normalizeHostPort(rpIngressEndpoint, HTTPS_PORT)
 
 	transport := &http.Transport{
 		TLSClientConfig: tlsConfig,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			klog.Infof("DialContext Address before: %s", addr)
 			if addr == E2E_RP_INGRESS_ENDPOINT_ADDRESS {
-				addr = fmt.Sprintf("%s%s", fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", "heelayotebld95054108", "eastus"), ":443")
+				addr = rpIngressAddress
 			}
-
+			klog.Infof("DialContext Address: %s", addr)
 			return dialer.DialContext(ctx, network, addr)
 		},
 		// Configuring DialContext disables HTTP/2 by default.
@@ -275,7 +278,7 @@ func configureHTTP2Transport(t *http.Transport) error {
 }
 
 // split the pem block to cert/key
-func SplitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
+func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
 	for {
 		var derBlock *pem.Block
 		derBlock, pemBlock = pem.Decode(pemBlock)
@@ -299,4 +302,11 @@ func CloneCloudConfiguration(cloudConfig *cloud.Configuration) *cloud.Configurat
 		clone.Services[k] = v
 	}
 	return &clone
+}
+
+func normalizeHostPort(hostMaybeWithPort string, defaultPortWithColon string) string {
+	if _, _, err := net.SplitHostPort(hostMaybeWithPort); err == nil {
+		return hostMaybeWithPort // host already has a port
+	}
+	return fmt.Sprintf("%s%s", hostMaybeWithPort, defaultPortWithColon)
 }

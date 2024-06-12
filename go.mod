@@ -14,12 +14,13 @@ require (
 	github.com/Azure/go-armbalancer v0.0.2
 	github.com/Azure/go-autorest/autorest v0.11.29
 	github.com/Azure/go-autorest/autorest/to v0.4.0
-	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2
-	github.com/awslabs/operatorpkg v0.0.0-20240805231134-67d0acfb6306
-	github.com/google/uuid v1.6.0
-	github.com/imdario/mergo v0.3.16
-	github.com/onsi/ginkgo/v2 v2.19.1
-	github.com/onsi/gomega v1.34.1
+	github.com/Azure/skewer v0.0.19
+	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1
+	github.com/aws/karpenter-core v0.29.2
+	github.com/go-playground/validator/v10 v10.13.0
+	github.com/onsi/ginkgo/v2 v2.11.0
+	github.com/onsi/gomega v1.27.10
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.46.0
 	github.com/stretchr/testify v1.9.0
@@ -73,10 +74,11 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20240424215950-a892ee059fd6 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
+	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect

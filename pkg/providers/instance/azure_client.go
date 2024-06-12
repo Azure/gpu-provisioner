@@ -17,18 +17,13 @@ package instance
 
 import (
 	"context"
-	"maps"
-	"net/http"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/auth/awesome"
 	"github.com/azure/gpu-provisioner/pkg/utils"
-	"github.com/google/uuid"
-
 	// nolint SA1019 - deprecated package
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
 	"github.com/Azure/skewer"
@@ -38,10 +33,6 @@ import (
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
 	"github.com/google/uuid"
 	"k8s.io/klog/v2"
-)
-
-const (
-	RPReferer = "rp.e2e.ig.e2e-aks.azure.com"
 )
 
 type AgentPoolsAPI interface {
@@ -64,8 +55,9 @@ func NewAZClientFromAPI(
 }
 
 func CreateAzClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
-	var err error
+	klog.Infof("CreateAzClient")
 
+	var err error
 	azClient, err := NewAZClient(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -75,13 +67,14 @@ func CreateAzClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 }
 
 func NewAZClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
-
+	klog.Infof("NewAZClient")
 	skuClient := compute.NewResourceSkusClient(cfg.SubscriptionID)
 	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
 	//	If not E2E, we use the default options
 	var agentPoolClient AgentPoolsAPI
 	if isE2E {
 		optionsToUse := &arm.ClientOptions{}
+
 		e2eCloudConfig := auth.CloneCloudConfiguration(&cloud.AzurePublic)
 		e2eCloudConfig.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
 			Audience: auth.E2E_SERVICE_CONFIGURATION_AUDIENCE,
@@ -90,18 +83,17 @@ func NewAZClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 		optionsToUse.ClientOptions.Cloud = *e2eCloudConfig
 
 		httpClient, err := auth.BuildHTTPClient(ctx)
+		if err != nil {
+			return nil, err
+		}
 		optionsToUse.Transport = httpClient
 
+		agentPoolClient, err = awesome.NewAgentPoolsClient(cfg.SubscriptionID, &auth.DummyCredential{}, optionsToUse)
 		if err != nil {
 			return nil, err
 		}
-		apClient, err := awesome.NewAgentPoolsClient(cfg.SubscriptionID, &auth.DummyCredential{}, optionsToUse)
-		if err != nil {
-			return nil, err
-		}
-		klog.V(5).Infof("Created awesome agent pool client %v", agentPoolClient)
+		klog.Infof("Created awesome agent pool client %v", agentPoolClient)
 
-		agentPoolClient = apClient
 		skuClient.Authorizer = &auth.DummyCredential{}
 	} else {
 		credAuth, err := auth.NewCredentialAuth(ctx, cfg)
@@ -112,45 +104,14 @@ func NewAZClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 		if err != nil {
 			return nil, err
 		}
-		klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
+		klog.Infof("Created agent pool client %v using token credential", agentPoolClient)
 		// TODO: this one is not enabled for rate limiting / throttling ...
 		// TODO Move this over to track 2 when skewer is migrated
 		skuClient.Authorizer = credAuth.Authorizer
-		klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
-
+		klog.Infof("Created sku client with authorizer: %v", skuClient)
 	}
 
 	return &AZClient{
 		agentPoolsClient: agentPoolClient,
 	}, nil
-}
-
-func SetArmClientOptions() *arm.ClientOptions {
-	opt := new(arm.ClientOptions)
-
-	opt.PerCallPolicies = append(opt.PerCallPolicies,
-		PolicySetHeaders{
-			"Referer": []string{RPReferer},
-		},
-		PolicySetHeaders{
-			"x-ms-correlation-request-id": []string{uuid.New().String()},
-		},
-	)
-	opt.Cloud.Services = maps.Clone(opt.Cloud.Services) // we need this because map is a reference type
-	opt.Cloud.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
-		Audience: cloud.AzurePublic.Services[cloud.ResourceManager].Audience,
-		Endpoint: "https://" + RPReferer,
-	}
-	return opt
-}
-
-// PolicySetHeaders sets http header
-type PolicySetHeaders http.Header
-
-func (p PolicySetHeaders) Do(req *policy.Request) (*http.Response, error) {
-	header := req.Raw().Header
-	for k, v := range p {
-		header[k] = v
-	}
-	return req.Next()
 }

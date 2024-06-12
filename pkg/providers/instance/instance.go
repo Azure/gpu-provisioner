@@ -170,7 +170,6 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
-		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
 		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
 	}
 
