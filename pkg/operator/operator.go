@@ -38,7 +38,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		logging.FromContext(ctx).Errorf("creating Azure config, %s", err)
 	}
 
-	azClient, err := instance.CreateAzClient(ctx, azConfig)
+	azClient, err := instance.NewAZClient(ctx, azConfig)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("creating Azure client, %s", err)
 		// Let us panic here, instead of crashing in the following code.

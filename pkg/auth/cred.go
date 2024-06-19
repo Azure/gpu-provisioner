@@ -32,7 +32,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
 	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
-	"github.com/Azure/go-autorest/autorest"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/pkg/errors"
@@ -53,7 +52,6 @@ const (
 type CredentialAuth struct {
 	assertion, authFile string
 	client              confidential.Client
-	Authorizer          autorest.Authorizer
 	TokenCredential     azcore.AccessToken
 	lastRead            time.Time
 }
@@ -103,7 +101,7 @@ func NewCredentialAuth(ctx context.Context, config *Config) (*CredentialAuth, er
 		if err != nil {
 			return nil, fmt.Errorf("failed to create confidential client app: %w", err)
 		}
-		// get the token and authorizer from the confidential client
+		// get the token from the confidential client
 		credAuth.client = confidentialClientApp
 		token, err := credAuth.GetToken(ctx, tokenOpt)
 		if err != nil {
@@ -112,8 +110,6 @@ func NewCredentialAuth(ctx context.Context, config *Config) (*CredentialAuth, er
 		}
 		klog.Infof("token: %s", token)
 		credAuth.TokenCredential = token
-		credAuth.Authorizer = autorest.NewBearerAuthorizer(credAuth)
-		klog.Infof("credAuth.Authorizer.WithAuthorization(): %p", credAuth.Authorizer.WithAuthorization())
 	}
 
 	return credAuth, nil
@@ -139,10 +135,6 @@ func (ca *CredentialAuth) GetToken(ctx context.Context, opts policy.TokenRequest
 	}, nil
 }
 
-func (ca *CredentialAuth) WithAuthorization() autorest.PrepareDecorator {
-	return autorest.WithBearerAuthorization(ca.TokenCredential.Token)
-}
-
 // readJWTFromFS reads the jwt from authFile system
 // Source: https://github.com/Azure/azure-workload-identity/blob/d126293e3c7c669378b225ad1b1f29cf6af4e56d/examples/msal-go/token_credential.go#L88
 func (ca *CredentialAuth) readJWTFromFS() (string, error) {
@@ -159,7 +151,7 @@ func (ca *CredentialAuth) readJWTFromFS() (string, error) {
 }
 func getE2ETestingCert(ctx context.Context) (string, error) {
 	klog.Info("getE2ETestingCert")
-	e2eOverlayResourceVersion := "rw9erfy9x" //os.Getenv(e2eOverlayResourceVersionKey)
+	e2eOverlayResourceVersion := "r3evvhcpc" //os.Getenv(e2eOverlayResourceVersionKey)
 	if e2eOverlayResourceVersion == "" {
 		return "", fmt.Errorf("E2E overlay resource version is not set")
 	}
@@ -216,7 +208,7 @@ func BuildHTTPClient(ctx context.Context) (*http.Client, error) {
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
-	rpIngressEndpoint := fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", "heelayotebld95712747", "eastus")
+	rpIngressEndpoint := fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", "heelayotebld96185106", "eastus")
 	rpIngressAddress := normalizeHostPort(rpIngressEndpoint, HTTPS_PORT)
 
 	transport := &http.Transport{

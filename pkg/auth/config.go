@@ -53,7 +53,6 @@ func (cfg *Config) BaseVars() {
 }
 
 // BuildAzureConfig returns a Config object for the Azure clients
-// nolint: gocyclo
 func BuildAzureConfig() (*Config, error) {
 	cfg := &Config{}
 	cfg.BaseVars()
