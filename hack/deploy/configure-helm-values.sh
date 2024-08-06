@@ -23,9 +23,6 @@ AZURE_RESOURCE_GROUP_MC=$(jq -r ".nodeResourceGroup" <<< "$AKS_JSON")
 AZURE_TENANT_ID=$(az account show -o json |jq -r ".tenantId")
 AZURE_SUBSCRIPTION_ID=$(az account show -o json |jq -r ".id")
 
-
-
-
 GPU_PROVISIONER_USER_ASSIGNED_CLIENT_ID=$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${AZURE_GPU_PROVISIONER_USER_ASSIGNED_IDENTITY_NAME}" --query 'clientId' -otsv)
 
 export CLUSTER_NAME AZURE_LOCATION AZURE_RESOURCE_GROUP_MC GPU_PROVISIONER_USER_ASSIGNED_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
