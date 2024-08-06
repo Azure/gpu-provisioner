@@ -62,9 +62,9 @@ az-mkacr: az-mkrg ## Create test ACR
 	az acr login  --name $(AZURE_ACR_NAME)
 
 az-mkaks: az-mkacr ## Create test AKS cluster (with msi, oidc and workload identity enabled)
-	az aks create          --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
+	az aks create  --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP) --attach-acr $(AZURE_ACR_NAME) \
 	--kubernetes-version $(AKS_K8S_VERSION) --node-count 1 --generate-ssh-keys \
-	--enable-managed-identity  --enable-workload-identity --enable-oidc-issuer -o none
+	--enable-managed-identity  --enable-workload-identity --enable-oidc-issuer --node-vm-size Standard_D2s_v3 -o none
 	az aks get-credentials --name $(AZURE_CLUSTER_NAME) --resource-group $(AZURE_RESOURCE_GROUP)
 
 az-rmrg: ## Destroy test ACR and AKS cluster by deleting the resource group (use with care!)
