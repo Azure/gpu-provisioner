@@ -11,7 +11,7 @@ It implements the cloud provider interfaces to realize the following abstraction
 ## Prerequisites
 - An Azure subscription.
 - An AKS cluster with [OIDC](https://learn.microsoft.com/en-us/azure/aks/use-oidc-issuer) addon installed. Please refer to the [Karpenter installation guide](https://karpenter.sh/docs/installation/) for more details.
-- 
+
 ## Install gpu-provisioner
 
 Please check the installation guidance [here](./charts/gpu-provisioner/README.md).
@@ -23,6 +23,7 @@ After deploying the controller successfully, one can apply the yaml in `/example
 ## Important note
 - The gpu-provisioner assumes the Machine CR name is **equal** to the agent pool name. Hence, **the machine CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.
 - The machine CR needs to have a label with key `kaito.sh/workspace`.
+```
 
 ## Source Attribution
 
