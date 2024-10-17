@@ -32,7 +32,6 @@ spec:
         {{- with .Values.podAnnotations }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -74,6 +73,16 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: KARPENTER_SERVICE
+              value: {{ include "gpu-provisioner.fullname" . }}
+            - name: METRICS_PORT
+              value: "{{ .Values.controller.metrics.port }}"
+            - name: HEALTH_PROBE_PORT
+              value: "{{ .Values.controller.healthProbe.port }}"
+            - name: WEBHOOK_PORT
+              value: "{{ .Values.controller.webhook.port }}"
+            - name: WEBHOOK_METRICS_PORT
+              value: "{{ .Values.controller.webhookMetrics.port }}"
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}

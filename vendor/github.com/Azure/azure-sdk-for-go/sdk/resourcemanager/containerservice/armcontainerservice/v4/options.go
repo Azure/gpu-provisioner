@@ -166,6 +166,18 @@ type ManagedClustersClientGetCommandResultOptions struct {
 	// placeholder for future optional parameters
 }
 
+// ManagedClustersClientGetMeshRevisionProfileOptions contains the optional parameters for the ManagedClustersClient.GetMeshRevisionProfile
+// method.
+type ManagedClustersClientGetMeshRevisionProfileOptions struct {
+	// placeholder for future optional parameters
+}
+
+// ManagedClustersClientGetMeshUpgradeProfileOptions contains the optional parameters for the ManagedClustersClient.GetMeshUpgradeProfile
+// method.
+type ManagedClustersClientGetMeshUpgradeProfileOptions struct {
+	// placeholder for future optional parameters
+}
+
 // ManagedClustersClientGetOSOptionsOptions contains the optional parameters for the ManagedClustersClient.GetOSOptions method.
 type ManagedClustersClientGetOSOptionsOptions struct {
 	// The resource type for which the OS options needs to be returned
@@ -218,6 +230,18 @@ type ManagedClustersClientListClusterUserCredentialsOptions struct {
 // ManagedClustersClientListKubernetesVersionsOptions contains the optional parameters for the ManagedClustersClient.ListKubernetesVersions
 // method.
 type ManagedClustersClientListKubernetesVersionsOptions struct {
+	// placeholder for future optional parameters
+}
+
+// ManagedClustersClientListMeshRevisionProfilesOptions contains the optional parameters for the ManagedClustersClient.NewListMeshRevisionProfilesPager
+// method.
+type ManagedClustersClientListMeshRevisionProfilesOptions struct {
+	// placeholder for future optional parameters
+}
+
+// ManagedClustersClientListMeshUpgradeProfilesOptions contains the optional parameters for the ManagedClustersClient.NewListMeshUpgradeProfilesPager
+// method.
+type ManagedClustersClientListMeshUpgradeProfilesOptions struct {
 	// placeholder for future optional parameters
 }
 
@@ -301,5 +325,36 @@ type SnapshotsClientListOptions struct {
 
 // SnapshotsClientUpdateTagsOptions contains the optional parameters for the SnapshotsClient.UpdateTags method.
 type SnapshotsClientUpdateTagsOptions struct {
+	// placeholder for future optional parameters
+}
+
+// TrustedAccessRoleBindingsClientBeginCreateOrUpdateOptions contains the optional parameters for the TrustedAccessRoleBindingsClient.BeginCreateOrUpdate
+// method.
+type TrustedAccessRoleBindingsClientBeginCreateOrUpdateOptions struct {
+	// Resumes the LRO from the provided token.
+	ResumeToken string
+}
+
+// TrustedAccessRoleBindingsClientBeginDeleteOptions contains the optional parameters for the TrustedAccessRoleBindingsClient.BeginDelete
+// method.
+type TrustedAccessRoleBindingsClientBeginDeleteOptions struct {
+	// Resumes the LRO from the provided token.
+	ResumeToken string
+}
+
+// TrustedAccessRoleBindingsClientGetOptions contains the optional parameters for the TrustedAccessRoleBindingsClient.Get
+// method.
+type TrustedAccessRoleBindingsClientGetOptions struct {
+	// placeholder for future optional parameters
+}
+
+// TrustedAccessRoleBindingsClientListOptions contains the optional parameters for the TrustedAccessRoleBindingsClient.NewListPager
+// method.
+type TrustedAccessRoleBindingsClientListOptions struct {
+	// placeholder for future optional parameters
+}
+
+// TrustedAccessRolesClientListOptions contains the optional parameters for the TrustedAccessRolesClient.NewListPager method.
+type TrustedAccessRolesClientListOptions struct {
 	// placeholder for future optional parameters
 }

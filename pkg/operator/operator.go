@@ -20,25 +20,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aws/karpenter-core/pkg/operator"
 	"github.com/azure/gpu-provisioner/pkg/auth"
-	azurecache "github.com/azure/gpu-provisioner/pkg/cache"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
-	"github.com/azure/gpu-provisioner/pkg/providers/pricing"
-	"github.com/patrickmn/go-cache"
 	"knative.dev/pkg/logging"
+	"sigs.k8s.io/karpenter/pkg/operator"
 )
 
 // Operator is injected into the AWS CloudProvider's factories
 type Operator struct {
 	*operator.Operator
-
-	UnavailableOfferingsCache *azurecache.UnavailableOfferings
-
-	PricingProvider       *pricing.Provider
-	InstanceTypesProvider *instancetype.Provider
-	InstanceProvider      *instance.Provider
+	InstanceProvider *instance.Provider
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -55,37 +46,17 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		panic(fmt.Sprintf("Configure azure client fails. Please ensure federatedcredential has been created for identity %s.", os.Getenv("AZURE_CLIENT_ID")))
 	}
 
-	unavailableOfferingsCache := azurecache.NewUnavailableOfferings()
-	pricingProvider := pricing.NewProvider(
-		ctx,
-		pricing.NewAPI(),
-		azConfig.Location,
-		operator.Elected(),
-	)
-
-	instanceTypeProvider := instancetype.NewProvider(
-		azConfig.Location,
-		cache.New(instancetype.InstanceTypesCacheTTL, azurecache.DefaultCleanupInterval),
-		azClient.SKUClient,
-		pricingProvider,
-		unavailableOfferingsCache,
-	)
 	instanceProvider := instance.NewProvider(
 		azClient,
 		operator.GetClient(),
-		instanceTypeProvider,
-		unavailableOfferingsCache,
 		azConfig.ResourceGroup,
 		azConfig.NodeResourceGroup,
 		azConfig.ClusterName,
 	)
 
 	return ctx, &Operator{
-		Operator:                  operator,
-		UnavailableOfferingsCache: unavailableOfferingsCache,
-		PricingProvider:           pricingProvider,
-		InstanceTypesProvider:     instanceTypeProvider,
-		InstanceProvider:          instanceProvider,
+		Operator:         operator,
+		InstanceProvider: instanceProvider,
 	}
 }
 

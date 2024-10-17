@@ -18,68 +18,61 @@ package cloudprovider
 import (
 	"context"
 	"fmt"
-	"net/http"
+	"strings"
+	"time"
 
+	"github.com/awslabs/operatorpkg/status"
+	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/azure/gpu-provisioner/pkg/apis"
-	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
-	"github.com/samber/lo"
-
-	coreapis "github.com/aws/karpenter-core/pkg/apis"
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/cloudprovider"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
-func init() {
-	coreapis.Settings = append(coreapis.Settings, apis.Settings...)
-}
-
-var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
+var _ cloudprovider.CloudProvider = &CloudProvider{}
 
 type CloudProvider struct {
-	instanceTypeProvider *instancetype.Provider
-	instanceProvider     *instance.Provider
-	kubeClient           client.Client
+	instanceProvider *instance.Provider
+	kubeClient       client.Client
 }
 
-func New(instanceTypeProvider *instancetype.Provider, instanceProvider *instance.Provider, kubeClient client.Client) *CloudProvider {
+func New(instanceProvider *instance.Provider, kubeClient client.Client) *CloudProvider {
 	return &CloudProvider{
-		instanceTypeProvider: instanceTypeProvider,
-		instanceProvider:     instanceProvider,
-		kubeClient:           kubeClient,
+		instanceProvider: instanceProvider,
+		kubeClient:       kubeClient,
 	}
 }
 
 // Create a node given the constraints.
-func (c *CloudProvider) Create(ctx context.Context, machine *v1alpha5.Machine) (*v1alpha5.Machine, error) {
-	klog.InfoS("Create", "machine", klog.KObj(machine))
+func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*karpenterv1.NodeClaim, error) {
+	klog.InfoS("Create", "nodeClaim", klog.KObj(nodeClaim))
 
-	instance, err := c.instanceProvider.Create(ctx, machine)
+	instance, err := c.instanceProvider.Create(ctx, nodeClaim)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
-	m := c.instanceToMachine(ctx, instance)
-	m.Labels = lo.Assign(m.Labels, instance.Labels)
-	return m, nil
+	nc := c.instanceToNodeClaim(ctx, instance)
+	nc.Labels = lo.Assign(nc.Labels, instance.Labels)
+	return nc, nil
 }
 
-func (c *CloudProvider) List(ctx context.Context) ([]*v1alpha5.Machine, error) {
-	machines := []*v1alpha5.Machine{}
+func (c *CloudProvider) List(ctx context.Context) ([]*karpenterv1.NodeClaim, error) {
+	nodeClaims := []*karpenterv1.NodeClaim{}
 	instances, err := c.instanceProvider.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	for index := range instances {
-		machines = append(machines, c.instanceToMachine(ctx, instances[index]))
+		nodeClaims = append(nodeClaims, c.instanceToNodeClaim(ctx, instances[index]))
 	}
-	return machines, nil
+	return nodeClaims, nil
 }
 
-func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.Machine, error) {
+func (c *CloudProvider) Get(ctx context.Context, providerID string) (*karpenterv1.NodeClaim, error) {
 	klog.InfoS("Get", "providerID", providerID)
 
 	instance, err := c.instanceProvider.Get(ctx, providerID)
@@ -89,34 +82,76 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*v1alpha5.M
 	if instance == nil {
 		return nil, fmt.Errorf("cannot find a ready instance , %w", err)
 	}
-	return c.instanceToMachine(ctx, instance), err
+	return c.instanceToNodeClaim(ctx, instance), err
 }
 
-func (c *CloudProvider) LivenessProbe(req *http.Request) error {
-	return c.instanceTypeProvider.LivenessProbe(req)
+func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) error {
+	klog.InfoS("Delete", "nodeClaim", klog.KObj(nodeClaim))
+	return c.instanceProvider.Delete(ctx, nodeClaim.Name)
 }
 
-func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
-	klog.InfoS("Delete", "machine", klog.KObj(machine))
-	if len(machine.Status.ProviderID) != 0 {
-		return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
-	}
-	return c.instanceProvider.DeleteByName(ctx, machine.Name)
+func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (cloudprovider.DriftReason, error) {
+	klog.V(5).InfoS("IsDrifted", "nodeclaim", klog.KObj(nodeClaim))
+	return cloudprovider.DriftReason(""), nil
 }
 
-func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {
-	klog.InfoS("IsMachineDrifted", "machine", klog.KObj(machine))
-	return false, nil
-}
-
-func (c *CloudProvider) GetInstanceTypes(ctx context.Context, provisioner *v1alpha5.Provisioner) ([]*cloudprovider.InstanceType, error) {
-
-	instanceTypes := []*cloudprovider.InstanceType{}
-
-	return instanceTypes, nil
+func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpenterv1.NodePool) ([]*cloudprovider.InstanceType, error) {
+	return []*cloudprovider.InstanceType{}, nil
 }
 
 // Name returns the CloudProvider implementation name.
 func (c *CloudProvider) Name() string {
 	return "azure"
+}
+
+func (c *CloudProvider) GetSupportedNodeClasses() []status.Object {
+	return []status.Object{}
+}
+
+func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *instance.Instance) *karpenterv1.NodeClaim {
+	nodeClaim := &karpenterv1.NodeClaim{}
+	if instanceObj == nil {
+		return nodeClaim
+	}
+
+	labels := instanceObj.Labels
+	annotations := map[string]string{}
+
+	nodeClaim.Name = lo.FromPtr(instanceObj.Name)
+
+	if instanceObj.CapacityType != nil {
+		labels[karpenterv1.CapacityTypeLabelKey] = *instanceObj.CapacityType
+	}
+
+	if instanceObj.Type != nil {
+		labels[corev1.LabelInstanceTypeStable] = lo.FromPtr(instanceObj.Type)
+	}
+
+	if instanceObj.Tags[karpenterv1.NodePoolLabelKey] != nil {
+		labels[karpenterv1.NodePoolLabelKey] = *instanceObj.Tags[karpenterv1.NodePoolLabelKey]
+	}
+
+	nodeClaim.Labels = labels
+	nodeClaim.Annotations = annotations
+	if timestamp, ok := labels[instance.NodeClaimCreationLabel]; ok {
+		if creationTime, err := time.Parse(instance.CreationTimestampLayout, timestamp); err == nil {
+			nodeClaim.CreationTimestamp = metav1.Time{Time: creationTime}
+		}
+	}
+
+	if instanceObj.ID != nil {
+		nodeClaim.Status.ProviderID = lo.FromPtr(instanceObj.ID)
+	}
+
+	if instanceObj.ImageID != nil {
+		nodeClaim.Status.ImageID = *instanceObj.ImageID
+	}
+
+	if instanceObj.State != nil {
+		if strings.Contains(strings.ToLower(*instanceObj.State), "deleting") {
+			nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+		}
+	}
+
+	return nodeClaim
 }

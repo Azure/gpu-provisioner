@@ -17,15 +17,18 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 // MockClient is a mock for the controller-runtime dynamic client interface.
@@ -167,22 +170,68 @@ func (m *MockClient) RESTMapper() meta.RESTMapper {
 	return args.Get(0).(meta.RESTMapper)
 }
 
+// StatusClient interface
+func (m *MockClient) Status() k8sClient.StatusWriter {
+	return m.StatusMock
+}
+
+// SubResourceClientConstructor interface
+func (m *MockClient) SubResource(subResource string) k8sClient.SubResourceClient {
+	return m.StatusMock
+}
+
 type MockStatusClient struct {
 	mock.Mock
 }
 
+// Create implements client.StatusWriter
+func (*MockStatusClient) Create(ctx context.Context, obj k8sClient.Object, subResource k8sClient.Object, opts ...k8sClient.SubResourceCreateOption) error {
+	panic("unimplemented")
+}
+
 // Patch implements client.StatusWriter
-func (*MockStatusClient) Patch(ctx context.Context, obj k8sClient.Object, patch k8sClient.Patch, opts ...k8sClient.PatchOption) error {
+func (*MockStatusClient) Patch(ctx context.Context, obj k8sClient.Object, patch k8sClient.Patch, opts ...k8sClient.SubResourcePatchOption) error {
 	panic("unimplemented")
 }
 
 // Update implements client.StatusWriter
-func (*MockStatusClient) Update(ctx context.Context, obj k8sClient.Object, opts ...k8sClient.UpdateOption) error {
+func (*MockStatusClient) Update(ctx context.Context, obj k8sClient.Object, opts ...k8sClient.SubResourceUpdateOption) error {
 	panic("unimplemented")
 }
 
-// StatusClient interface
+func (*MockStatusClient) Get(ctx context.Context, obj k8sClient.Object, subResource k8sClient.Object, opts ...k8sClient.SubResourceGetOption) error {
+	panic("unimplemented")
+}
 
-func (m *MockClient) Status() k8sClient.StatusWriter {
-	return m.StatusMock
+func CreateNodeListWithNodeClaim(nodeClaims []*karpenterv1.NodeClaim) *corev1.NodeList {
+	nodes := []corev1.Node{}
+	for i := range nodeClaims {
+		if len(nodeClaims[i].Status.ProviderID) == 0 {
+			continue
+		}
+		nodes = append(nodes, corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: fmt.Sprintf("aks-%s-20562481-vmss_0", nodeClaims[i].Name),
+				Labels: map[string]string{
+					"agentpool":                      nodeClaims[i].Name,
+					"kubernetes.azure.com/agentpool": nodeClaims[i].Name,
+				},
+			},
+			Spec: corev1.NodeSpec{
+				ProviderID: nodeClaims[i].Status.ProviderID,
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{
+						Type:   corev1.NodeReady,
+						Status: corev1.ConditionTrue,
+					},
+				},
+			},
+		})
+	}
+
+	return &corev1.NodeList{
+		Items: nodes,
+	}
 }

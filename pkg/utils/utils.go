@@ -21,8 +21,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/aws/karpenter-core/pkg/cloudprovider"
 )
 
 // ParseAgentPoolNameFromID parses the id stored on the instance ID
@@ -45,35 +43,6 @@ func ParseAgentPoolNameFromID(id string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("error while parsing id %s", id)
-}
-
-// ParseSubIDFromID parses the id stored on the instance ID
-func ParseSubIDFromID(id string) (*string, error) {
-	r := regexp.MustCompile(`/subscriptions/(?P<SubscriptionID>.*)/resourcegroups/.*/providers/.*`)
-	matches := r.FindStringSubmatch(id)
-	if matches == nil {
-		return nil, fmt.Errorf("id does not match the regxp for ParseSubIDFromID %s", id)
-	}
-
-	for i, name := range r.SubexpNames() {
-		if name == "SubscriptionID" {
-			return &matches[i], nil
-		}
-	}
-	return nil, fmt.Errorf("error while parsing id %s", id)
-}
-
-func GetAllSingleValuedRequirementLabels(instanceType *cloudprovider.InstanceType) map[string]string {
-	labels := map[string]string{}
-	if instanceType == nil {
-		return labels
-	}
-	for key, req := range instanceType.Requirements {
-		if req.Len() == 1 {
-			labels[key] = req.Values()[0]
-		}
-	}
-	return labels
 }
 
 // WithDefaultBool returns the boolean value of the supplied environment variable or, if not present,
