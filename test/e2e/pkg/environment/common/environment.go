@@ -17,27 +17,24 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	loggingtesting "knative.dev/pkg/logging/testing"
 	"knative.dev/pkg/system"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	coreapis "github.com/aws/karpenter-core/pkg/apis"
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/operator/injection"
-	"github.com/azure/gpu-provisioner/pkg/apis"
-	"github.com/azure/gpu-provisioner/pkg/utils/project"
+	_ "sigs.k8s.io/karpenter/pkg/apis/v1"
+	_ "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 )
 
 type ContextKey string
@@ -64,7 +61,6 @@ func NewEnvironment(t *testing.T) *Environment {
 
 	lo.Must0(os.Setenv(system.NamespaceEnvKey, "gpu-provisioner"))
 	kubernetesInterface := kubernetes.NewForConfigOrDie(config)
-	ctx = injection.WithSettingsOrDie(ctx, kubernetesInterface, apis.Settings...)
 	if val, ok := os.LookupEnv("GIT_REF"); ok {
 		ctx = context.WithValue(ctx, GitRefContextKey, val)
 	}
@@ -82,22 +78,12 @@ func NewEnvironment(t *testing.T) *Environment {
 
 func NewConfig() *rest.Config {
 	config := controllerruntime.GetConfigOrDie()
-	config.UserAgent = fmt.Sprintf("%s-%s", v1alpha5.TestingGroup, project.Version)
+	config.UserAgent = strings.ReplaceAll(schema.GroupVersion{Group: v1alpha1.Group, Version: "v1alpha1"}.String(), "/", "-")
 	config.QPS = 1e6
 	config.Burst = 1e6
 	return config
 }
 
 func NewClient(config *rest.Config) (client.Client, error) {
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := apis.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	if err := coreapis.AddToScheme(scheme); err != nil {
-		return nil, err
-	}
-	return client.New(config, client.Options{Scheme: scheme})
+	return client.New(config, client.Options{Scheme: scheme.Scheme})
 }

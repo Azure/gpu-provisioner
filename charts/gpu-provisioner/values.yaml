@@ -12,6 +12,9 @@ additionalAnnotations: {}
 imagePullPolicy: IfNotPresent
 # -- Image pull secrets for Docker images.
 imagePullSecrets: []
+service:
+  # -- Additional annotations for the Service.
+  annotations: {}
 serviceAccount:
   # -- Specifies if a ServiceAccount should be created.
   create: true
@@ -142,10 +145,16 @@ controller:
   logEncoding: ""
   metrics:
     # -- The container port to use for metrics.
-    port: 8000
+    port: 8080
   healthProbe:
     # -- The container port to use for http health probe.
     port: 8081
+  webhook:
+    # -- The container port to use for http health probe.
+    port: 8443
+  webhookMetrics:
+    # -- The container port to use for http health probe.
+    port: 8001
 # -- Global log level
 logLevel: debug
 # -- Global log encoding

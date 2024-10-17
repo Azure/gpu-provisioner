@@ -19,3 +19,4 @@ _output/
 /hack/tools/bin/
 /coverage.txt
 /coverage.out
+gpu-provisioner-values.yaml

@@ -37,7 +37,7 @@ func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 	return &res.AgentPool, nil
 }
 
-func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) error {
+func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName, apName string) error {
 	klog.InfoS("deleteAgentPool", "agentpool", apName)
 	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
 	if err != nil {
@@ -57,7 +57,7 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 	return err
 }
 
-func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string) (*armcontainerservice.AgentPool, error) {
+func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName, apName string) (*armcontainerservice.AgentPool, error) {
 	resp, err := client.Get(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		return nil, err
