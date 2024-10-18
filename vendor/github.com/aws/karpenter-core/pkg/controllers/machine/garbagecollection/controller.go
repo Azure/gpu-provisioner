@@ -77,19 +77,24 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 // But since we use machine name as agent pool name, the chance of hitting agent pool name conflict is very low.
 // We rely on periodic checks to remediate the conflict if any.
 func (c *Controller) remediateNodeNameConflict(ctx context.Context) error {
-	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+	machineList1 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList1, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+		return err
+	}
+	machineList2 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList2, client.HasLabels([]string{"kaito.sh/ragengine"})); err != nil {
 		return err
 	}
 
+	machineListCombined := append(machineList1.Items, machineList2.Items...)
 	nodeToMachineMap := make(map[string][]*v1alpha5.Machine)
 
-	for i, _ := range machineList.Items {
-		if node, linked := machineList.Items[i].Annotations[v1alpha5.MachineLinkedAnnotationKey]; linked {
+	for i, _ := range machineListCombined {
+		if node, linked := machineListCombined[i].Annotations[v1alpha5.MachineLinkedAnnotationKey]; linked {
 			if _, ok := nodeToMachineMap[node]; !ok {
-				nodeToMachineMap[node] = []*v1alpha5.Machine{&machineList.Items[i]}
+				nodeToMachineMap[node] = []*v1alpha5.Machine{&machineListCombined[i]}
 			} else {
-				nodeToMachineMap[node] = append(nodeToMachineMap[node], &machineList.Items[i])
+				nodeToMachineMap[node] = append(nodeToMachineMap[node], &machineListCombined[i])
 			}
 		}
 	}
@@ -129,13 +134,19 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 		return err
 	}
 
-	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+	machineList1 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList1, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
 		return err
 	}
 
+	machineList2 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList2, client.HasLabels([]string{"kaito.sh/ragengine"})); err != nil {
+		return err
+	}
+	machineListCombined := append(machineList1.Items, machineList2.Items...)
+
 	machineNames := make(map[string]struct{})
-	for _, each := range machineList.Items {
+	for _, each := range machineListCombined {
 		machineNames[each.Name] = struct{}{}
 	}
 
@@ -165,10 +176,17 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 
 // gpu-provisioner: leverage the two minutes perodic check to update machine readiness heartbeat.
 func (c *Controller) reconcileMachines(ctx context.Context) error {
-	machineList := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+	machineList1 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList1, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
 		return err
 	}
+
+	machineList2 := &v1alpha5.MachineList{}
+	if err := c.kubeClient.List(ctx, machineList2, client.HasLabels([]string{"kaito.sh/ragengine"})); err != nil {
+		return err
+	}
+
+	machineListCombined := append(machineList1.Items, machineList2.Items...)
 
 	// The NotReady nodes are excluded from the list.
 	cloudProviderMachines, err := c.cloudProvider.List(ctx)
@@ -182,7 +200,7 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 		return m.Status.ProviderID
 	})...)
 
-	deletedGarbageMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
+	deletedGarbageMachines := lo.Filter(lo.ToSlicePtr(machineListCombined), func(m *v1alpha5.Machine, _ int) bool {
 		// The assumption is that any clean up work should be done in 10 minutes.
 		// The node gc will cover any problems caused by this force deletion.
 		return !m.DeletionTimestamp.IsZero() && metav1.Now().After((*m.DeletionTimestamp).Add(time.Minute*10))
@@ -191,7 +209,7 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 	rfErrs := c.batchDeleteMachines(ctx, deletedGarbageMachines, true, "to be delete but blocked by finializer for more than 10 minutes")
 
 	// Check all machine heartbeats.
-	hbMachines := lo.Filter(lo.ToSlicePtr(machineList.Items), func(m *v1alpha5.Machine, _ int) bool {
+	hbMachines := lo.Filter(lo.ToSlicePtr(machineListCombined), func(m *v1alpha5.Machine, _ int) bool {
 		return m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
 			m.DeletionTimestamp.IsZero()
 	})
