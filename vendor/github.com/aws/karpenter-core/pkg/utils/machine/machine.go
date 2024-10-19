@@ -36,11 +36,17 @@ import (
 	"github.com/aws/karpenter-core/pkg/scheduling"
 )
 
-var KaitoMachinePredicate, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+var selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
 	MatchExpressions: []metav1.LabelSelectorRequirement{
-		metav1.LabelSelectorRequirement{Key: "kaito.sh/workspace", Operator: "Exists"},
+		{Key: "kaito.sh/workspace", Operator: metav1.LabelSelectorOpExists},
 	},
 })
+var selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	MatchExpressions: []metav1.LabelSelectorRequirement{
+		{Key: "kaito.sh/ragengine", Operator: metav1.LabelSelectorOpExists},
+	},
+})
+var KaitoMachinePredicate = predicate.Or(selector1, selector2)
 
 // EventHandler is a watcher on v1alpha5.Machine that maps Machines to Nodes based on provider ids
 // and enqueues reconcile.Requests for the Nodes
