@@ -38,10 +38,13 @@ func TestGPUMachine(t *testing.T) {
 }
 
 var _ = BeforeEach(func() { env.BeforeEach() })
-var _ = AfterEach(func() { env.Cleanup() })
-var _ = AfterEach(func() { env.AfterEach() })
+var _ = AfterEach(func() {
+	env.Cleanup()
+	env.AfterEach()
+})
 
 var _ = Describe("GPU Machine", func() {
+
 	It("should provision one GPU node ", func() {
 		machineLabels := map[string]string{
 			"karpenter.sh/provisioner-name": "default",
@@ -78,10 +81,67 @@ var _ = Describe("GPU Machine", func() {
 				},
 			},
 		})
+
+		DeferCleanup(func() {
+			env.ExpectDeleted(machine)
+			env.EventuallyExpectCreatedMachineCount("==", 0)
+			env.EventuallyExpectNodeCount("==", 0)
+		})
+
 		env.ExpectCreated(machine)
 		env.EventuallyExpectCreatedMachineCount("==", 1)
 		env.EventuallyExpectMachinesReady(machine)
 		env.EventuallyExpectNodeCount("==", 1)
 		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 	})
+
+	It("should provision one GPU node with RAGEngine label ", func() {
+		machineLabels := map[string]string{
+			"karpenter.sh/provisioner-name": "default",
+			"kaito.sh/ragengine":            "none",
+		}
+
+		machine := test.Machine(v1alpha5.Machine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "testmachine",
+				Labels: machineLabels,
+			},
+			Spec: v1alpha5.MachineSpec{
+				MachineTemplateRef: &v1alpha5.MachineTemplateRef{
+					Name: "test-machine",
+				},
+				Requirements: []v1.NodeSelectorRequirement{
+					{
+						Key:      v1.LabelInstanceTypeStable,
+						Operator: v1.NodeSelectorOpIn,
+						Values:   []string{"Standard_NC12s_v3"},
+					},
+					{
+						Key:      "karpenter.sh/provisioner-name",
+						Operator: v1.NodeSelectorOpIn,
+						Values:   []string{"default"},
+					},
+				},
+				Taints: []v1.Taint{
+					{
+						Key:    "sku",
+						Value:  "gpu",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		})
+		DeferCleanup(func() {
+			env.ExpectDeleted(machine)
+			env.EventuallyExpectCreatedMachineCount("==", 0)
+			env.EventuallyExpectNodeCount("==", 0)
+		})
+
+		env.ExpectCreated(machine)
+		env.EventuallyExpectCreatedMachineCount("==", 1)
+		env.EventuallyExpectMachinesReady(machine)
+		env.EventuallyExpectNodeCount("==", 1)
+		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
+	})
+
 })
