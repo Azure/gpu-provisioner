@@ -31,4 +31,4 @@ export CLUSTER_NAME AZURE_LOCATION AZURE_RESOURCE_GROUP AZURE_RESOURCE_GROUP_MC 
 if [ ! -f gpu-provisioner-values-template.yaml ]; then
     curl -sO https://raw.githubusercontent.com/Azure/gpu-provisioner/main/gpu-provisioner-values-template.yaml
 fi
-yq '(.. | select(tag == "!!str")) |= envsubst(nu)' gpu-provisioner-values-template.yaml > gpu-provisioner-values.yaml
+yq '(.. | select(tag == "!!str")) |= envsubst' gpu-provisioner-values-template.yaml > gpu-provisioner-values.yaml
