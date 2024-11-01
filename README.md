@@ -11,7 +11,7 @@ It implements the cloud provider interfaces to realize the following abstraction
 ## Prerequisites
 - An Azure subscription.
 - An AKS cluster with [OIDC](https://learn.microsoft.com/en-us/azure/aks/use-oidc-issuer) addon installed. Please refer to the [Karpenter installation guide](https://karpenter.sh/docs/installation/) for more details.
-- 
+ 
 ## Install gpu-provisioner
 
 Please check the installation guidance [here](./charts/gpu-provisioner/README.md).
