@@ -102,7 +102,7 @@ controller:
     # -- Repository path to the controller image.
     repository: mcr.microsoft.com/aks/kaito/gpu-provisioner
     # -- Tag of the controller image.
-    tag: 0.2.0
+    tag: 0.2.1
     # -- SHA256 digest of the controller image.
     digest: ""
   # -- SecurityContext for the controller container.
