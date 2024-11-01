@@ -36,11 +36,9 @@ release:
   header: |
     ## {{.Tag}} - {{ time "2006-01-02" }}
 changelog:
-  skip: false
   groups:
     - title: Features 🌈
       regexp: ^.*feat[(\\w)]*:+.*$
-
     - title: Bug Fixes 🐞
       regexp: ^.*fix[(\\w)]*:+.*$
     - title: Build 🏭
