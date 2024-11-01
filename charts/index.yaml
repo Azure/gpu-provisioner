@@ -3,9 +3,9 @@ entries:
   gpu-provisioner:
   - apiVersion: v2
     appVersion: 0.2.1
-    created: "2024-11-01T18:31:05.555957114Z"
+    created: "2024-11-01T18:44:33.382683182Z"
     description: A Helm chart for gpu-provisioner
-    digest: ae07c2f0d35d8fa13f09d0ce6b568be3a0ccd7a98f409ba4db2e0edebde7e2a1
+    digest: 38e994cfdfe87a3fc3504effa6e81756ea14953983d56dea94b2f8e7b1b5a7c5
     maintainers:
     - email: vrgf2003@gmail.com
       name: Fei-Guo
@@ -69,4 +69,4 @@ entries:
     urls:
     - https://Azure.github.io/gpu-provisioner/charts/gpu-provisioner-0.0.1.tgz
     version: 0.0.1
-generated: "2024-11-01T18:31:05.554146717Z"
+generated: "2024-11-01T18:44:33.38143873Z"
