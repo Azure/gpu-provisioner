@@ -83,6 +83,9 @@ var (
 				"kubernetes.azure.com/agentpool": "agentpool0",
 			},
 		},
+		Spec: v1.NodeSpec{
+			ProviderID: "azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss/virtualMachines/0",
+		},
 		Status: v1.NodeStatus{
 			Conditions: []v1.NodeCondition{
 				{
