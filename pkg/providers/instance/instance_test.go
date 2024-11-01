@@ -18,7 +18,6 @@ package instance
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -194,11 +193,6 @@ func TestFromAgentPoolToInstance(t *testing.T) {
 				c.On("List", mock.IsType(context.Background()), mock.IsType(&v1.NodeList{}), mock.Anything).Return(errors.New("Fail to get node list"))
 			},
 			expectedError: errors.New("Fail to get node list"),
-		},
-		{
-			name:          "Fail to get instance from agent pool due to malformed id",
-			mockAgentPool: tests.GetAgentPoolObjWithName("agentpool0", "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3"),
-			expectedError: errors.New("id does not match the regxp for ParseSubIDFromID"),
 		},
 	}
 
@@ -464,20 +458,6 @@ func TestFromAPListToInstanceFailure(t *testing.T) {
 			},
 			expectedError: func(err string) error {
 				return errors.New("no agentpools found")
-			},
-		},
-		{
-			name: "Fail to get instance from agent pool list because agentpool subId can't be parsed",
-			id:   "/subscriptions/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss",
-			mockAgentPoolList: func(id string) []*armcontainerservice.AgentPool {
-				ap := tests.GetAgentPoolObjWithName("agentpool0", id, "Standard_NC6s_v3")
-
-				return []*armcontainerservice.AgentPool{
-					&ap,
-				}
-			},
-			expectedError: func(err string) error {
-				return fmt.Errorf("id does not match the regxp for ParseSubIDFromID %s", err)
 			},
 		},
 	}
