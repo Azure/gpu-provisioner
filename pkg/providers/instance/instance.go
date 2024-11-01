@@ -146,16 +146,6 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine) (*Inst
 	return instance, err
 }
 
-// getVMSSNodeProviderID generates the provider ID for a virtual machine scale set.
-func (p *Provider) getVMSSNodeProviderID(subscriptionID, scaleSetName string) string {
-	return fmt.Sprintf(
-		"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/%s/virtualMachines/0", //vm = 0 as ew have the count always 1
-		subscriptionID,
-		strings.ToLower(p.nodeResourceGroup),
-		scaleSetName,
-	)
-}
-
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
