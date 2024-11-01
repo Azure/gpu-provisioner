@@ -16,7 +16,6 @@ It implements the cloud provider interfaces to realize the following abstraction
 
 Please check the installation guidance [here](./charts/gpu-provisioner/README.md).
 
-```shell
 ## How to test
 After deploying the controller successfully, one can apply the yaml in `/examples` to create a machine CR. A real node will be created and added to the cluster by the controller.
 
