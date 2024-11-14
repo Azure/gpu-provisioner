@@ -210,7 +210,7 @@ func TestFromAgentPoolToInstance(t *testing.T) {
 
 			p := createTestProvider(agentPoolMocks, mockK8sClient)
 
-			instance, err := p.fromAgentPoolToInstance(context.Background(), &tc.mockAgentPool)
+			instance, err := p.fromRegisteredAgentPoolToInstance(context.Background(), &tc.mockAgentPool)
 
 			if tc.expectedError == nil {
 				assert.NoError(t, err, "Not expected to return error")

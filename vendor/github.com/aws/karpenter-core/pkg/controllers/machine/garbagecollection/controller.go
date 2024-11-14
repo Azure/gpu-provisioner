@@ -45,6 +45,10 @@ const (
 	NodeHeartBeatAnnotationKey = "NodeHeartBeatTimeStamp"
 )
 
+var (
+	KaitoMachineLabels = []string{"kaito.sh/workspace", "kaito.sh/ragengine"}
+)
+
 type Controller struct {
 	clock         clock.Clock
 	kubeClient    client.Client
@@ -66,8 +70,9 @@ func (c *Controller) Name() string {
 func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	merr := c.reconcileMachines(ctx)
 	nerr := c.reconcileNodes(ctx)
+	cerr := c.reconcileCloudProviderInstances(ctx)
 
-	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(merr, nerr)
+	return reconcile.Result{RequeueAfter: time.Minute * 2}, multierr.Combine(merr, nerr, cerr)
 }
 
 // gpu-provisioner: node name conflict means two machines are linked to the same node.
@@ -134,28 +139,21 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 		return err
 	}
 
-	machineList1 := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList1, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+	kaitoMachines, err := c.ListAllKaitoMachines(ctx)
+	if err != nil {
 		return err
 	}
 
-	machineList2 := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList2, client.HasLabels([]string{"kaito.sh/ragengine"})); err != nil {
-		return err
-	}
-	machineListCombined := append(machineList1.Items, machineList2.Items...)
-
-	machineNames := make(map[string]struct{})
-	for _, each := range machineListCombined {
-		machineNames[each.Name] = struct{}{}
-	}
+	machineNames := sets.New[string](lo.FilterMap(kaitoMachines, func(m v1alpha5.Machine, _ int) (string, bool) {
+		return m.Name, true
+	})...)
 
 	deletedGarbageNodes := lo.Filter(lo.ToSlicePtr(nodeList.Items), func(n *v1.Node, _ int) bool {
 		_, ok := n.Labels[v1alpha5.ProvisionerNameLabelKey]
 		if ok && n.Spec.ProviderID != "" {
 			// We rely on a strong assumption here: the machine name is equal to the agent pool name.
 			machine := n.Labels["kubernetes.azure.com/agentpool"]
-			if _, ok := machineNames[machine]; !ok {
+			if !machineNames.Has(machine) {
 				return true
 			}
 		}
@@ -176,17 +174,10 @@ func (c *Controller) reconcileNodes(ctx context.Context) error {
 
 // gpu-provisioner: leverage the two minutes perodic check to update machine readiness heartbeat.
 func (c *Controller) reconcileMachines(ctx context.Context) error {
-	machineList1 := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList1, client.HasLabels([]string{"kaito.sh/workspace"})); err != nil {
+	kaitoMachines, err := c.ListAllKaitoMachines(ctx)
+	if err != nil {
 		return err
 	}
-
-	machineList2 := &v1alpha5.MachineList{}
-	if err := c.kubeClient.List(ctx, machineList2, client.HasLabels([]string{"kaito.sh/ragengine"})); err != nil {
-		return err
-	}
-
-	machineListCombined := append(machineList1.Items, machineList2.Items...)
 
 	// The NotReady nodes are excluded from the list.
 	cloudProviderMachines, err := c.cloudProvider.List(ctx)
@@ -196,11 +187,16 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 	cloudProviderMachines = lo.Filter(cloudProviderMachines, func(m *v1alpha5.Machine, _ int) bool {
 		return m.DeletionTimestamp.IsZero()
 	})
-	cloudProviderProviderIDs := sets.New[string](lo.Map(cloudProviderMachines, func(m *v1alpha5.Machine, _ int) string {
-		return m.Status.ProviderID
+	cloudProviderProviderIDs := sets.New[string](lo.FilterMap(cloudProviderMachines, func(m *v1alpha5.Machine, _ int) (string, bool) {
+		// skip leaked cloudporiver instances
+		if len(m.Status.ProviderID) == 0 {
+			return "", false
+		}
+
+		return m.Status.ProviderID, true
 	})...)
 
-	deletedGarbageMachines := lo.Filter(lo.ToSlicePtr(machineListCombined), func(m *v1alpha5.Machine, _ int) bool {
+	deletedGarbageMachines := lo.Filter(lo.ToSlicePtr(kaitoMachines), func(m *v1alpha5.Machine, _ int) bool {
 		// The assumption is that any clean up work should be done in 10 minutes.
 		// The node gc will cover any problems caused by this force deletion.
 		return !m.DeletionTimestamp.IsZero() && metav1.Now().After((*m.DeletionTimestamp).Add(time.Minute*10))
@@ -209,7 +205,7 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 	rfErrs := c.batchDeleteMachines(ctx, deletedGarbageMachines, true, "to be delete but blocked by finializer for more than 10 minutes")
 
 	// Check all machine heartbeats.
-	hbMachines := lo.Filter(lo.ToSlicePtr(machineListCombined), func(m *v1alpha5.Machine, _ int) bool {
+	hbMachines := lo.Filter(lo.ToSlicePtr(kaitoMachines), func(m *v1alpha5.Machine, _ int) bool {
 		return m.StatusConditions().GetCondition(v1alpha5.MachineLaunched).IsTrue() &&
 			m.DeletionTimestamp.IsZero()
 	})
@@ -261,6 +257,47 @@ func (c *Controller) reconcileMachines(ctx context.Context) error {
 	return multierr.Combine(errs...)
 }
 
+// reconcileCloudProviderInstances is used to garbage leaked cloudprovider isntances.
+func (c *Controller) reconcileCloudProviderInstances(ctx context.Context) error {
+	kaitoMachines, err := c.ListAllKaitoMachines(ctx)
+	if err != nil {
+		return err
+	}
+
+	currentMachineNames := sets.New[string](lo.FilterMap(kaitoMachines, func(m v1alpha5.Machine, _ int) (string, bool) {
+		return m.Name, true
+	})...)
+
+	// list all agentpools for garbaging leaked ones.
+	cloudProviderInstances, err := c.cloudProvider.List(ctx)
+	if err != nil {
+		return err
+	}
+
+	cloudProviderInstancesWithoutNodes := lo.Filter(cloudProviderInstances, func(m *v1alpha5.Machine, _ int) bool {
+		// skip cloudporiver instances that have associated nodes
+		return len(m.Status.ProviderID) == 0
+	})
+
+	deletedCloudProviderInstances := lo.Filter(cloudProviderInstancesWithoutNodes, func(m *v1alpha5.Machine, _ int) bool {
+		// cloudProviderInstance has no associated node and Machines, this Instance is a leaked one.
+		return !currentMachineNames.Has(m.Name)
+	})
+	logging.FromContext(ctx).Infof("currentMachineNames=%v, cloudprovider instances: total count=%d, leaked count=%d", currentMachineNames.List(), len(cloudProviderInstances), len(deletedCloudProviderInstances))
+
+	errs := make([]error, len(deletedCloudProviderInstances))
+	workqueue.ParallelizeUntil(ctx, 20, len(deletedCloudProviderInstances), func(i int) {
+		if err := c.cloudProvider.Delete(ctx, deletedCloudProviderInstances[i]); err != nil {
+			logging.FromContext(ctx).Infof("failed to delete leaked cloudprovider machine(%s), %v", deletedCloudProviderInstances[i].Name, err)
+			errs[i] = err
+			return
+		}
+		logging.FromContext(ctx).Infof("delete leaked cloudprovider machine: %s successfully", deletedCloudProviderInstances[i].Name)
+	})
+
+	return multierr.Combine(errs...)
+}
+
 func (c *Controller) batchDeleteMachines(ctx context.Context, machines []*v1alpha5.Machine, removeFinalizer bool, msg string) []error {
 	errs := make([]error, len(machines))
 	workqueue.ParallelizeUntil(ctx, 20, len(machines), func(i int) {
@@ -287,6 +324,20 @@ func (c *Controller) batchDeleteMachines(ctx context.Context, machines []*v1alph
 		}).Inc()
 	})
 	return errs
+}
+
+func (c *Controller) ListAllKaitoMachines(ctx context.Context) ([]v1alpha5.Machine, error) {
+	kaitoMachines := make([]v1alpha5.Machine, 0)
+
+	for i := range KaitoMachineLabels {
+		machineList := &v1alpha5.MachineList{}
+		if err := c.kubeClient.List(ctx, machineList, client.HasLabels([]string{KaitoMachineLabels[i]})); err != nil {
+			return kaitoMachines, err
+		}
+
+		kaitoMachines = append(kaitoMachines, machineList.Items...)
+	}
+	return kaitoMachines, nil
 }
 
 func (c *Controller) Builder(_ context.Context, m manager.Manager) corecontroller.Builder {
