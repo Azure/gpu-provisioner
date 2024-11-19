@@ -98,7 +98,10 @@ func (c *CloudProvider) LivenessProbe(req *http.Request) error {
 
 func (c *CloudProvider) Delete(ctx context.Context, machine *v1alpha5.Machine) error {
 	klog.InfoS("Delete", "machine", klog.KObj(machine))
-	return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
+	if len(machine.Status.ProviderID) != 0 {
+		return c.instanceProvider.Delete(ctx, machine.Status.ProviderID)
+	}
+	return c.instanceProvider.DeleteByName(ctx, machine.Name)
 }
 
 func (c *CloudProvider) IsMachineDrifted(ctx context.Context, machine *v1alpha5.Machine) (bool, error) {

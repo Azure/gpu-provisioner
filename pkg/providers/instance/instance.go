@@ -40,11 +40,14 @@ import (
 	"github.com/azure/gpu-provisioner/pkg/providers/instancetype"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	nodeutil "github.com/aws/karpenter-core/pkg/utils/node"
 )
 
 const (
 	LabelMachineType = "kaito.sh/machine-type"
+)
+
+var (
+	KaitoNodeLabels = []string{"kaito.sh/workspace", "kaito.sh/ragengine"}
 )
 
 type Provider struct {
@@ -116,7 +119,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine) (*Inst
 		return nil, err
 	}
 
-	instance, err := p.fromAgentPoolToInstance(ctx, ap)
+	instance, err := p.fromRegisteredAgentPoolToInstance(ctx, ap)
 	if instance == nil && err == nil {
 		// means the node object has not been found yet, we wait until the node is created
 		b := wait.Backoff{
@@ -130,7 +133,7 @@ func (p *Provider) Create(ctx context.Context, machine *v1alpha5.Machine) (*Inst
 			return true
 		}, func() error {
 			var e error
-			instance, e = p.fromAgentPoolToInstance(ctx, ap)
+			instance, e = p.fromRegisteredAgentPoolToInstance(ctx, ap)
 			if e != nil {
 				return e
 			}
@@ -157,7 +160,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
 	}
 
-	return p.fromAgentPoolToInstance(ctx, apObj)
+	return p.convertAgentPoolToInstance(ctx, apObj, id)
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
@@ -185,21 +188,29 @@ func (p *Provider) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
-	node, err := p.getNodeByName(ctx, lo.FromPtr(apObj.Name))
+func (p *Provider) DeleteByName(ctx context.Context, apName string) error {
+	klog.InfoS("Instance.DeleteByName", "agentpool name", apName)
+
+	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName)
 	if err != nil {
-		return nil, err
+		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
+		return fmt.Errorf("agentPool.Delete for %q failed: %w", apName, err)
 	}
-	if node == nil || nodeutil.GetCondition(node, v1.NodeReady).Status != v1.ConditionTrue {
-		// node is not found or not ready
-		return nil, nil
+	return nil
+}
+
+func (p *Provider) convertAgentPoolToInstance(_ context.Context, apObj *armcontainerservice.AgentPool, id string) (*Instance, error) {
+	if apObj == nil || len(id) == 0 {
+		return nil, fmt.Errorf("agent pool or provider id is nil")
 	}
+
 	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
 		return lo.FromPtr(k)
 	})
+
 	return &Instance{
 		Name:     apObj.Name,
-		ID:       to.Ptr(node.Spec.ProviderID),
+		ID:       to.Ptr(id),
 		Type:     apObj.Properties.VMSize,
 		SubnetID: apObj.Properties.VnetSubnetID,
 		Tags:     apObj.Properties.Tags,
@@ -208,17 +219,101 @@ func (p *Provider) fromAgentPoolToInstance(ctx context.Context, apObj *armcontai
 	}, nil
 }
 
+func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
+	if apObj == nil {
+		return nil, fmt.Errorf("agent pool is nil")
+	}
+
+	nodes, err := p.getNodesByName(ctx, lo.FromPtr(apObj.Name))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(nodes) == 0 || len(nodes) > 1 {
+		// NotFound is not considered as an error
+		// and AgentPool may create more than one instance, we need to wait agentPool remove
+		// the spare instance.
+		return nil, nil
+	}
+
+	// we only want to resolve providerID and construct instance based on AgentPool.
+	// there is no need to verify the node ready condition. so comment the following if condition.
+	// if node == nil || nodeutil.GetCondition(node, v1.NodeReady).Status != v1.ConditionTrue {
+	// 	// node is not found or not ready
+	// 	return nil, nil
+	// }
+
+	// It's need to wait node and providerID ready when create AgentPool,
+	// but there is no need to wait when termination controller lists all agentpools.
+	// because termination controller garbage leaked agentpools.
+	if len(nodes[0].Spec.ProviderID) == 0 {
+		// provider id is not found
+		return nil, nil
+	}
+
+	// tokens := strings.SplitAfter(node.Name, "-vmss") // remove the vm index "0000"
+	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
+		return lo.FromPtr(k)
+	})
+	return &Instance{
+		Name: apObj.Name,
+		// ID:       to.Ptr(fmt.Sprint("azure://", p.getVMSSNodeProviderID(lo.FromPtr(subID), tokens[0]))),
+		ID:       to.Ptr(nodes[0].Spec.ProviderID),
+		Type:     apObj.Properties.VMSize,
+		SubnetID: apObj.Properties.VnetSubnetID,
+		Tags:     apObj.Properties.Tags,
+		State:    apObj.Properties.ProvisioningState,
+		Labels:   instanceLabels,
+	}, nil
+}
+
+// fromKaitoAgentPoolToInstance is used to convert agentpool that owned by kaito to Instance, and agentPools that have no
+// associated node are also included in order to garbage leaked agentPools.
+func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
+	if apObj == nil {
+		return nil, fmt.Errorf("agent pool is nil")
+	}
+
+	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
+		return lo.FromPtr(k)
+	})
+	ins := &Instance{
+		Name:     apObj.Name,
+		Type:     apObj.Properties.VMSize,
+		SubnetID: apObj.Properties.VnetSubnetID,
+		Tags:     apObj.Properties.Tags,
+		State:    apObj.Properties.ProvisioningState,
+		Labels:   instanceLabels,
+	}
+
+	nodes, err := p.getNodesByName(ctx, lo.FromPtr(apObj.Name))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(nodes) == 1 && len(nodes[0].Spec.ProviderID) != 0 {
+		ins.ID = to.Ptr(nodes[0].Spec.ProviderID)
+	}
+
+	return ins, nil
+}
+
 func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armcontainerservice.AgentPool) ([]*Instance, error) {
 	if len(apList) == 0 {
 		return nil, fmt.Errorf("no agentpools found")
 	}
 	instances := []*Instance{}
 	for index := range apList {
-		instance, err := p.fromAgentPoolToInstance(ctx, apList[index])
+		// skip agentPool that is not owned by kaito
+		if !agentPoolIsOwnedByKaito(apList[index]) {
+			continue
+		}
+
+		instance, err := p.fromKaitoAgentPoolToInstance(ctx, apList[index])
 		if err != nil {
 			return nil, err
 		}
-		if instance != nil { // exclude not found or not ready node
+		if instance != nil {
 			instances = append(instances, instance)
 		}
 	}
@@ -261,7 +356,7 @@ func newAgentPoolObject(vmSize string, machine *v1alpha5.Machine) armcontainerse
 	}
 }
 
-func (p *Provider) getNodeByName(ctx context.Context, apName string) (*v1.Node, error) {
+func (p *Provider) getNodesByName(ctx context.Context, apName string) ([]*v1.Node, error) {
 	nodeList := &v1.NodeList{}
 	labelSelector := client.MatchingLabels{"agentpool": apName, "kubernetes.azure.com/agentpool": apName}
 
@@ -274,10 +369,20 @@ func (p *Provider) getNodeByName(ctx context.Context, apName string) (*v1.Node, 
 		return nil, err
 	}
 
-	if nodeList == nil || len(nodeList.Items) == 0 {
-		// NotFound is not considered as an error
-		return nil, nil
+	return lo.ToSlicePtr(nodeList.Items), nil
+}
+
+func agentPoolIsOwnedByKaito(ap *armcontainerservice.AgentPool) bool {
+	if ap == nil || ap.Properties == nil {
+		return false
 	}
 
-	return &nodeList.Items[0], nil
+	// when agentpool.NodeLabels includes labels from kaito, return true, if not, return false
+	for i := range KaitoNodeLabels {
+		if _, ok := ap.Properties.NodeLabels[KaitoNodeLabels[i]]; ok {
+			return true
+		}
+	}
+
+	return false
 }
