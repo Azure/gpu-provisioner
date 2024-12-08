@@ -31,7 +31,6 @@ import (
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/azure/gpu-provisioner/pkg/utils"
-
 	"github.com/pkg/errors"
 )
 

@@ -1,0 +1,68 @@
+apiVersion: karpenter.sh/v1
+kind: NodeClaim
+metadata:
+  name: gpuvmv1
+  labels:
+    karpenter.sh/nodepool: kaito
+    kaito.sh/workspace: test-gpu-provisioner
+    kaito.sh/workspacenamespace: default
+  annotations:
+    karpenter.sh/do-not-disrupt: "true"
+spec:
+  taints:
+    - key: "sku"
+      value: "gpu"
+      effect: "NoSchedule"
+  nodeClassRef:
+    name: gpuonly1
+    kind: AKSNodeClass
+    group: karpenter.azure.com
+  requirements:
+  - key: node.kubernetes.io/instance-type
+    operator: In
+    values:
+#    - Standard_NC6
+#    - Standard_NC12
+#    - Standard_NC24
+#    - Standard_NC24r
+#    - Standard_NC6s_v2
+#    - Standard_NC12s_v2
+#    - Standard_NC24s_v2
+#    - Standard_NC24rs_v2
+#    - Standard_NC6s_v3
+    - Standard_NC12s_v3
+#    - Standard_NC24s_v3
+#    - Standard_NC24rs_v3
+#    - Standard_NC12
+#    - Standard_NC16as_T4_v3
+#    - Standard_NC24
+#    - Standard_NC24r
+#    - Standard_NC4as_T4_v3
+#    - Standard_NC64as_T4_v3
+#    - Standard_NC8as_T4_v3
+#    - Standard_ND6s
+#    - Standard_ND12s
+#    - Standard_ND24s
+#    - Standard_ND24rs
+#    - Standard_NV6
+#    - Standard_NV12
+#    - Standard_NV24
+  - key: karpenter.sh/nodepool
+    operator: In
+    values:
+    - kaito
+  - key: gpu-provisioner.sh/machine-type
+    operator: In
+    values:
+    - gpu
+  - key: karpenter.azure.com/sku-name
+    operator: In
+    values:
+    - Standard_NC12s_v3
+  - key: kubernetes.io/os
+    operator: In
+    values:
+    - linux
+  resources:
+    requests:
+      ephemeral-storage: 120Gi

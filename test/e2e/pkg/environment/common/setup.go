@@ -16,10 +16,10 @@ limitations under the License.
 package common
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/aws/karpenter-core/pkg/test"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive,stylecheck
 	. "github.com/onsi/gomega"    //nolint:revive,stylecheck
 	"github.com/samber/lo"
@@ -29,24 +29,21 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-
-	"github.com/aws/karpenter-core/pkg/apis"
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/operator/injection"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/test"
 )
 
 var (
 	CleanableObjects = []client.Object{
 		&v1.Pod{},
 		&appsv1.Deployment{},
-		&v1alpha5.Machine{},
+		&karpenterv1.NodeClaim{},
 		&v1.Node{},
 	}
 )
 
 // nolint:gocyclo
 func (env *Environment) BeforeEach() {
-	env.Context = injection.WithSettingsOrDie(env.Context, env.KubeClient, apis.Settings...)
 	env.StartingNodeCount = env.Monitor.NodeCount()
 }
 
@@ -66,25 +63,25 @@ func (env *Environment) CleanupObjects(cleanableObjects ...client.Object) {
 			defer wg.Done()
 			defer GinkgoRecover()
 
+			gvk := lo.Must(apiutil.GVKForObject(obj, env.Client.Scheme()))
 			// This only gets the metadata for the objects since we don't need all the details of the objects
 			metaList := &metav1.PartialObjectMetadataList{}
-			metaList.SetGroupVersionKind(lo.Must(apiutil.GVKForObject(obj, env.Client.Scheme())))
+			metaList.SetGroupVersionKind(gvk)
 			Expect(env.Client.List(env, metaList, client.HasLabels([]string{test.DiscoveryLabel}))).To(Succeed())
 			// Limit the concurrency of these calls to 50 workers per object so that we try to limit how aggressively we
 			// are deleting so that we avoid getting client-side throttled
 			workqueue.ParallelizeUntil(env, 50, len(metaList.Items), func(i int) {
 				defer GinkgoRecover()
 				Eventually(func(g Gomega) {
-					metaList = &metav1.PartialObjectMetadataList{}
-					metaList.SetGroupVersionKind(lo.Must(apiutil.GVKForObject(obj, env.Client.Scheme())))
-					g.Expect(env.Client.List(env, metaList, client.HasLabels([]string{test.DiscoveryLabel}))).To(Succeed())
 					g.Expect(client.IgnoreNotFound(env.Client.Delete(env, &metaList.Items[i], client.PropagationPolicy(metav1.DeletePropagationForeground)))).To(Succeed())
 				}).WithPolling(time.Second).Should(Succeed())
 			})
 			Eventually(func(g Gomega) {
 				metaList = &metav1.PartialObjectMetadataList{}
-				metaList.SetGroupVersionKind(lo.Must(apiutil.GVKForObject(obj, env.Client.Scheme())))
-				g.Expect(len(metaList.Items)).To(BeZero())
+				metaList.SetGroupVersionKind(gvk)
+				err := env.Client.List(env, metaList, client.HasLabels([]string{test.DiscoveryLabel}))
+				g.Expect(err).To(Succeed())
+				g.Expect(len(metaList.Items)).To(BeZero(), fmt.Sprintf("Not all objects(%s) are deleted", gvk.String()))
 			}).WithPolling(time.Second * 10).Should(Succeed())
 		}(obj)
 	}

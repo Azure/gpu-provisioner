@@ -1,14 +1,18 @@
 package errors
 
 const (
-	// Azure Resource Errors
 
-	// ResourceNotFound is a const used to reference if we are missing a resource from azure
-	ResourceNotFound = "ResourceNotFound"
-
-	OperationNotAllowed = "OperationNotAllowed"
+	// Error codes
+	ResourceNotFound     = "ResourceNotFound"
+	OperationNotAllowed  = "OperationNotAllowed"
+	ZoneAllocationFailed = "ZonalAllocationFailed"
+	NicReservedForAnotherVM = "NicReservedForAnotherVm"
+	SKUNotAvailableErrorCode = "SkuNotAvailable"
+	
 
 	// Error search terms
+	LowPriorityQuotaExceededTerm = "LowPriorityCores"
+	SKUFamilyQuotaExceededTerm = "Family Cores quota"
 	SubscriptionQuotaExceededTerm = "Submit a request for Quota increase"
 	RegionalQuotaExceededTerm     = "exceeding approved Total Regional Cores quota"
 )

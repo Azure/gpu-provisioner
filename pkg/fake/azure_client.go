@@ -22,12 +22,15 @@ limitations under the License.
 package fake
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
+	"fmt"
 
-	runtime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	v4 "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	gomock "go.uber.org/mock/gomock"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"go.uber.org/mock/gomock"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 // MockAgentPoolsAPI is a mock of AgentPoolsAPI interface.
@@ -54,10 +57,10 @@ func (m *MockAgentPoolsAPI) EXPECT() *MockAgentPoolsAPIMockRecorder {
 }
 
 // BeginCreateOrUpdate mocks base method.
-func (m *MockAgentPoolsAPI) BeginCreateOrUpdate(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, parameters v4.AgentPool, options *v4.AgentPoolsClientBeginCreateOrUpdateOptions) (*runtime.Poller[v4.AgentPoolsClientCreateOrUpdateResponse], error) {
+func (m *MockAgentPoolsAPI) BeginCreateOrUpdate(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, parameters armcontainerservice.AgentPool, options *armcontainerservice.AgentPoolsClientBeginCreateOrUpdateOptions) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BeginCreateOrUpdate", ctx, resourceGroupName, resourceName, agentPoolName, parameters, options)
-	ret0, _ := ret[0].(*runtime.Poller[v4.AgentPoolsClientCreateOrUpdateResponse])
+	ret0, _ := ret[0].(*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -69,10 +72,10 @@ func (mr *MockAgentPoolsAPIMockRecorder) BeginCreateOrUpdate(ctx, resourceGroupN
 }
 
 // BeginDelete mocks base method.
-func (m *MockAgentPoolsAPI) BeginDelete(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, options *v4.AgentPoolsClientBeginDeleteOptions) (*runtime.Poller[v4.AgentPoolsClientDeleteResponse], error) {
+func (m *MockAgentPoolsAPI) BeginDelete(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, options *armcontainerservice.AgentPoolsClientBeginDeleteOptions) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BeginDelete", ctx, resourceGroupName, resourceName, agentPoolName, options)
-	ret0, _ := ret[0].(*runtime.Poller[v4.AgentPoolsClientDeleteResponse])
+	ret0, _ := ret[0].(*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -84,10 +87,10 @@ func (mr *MockAgentPoolsAPIMockRecorder) BeginDelete(ctx, resourceGroupName, res
 }
 
 // Get mocks base method.
-func (m *MockAgentPoolsAPI) Get(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, options *v4.AgentPoolsClientGetOptions) (v4.AgentPoolsClientGetResponse, error) {
+func (m *MockAgentPoolsAPI) Get(ctx context.Context, resourceGroupName, resourceName, agentPoolName string, options *armcontainerservice.AgentPoolsClientGetOptions) (armcontainerservice.AgentPoolsClientGetResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, resourceGroupName, resourceName, agentPoolName, options)
-	ret0, _ := ret[0].(v4.AgentPoolsClientGetResponse)
+	ret0, _ := ret[0].(armcontainerservice.AgentPoolsClientGetResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -99,10 +102,10 @@ func (mr *MockAgentPoolsAPIMockRecorder) Get(ctx, resourceGroupName, resourceNam
 }
 
 // NewListPager mocks base method.
-func (m *MockAgentPoolsAPI) NewListPager(resourceGroupName, resourceName string, options *v4.AgentPoolsClientListOptions) *runtime.Pager[v4.AgentPoolsClientListResponse] {
+func (m *MockAgentPoolsAPI) NewListPager(resourceGroupName, resourceName string, options *armcontainerservice.AgentPoolsClientListOptions) *runtime.Pager[armcontainerservice.AgentPoolsClientListResponse] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewListPager", resourceGroupName, resourceName, options)
-	ret0, _ := ret[0].(*runtime.Pager[v4.AgentPoolsClientListResponse])
+	ret0, _ := ret[0].(*runtime.Pager[armcontainerservice.AgentPoolsClientListResponse])
 	return ret0
 }
 
@@ -110,4 +113,18 @@ func (m *MockAgentPoolsAPI) NewListPager(resourceGroupName, resourceName string,
 func (mr *MockAgentPoolsAPIMockRecorder) NewListPager(resourceGroupName, resourceName, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewListPager", reflect.TypeOf((*MockAgentPoolsAPI)(nil).NewListPager), resourceGroupName, resourceName, options)
+}
+
+func CreateAgentPoolObjWithNodeClaim(nc *karpenterv1.NodeClaim) armcontainerservice.AgentPool {
+	return armcontainerservice.AgentPool{
+		Name: &nc.Name,
+		ID:   to.Ptr(fmt.Sprintf("azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-%s-20562481-vmss/virtualMachines/0", nc.Name)),
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			VMSize: to.Ptr(nc.Spec.Requirements[0].Values[0]),
+			NodeLabels: map[string]*string{
+				"test":               to.Ptr("test"),
+				"kaito.sh/workspace": to.Ptr("none"),
+			},
+		},
+	}
 }
