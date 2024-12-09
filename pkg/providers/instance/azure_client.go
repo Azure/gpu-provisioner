@@ -23,19 +23,13 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/azure/gpu-provisioner/pkg/utils"
-	"github.com/google/uuid"
-
-	// nolint SA1019 - deprecated package
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
-	"github.com/Azure/skewer"
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/network/armnetwork"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
+	"github.com/google/uuid"
 	"k8s.io/klog/v2"
 )
 
@@ -52,17 +46,13 @@ type AgentPoolsAPI interface {
 
 type AZClient struct {
 	agentPoolsClient AgentPoolsAPI
-	// SKU CLIENT is still using track 1 because skewer does not support the track 2 path. We need to refactor this once skewer supports track 2
-	SKUClient skewer.ResourceClient
 }
 
 func NewAZClientFromAPI(
 	agentPoolsClient AgentPoolsAPI,
-	skuClient skewer.ResourceClient,
 ) *AZClient {
 	return &AZClient{
 		agentPoolsClient: agentPoolsClient,
-		SKUClient:        skuClient,
 	}
 }
 
@@ -99,30 +89,14 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		opts = setArmClientOptions()
 	}
 
-	if err != nil {
-		klog.Errorf("Failed to get E2E testing cert: %v", err)
-	}
-
 	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
 	if err != nil {
 		return nil, err
 	}
 	klog.V(5).Infof("Created agent pool client %v using token credential", agentPoolClient)
-	interfacesClient, err := armnetwork.NewInterfacesClient(cfg.SubscriptionID, cred, opts)
-	if err != nil {
-		return nil, err
-	}
-	klog.V(5).Infof("Created network interface client %v using token credential", interfacesClient)
-
-	// TODO: this one is not enabled for rate limiting / throttling ...
-	// TODO Move this over to track 2 when skewer is migrated
-	skuClient := compute.NewResourceSkusClient(cfg.SubscriptionID)
-	skuClient.Authorizer = azClientConfig.Authorizer
-	klog.V(5).Infof("Created sku client with authorizer: %v", skuClient)
 
 	return &AZClient{
 		agentPoolsClient: agentPoolClient,
-		SKUClient:        skuClient,
 	}, nil
 }
 

@@ -17,4 +17,6 @@ jobs:
           use-quiet-mode: 'yes'
           # this will show detailed HTTP status for checked links
           use-verbose-mode: 'yes'
-          config-file: '.github/markdown.links.config.json'
+          folder-path: './'
+          base-branch: 'main'
+          max-depth: '2'

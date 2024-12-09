@@ -38,9 +38,8 @@ import (
 	"knative.dev/pkg/logging"
 	"knative.dev/pkg/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/test"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/test"
 )
 
 func (env *Environment) ExpectCreatedWithOffset(offset int, objects ...client.Object) {
@@ -58,7 +57,7 @@ func (env *Environment) ExpectCreated(objects ...client.Object) {
 
 func (env *Environment) ExpectDeletedWithOffset(offset int, objects ...client.Object) {
 	for _, object := range objects {
-		ExpectWithOffset(offset+1, env.Client.Delete(env, object, client.PropagationPolicy(metav1.DeletePropagationForeground), &client.DeleteOptions{GracePeriodSeconds: ptr.Int64(0)})).To(Succeed())
+		ExpectWithOffset(offset+1, client.IgnoreNotFound(env.Client.Delete(env, object, client.PropagationPolicy(metav1.DeletePropagationForeground), &client.DeleteOptions{GracePeriodSeconds: ptr.Int64(0)}))).To(Succeed())
 	}
 }
 
@@ -315,31 +314,31 @@ func (env *Environment) EventuallyExpectInitializedNodeCount(comparator string, 
 	EventuallyWithOffset(1, func(g Gomega) {
 		nodes = env.Monitor.CreatedNodes()
 		nodes = lo.Filter(nodes, func(n *v1.Node, _ int) bool {
-			return n.Labels[v1alpha5.LabelNodeInitialized] == "true"
+			return n.Labels[karpenterv1.NodeInitializedLabelKey] == "true"
 		})
 		g.Expect(len(nodes)).To(BeNumerically(comparator, count))
 	}).Should(Succeed())
 	return nodes
 }
 
-func (env *Environment) EventuallyExpectCreatedMachineCount(comparator string, count int) []*v1alpha5.Machine {
-	By(fmt.Sprintf("waiting for created machines to be %s to %d", comparator, count))
-	machineList := &v1alpha5.MachineList{}
+func (env *Environment) EventuallyExpectCreatedNodeClaimCount(comparator string, count int) []*karpenterv1.NodeClaim {
+	By(fmt.Sprintf("waiting for created node claims to be %s to %d", comparator, count))
+	nodeClaimList := &karpenterv1.NodeClaimList{}
 	EventuallyWithOffset(1, func(g Gomega) {
-		g.Expect(env.Client.List(env.Context, machineList)).To(Succeed())
-		g.Expect(len(machineList.Items)).To(BeNumerically(comparator, count))
+		g.Expect(env.Client.List(env.Context, nodeClaimList)).To(Succeed())
+		g.Expect(len(nodeClaimList.Items)).To(BeNumerically(comparator, count))
 	}).Should(Succeed())
-	return lo.Map(machineList.Items, func(m v1alpha5.Machine, _ int) *v1alpha5.Machine {
-		return &m
+	return lo.Map(nodeClaimList.Items, func(nc karpenterv1.NodeClaim, _ int) *karpenterv1.NodeClaim {
+		return &nc
 	})
 }
 
-func (env *Environment) EventuallyExpectMachinesReady(machines ...*v1alpha5.Machine) {
+func (env *Environment) EventuallyExpectNodeClaimsReady(objects ...client.Object) {
 	Eventually(func(g Gomega) {
-		for _, machine := range machines {
-			temp := &v1alpha5.Machine{}
-			g.Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(machine), temp)).Should(Succeed())
-			g.Expect(temp.StatusConditions().IsHappy()).To(BeTrue())
+		for _, object := range objects {
+			temp := &karpenterv1.NodeClaim{}
+			g.Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(object), temp)).Should(Succeed())
+			g.Expect(temp.StatusConditions().Root().IsTrue()).To(BeTrue())
 		}
 	}).Should(Succeed())
 }

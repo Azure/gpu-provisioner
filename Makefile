@@ -14,7 +14,7 @@ endif
 TOOLS_DIR := hack/tools
 TOOLS_BIN_DIR := $(abspath $(TOOLS_DIR)/bin)
 
-GOLANGCI_LINT_VER := v1.54.1
+GOLANGCI_LINT_VER := v1.61.0
 GOLANGCI_LINT_BIN := golangci-lint
 GOLANGCI_LINT := $(abspath $(TOOLS_BIN_DIR)/$(GOLANGCI_LINT_BIN)-$(GOLANGCI_LINT_VER))
 
@@ -38,7 +38,9 @@ BUILD_DATE_VAR := $(REPO_PATH)/pkg/version.BuildDate
 BUILD_DATE := $$(date +%Y-%m-%d-%H:%M)
 GIT_VAR := $(REPO_PATH)/pkg/version.GitCommit
 GIT_HASH := $$(git rev-parse --short HEAD)
-LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_VERSION) -X $(GIT_VAR)=$(GIT_HASH)"
+KARPENTER_VERSION_KEY := sigs.k8s.io/karpenter/pkg/operator.Version
+KARPENTER_VERSION_VAL := $(shell git describe --tags --always | cut -d"v" -f2)
+LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_VERSION) -X $(GIT_VAR)=$(GIT_HASH) -X $(KARPENTER_VERSION_KEY)=$(KARPENTER_VERSION_VAL)"
 
 # AKS INT/Staging Test
 AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
@@ -138,6 +140,7 @@ docker-build: docker-buildx
 		--output=$(OUTPUT_TYPE) \
 		--platform="linux/$(ARCH)" \
 		--pull \
+		--build-arg="KARPENTERVER=$(KARPENTER_VERSION_VAL)" \
 		--tag $(REGISTRY)/$(IMG_NAME):$(IMG_TAG) .
 
 

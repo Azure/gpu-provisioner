@@ -37,14 +37,46 @@ func IsNotFoundErr(err error) bool {
 	return azErr != nil && azErr.ErrorCode == ResourceNotFound
 }
 
+// ZonalAllocationFailureOccurred communicates if we have failed to allocate a resource in a zone, and should try another zone.
+// To learn more about zonal allocation failures, visit: http://aka.ms/allocation-guidance
+func ZonalAllocationFailureOccurred(err error) bool {
+	azErr := IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == ZoneAllocationFailed
+}
+
+// SKUFamilyQuotaHasBeenReached tells us if we have exceeded our Quota.
+func SKUFamilyQuotaHasBeenReached(err error) bool {
+	azErr := IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == OperationNotAllowed && strings.Contains(azErr.Error(), SKUFamilyQuotaExceededTerm)
+}
+
 // SubscriptionQuotaHasBeenReached tells us if we have exceeded our Quota.
 func SubscriptionQuotaHasBeenReached(err error) bool {
 	azErr := IsResponseError(err)
 	return azErr != nil && azErr.ErrorCode == OperationNotAllowed && strings.Contains(azErr.Error(), SubscriptionQuotaExceededTerm)
 }
 
-// RegionalQuotaHasBeenReached communicates if we have reached the quota for a given region.
+
+// RegionalQuotaHasBeenReached communicates if we have reached the quota limit for a given region under a specific subscription
 func RegionalQuotaHasBeenReached(err error) bool {
 	azErr := IsResponseError(err)
 	return azErr != nil && azErr.ErrorCode == OperationNotAllowed && strings.Contains(azErr.Error(), RegionalQuotaExceededTerm)
+}
+
+// LowPriorityQuotaHasBeenReached communicates if we have reached the quota limit for low priority VMs under a specific subscription 
+// Low priority VMs are generally Spot VMs, but can also be low priority VMs created via the Azure CLI or Azure Portal 
+func LowPriorityQuotaHasBeenReached(err error) bool {
+	azErr := IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == OperationNotAllowed && strings.Contains(azErr.Error(), LowPriorityQuotaExceededTerm)
+}
+// IsNicReservedForAnotherVM occurs when a NIC is associated with another VM during deletion. See https://aka.ms/deletenic 
+func IsNicReservedForAnotherVM(err error) bool {
+	azErr := IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == NicReservedForAnotherVM
+}
+
+// IsSKUNotAvailable https://aka.ms/azureskunotavailable: either not available for a location or zone, or out of capacity for Spot.
+func IsSKUNotAvailable(err error) bool {
+	azErr := IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == SKUNotAvailableErrorCode
 }
