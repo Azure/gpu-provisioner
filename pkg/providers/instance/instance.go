@@ -102,8 +102,16 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 		var err error
 		ap, err = createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName, apObj)
 		if err != nil {
-			logging.FromContext(ctx).Errorf("failed to create agent pool for nodeclaim(%s), %v", nodeClaim.Name, err)
-			return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
+			switch {
+			case strings.Contains(err.Error(), "Operation is not allowed because there's an in progress create node pool operation"):
+				// when gpu-provisioner restarted after crash for unknown reason, we may come across this error that agent pool creating
+				// is in progress, so we just need to wait node ready based on the apObj.
+				ap = &apObj
+				return nil
+			default:
+				logging.FromContext(ctx).Errorf("failed to create agent pool for nodeclaim(%s), %v", nodeClaim.Name, err)
+				return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
+			}
 		}
 		logging.FromContext(ctx).Debugf("created agent pool %s", *ap.ID)
 		return nil
