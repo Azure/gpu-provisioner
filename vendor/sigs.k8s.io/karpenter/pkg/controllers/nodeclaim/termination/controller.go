@@ -199,7 +199,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 		Named("nodeclaim.termination").
 		For(&v1.NodeClaim{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithEventFilter(nodeclaimutil.KaitoNodeClaimPredicate).
+		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
 		Watches(
 			&corev1.Node{},
 			nodeclaimutil.NodeEventHandler(c.kubeClient),

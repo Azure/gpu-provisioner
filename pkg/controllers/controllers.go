@@ -19,6 +19,7 @@ package controllers
 import (
 	"github.com/awslabs/operatorpkg/controller"
 	instancegarbagecollection "github.com/azure/gpu-provisioner/pkg/controllers/instance/garbagecollection"
+	nodeclaimstatus "github.com/azure/gpu-provisioner/pkg/controllers/nodeclaim"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
@@ -26,6 +27,7 @@ import (
 func NewControllers(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider) []controller.Controller {
 	controllers := []controller.Controller{
 		instancegarbagecollection.NewController(kubeClient, cloudProvider),
+		nodeclaimstatus.NewController(kubeClient),
 	}
 	return controllers
 }
