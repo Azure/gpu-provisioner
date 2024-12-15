@@ -60,7 +60,7 @@ type Controller struct {
 	launch         *Launch
 	registration   *Registration
 	initialization *Initialization
-	liveness       *NodeReady
+	liveness       *Liveness
 }
 
 func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, recorder events.Recorder) *Controller {
@@ -70,8 +70,7 @@ func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider clou
 		launch:         &Launch{kubeClient: kubeClient, cloudProvider: cloudProvider, cache: cache.New(time.Minute, time.Second*10), recorder: recorder},
 		registration:   &Registration{kubeClient: kubeClient},
 		initialization: &Initialization{kubeClient: kubeClient},
-		liveness:       &NodeReady{kubeClient: kubeClient},
-		// liveness:       &Liveness{clock: clk, kubeClient: kubeClient},
+		liveness:       &Liveness{clock: clk, kubeClient: kubeClient},
 	}
 }
 
@@ -141,7 +140,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 				DeleteFunc: func(e event.DeleteEvent) bool { return false },
 			},
 		)).
-		WithEventFilter(nodeclaimutil.KaitoNodeClaimPredicate).
+		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
 		Watches(
 			&corev1.Node{},
 			nodeclaimutil.NodeEventHandler(c.kubeClient),

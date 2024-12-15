@@ -117,7 +117,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return builder.
 		Named("nodeclaim.disruption").
 		For(&v1.NodeClaim{}).
-		WithEventFilter(nodeclaimutil.KaitoNodeClaimPredicate).
+		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		// Watches(
 		// 	&v1.NodePool{},
