@@ -152,7 +152,7 @@ func NewOperator() (context.Context, *Operator) {
 	mgrOpts := ctrl.Options{
 		Logger:                        logging.IgnoreDebugEvents(logger),
 		LeaderElection:                !options.FromContext(ctx).DisableLeaderElection,
-		LeaderElectionID:              "gpu-provisioner-leader-election",
+		LeaderElectionID:              "karpenter-leader-election",
 		LeaderElectionResourceLock:    resourcelock.LeasesResourceLock,
 		LeaderElectionNamespace:       system.Namespace(),
 		LeaderElectionReleaseOnCancel: true,
@@ -210,15 +210,15 @@ func NewOperator() (context.Context, *Operator) {
 	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.name", func(o client.Object) []string {
 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Name}
 	}), "failed to setup nodeclaim nodeclassref name indexer")
-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
-	// }), "failed to setup nodepool nodeclassref apiversion indexer")
-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
-	// }), "failed to setup nodepool nodeclassref kind indexer")
-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
-	// }), "failed to setup nodepool nodeclassref name indexer")
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
+	}), "failed to setup nodepool nodeclassref apiversion indexer")
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
+	}), "failed to setup nodepool nodeclassref kind indexer")
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
+	}), "failed to setup nodepool nodeclassref name indexer")
 	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &storagev1.VolumeAttachment{}, "spec.nodeName", func(o client.Object) []string {
 		return []string{o.(*storagev1.VolumeAttachment).Spec.NodeName}
 	}), "failed to setup volumeattachment indexer")
