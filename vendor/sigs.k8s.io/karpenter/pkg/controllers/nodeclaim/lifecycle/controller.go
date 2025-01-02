@@ -28,20 +28,22 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"sigs.k8s.io/karpenter/pkg/operator/injection"
+
+	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 )
@@ -60,7 +62,7 @@ type Controller struct {
 	launch         *Launch
 	registration   *Registration
 	initialization *Initialization
-	liveness       *NodeReady
+	liveness       *Liveness
 }
 
 func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, recorder events.Recorder) *Controller {
@@ -70,8 +72,7 @@ func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider clou
 		launch:         &Launch{kubeClient: kubeClient, cloudProvider: cloudProvider, cache: cache.New(time.Minute, time.Second*10), recorder: recorder},
 		registration:   &Registration{kubeClient: kubeClient},
 		initialization: &Initialization{kubeClient: kubeClient},
-		liveness:       &NodeReady{kubeClient: kubeClient},
-		// liveness:       &Liveness{clock: clk, kubeClient: kubeClient},
+		liveness:       &Liveness{clock: clk, kubeClient: kubeClient},
 	}
 }
 
@@ -141,7 +142,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 				DeleteFunc: func(e event.DeleteEvent) bool { return false },
 			},
 		)).
-		WithEventFilter(nodeclaimutil.KaitoNodeClaimPredicate).
 		Watches(
 			&corev1.Node{},
 			nodeclaimutil.NodeEventHandler(c.kubeClient),
