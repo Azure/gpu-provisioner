@@ -85,7 +85,6 @@ func (c *Controller) Reconcile(ctx context.Context, n *corev1.Node) (reconcile.R
 
 //nolint:gocyclo
 func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile.Result, error) {
-	log.FromContext(ctx).Info("finalize node", "node", node.Name)
 	if !controllerutil.ContainsFinalizer(node, v1.TerminationFinalizer) {
 		return reconcile.Result{}, nil
 	}
@@ -148,7 +147,6 @@ func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile
 	}
 	for _, nodeClaim := range nodeClaims {
 		isInstanceTerminated, err := termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
-		log.FromContext(ctx).Info("ensure terminated nodeclaim", "nodeclaim", nodeClaim.Name, "isInstanceTerminated", isInstanceTerminated, "error", err)
 		if err != nil {
 			// 404 = the nodeClaim no longer exists
 			if errors.IsNotFound(err) {
