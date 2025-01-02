@@ -99,7 +99,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
 	if err != nil {
 		return fmt.Errorf("listing pods on node, %w", err)
 	}
-	log.FromContext(ctx).Info("drain pods on node", "node", node.Name, "podsCount", len(pods), "nodeGracePeriodExpirationTime", nodeGracePeriodExpirationTime)
 
 	podsToDelete := lo.Filter(pods, func(p *corev1.Pod, _ int) bool {
 		return podutil.IsWaitingEviction(p, t.clock) && !podutil.IsTerminating(p)
@@ -110,7 +109,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
 
 	// evictablePods are pods that aren't yet terminating are eligible to have the eviction API called against them
 	evictablePods := lo.Filter(pods, func(p *corev1.Pod, _ int) bool { return podutil.IsEvictable(p) })
-	log.FromContext(ctx).Info("evict pods", "podsCount", len(evictablePods))
 	t.Evict(evictablePods)
 
 	// podsWaitingEvictionCount is the number of pods that either haven't had eviction called against them yet
@@ -119,7 +117,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
 	if podsWaitingEvictionCount > 0 {
 		return NewNodeDrainError(fmt.Errorf("%d pods are waiting to be evicted", len(pods)))
 	}
-	log.FromContext(ctx).Info("waiting eviction pods", "podsCount", podsWaitingEvictionCount)
 	return nil
 }
 
@@ -163,7 +160,6 @@ func (t *Terminator) EvictInOrder(pods ...[]*corev1.Pod) {
 }
 
 func (t *Terminator) DeleteExpiringPods(ctx context.Context, pods []*corev1.Pod, nodeGracePeriodTerminationTime *time.Time) error {
-	log.FromContext(ctx).Info("delete expiring pods", "podsCount", len(pods), "terminationTime", nodeGracePeriodTerminationTime)
 	for _, pod := range pods {
 		// check if the node has an expiration time and the pod needs to be deleted
 		deleteTime := t.podDeleteTimeWithGracePeriod(nodeGracePeriodTerminationTime, pod)
@@ -184,7 +180,7 @@ func (t *Terminator) DeleteExpiringPods(ctx context.Context, pods []*corev1.Pod,
 				"pod.terminationGracePeriodSeconds", *pod.Spec.TerminationGracePeriodSeconds,
 				"delete.gracePeriodSeconds", *gracePeriodSeconds,
 				"nodeclaim.terminationTime", *nodeGracePeriodTerminationTime,
-			).Info("deleting pod")
+			).V(1).Info("deleting pod")
 		}
 	}
 	return nil
