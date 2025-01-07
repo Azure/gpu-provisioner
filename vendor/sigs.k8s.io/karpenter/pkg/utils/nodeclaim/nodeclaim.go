@@ -50,7 +50,7 @@ var (
 			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
 		},
 	})
-	KaitoNodeClaimPredicate = predicate.Or(selector1, selector2)
+	KaitoResourcePredicate = predicate.Or(selector1, selector2)
 
 	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
 )
