@@ -2,7 +2,7 @@ name: publish_helm_chart
 
 on:
   repository_dispatch:
-    types: [ create-release ]
+    types: [publish-helm-chart ]
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -30,3 +30,15 @@ jobs:
           charts_dir: charts
           target_dir: charts
           linting: off
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [ publish-helm ]
+    environment: e2e-test
+    steps:
+      - name: 'Dispatch release tag to create release'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: create-release
+          client-payload: '{"tag": "${{ github.event.inputs.release_version }}"}'
