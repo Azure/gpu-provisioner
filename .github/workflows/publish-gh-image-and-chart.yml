@@ -1,4 +1,4 @@
-name: Publish gpu-provisioner image in ghcr and make a release
+name: Publish gpu-provisioner image to ghcr and helm chart
 on:
   workflow_dispatch:
     inputs:
@@ -108,14 +108,14 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-  create-release:
+  publish-helm-chart:
     runs-on: ubuntu-latest
     needs: [ build-scan-publish-gh-images ]
     environment: e2e-test  
     steps:
-      - name: 'Dispatch release tag'
+      - name: 'Dispatch release tag to publish helm chart'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: create-release
+          event-type: publish-helm-chart
           client-payload: '{"tag": "${{ github.event.inputs.release_version }}"}'
