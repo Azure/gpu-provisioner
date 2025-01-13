@@ -20,11 +20,5 @@ spec:
     - name: http-metrics
       port: {{ .Values.controller.metrics.port }}
       protocol: TCP
-    - name: webhook
-      port: {{ .Values.controller.webhook.port }}
-      protocol: TCP
-    - name: webhook-metrics
-      port: {{ .Values.controller.webhookMetrics.port }}
-      protocol: TCP
   selector:
     {{- include "gpu-provisioner.selectorLabels" . | nindent 4 }}

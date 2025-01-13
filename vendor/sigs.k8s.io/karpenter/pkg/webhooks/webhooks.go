@@ -54,14 +54,14 @@ const component = "webhook"
 var (
 	// TODO: Remove conversion webhooks once support for the v1beta1 APIs is dropped
 	ConversionResource = map[schema.GroupKind]conversion.GroupKindConversion{
-		// object.GVK(&v1beta1.NodePool{}).GroupKind(): {
-		// 	DefinitionName: "nodepools.karpenter.sh",
-		// 	HubVersion:     "v1",
-		// 	Zygotes: map[string]conversion.ConvertibleObject{
-		// 		"v1":      &v1.NodePool{},
-		// 		"v1beta1": &v1beta1.NodePool{},
-		// 	},
-		// },
+		object.GVK(&v1beta1.NodePool{}).GroupKind(): {
+			DefinitionName: "nodepools.karpenter.sh",
+			HubVersion:     "v1",
+			Zygotes: map[string]conversion.ConvertibleObject{
+				"v1":      &v1.NodePool{},
+				"v1beta1": &v1beta1.NodePool{},
+			},
+		},
 		object.GVK(&v1beta1.NodeClaim{}).GroupKind(): {
 			DefinitionName: "nodeclaims.karpenter.sh",
 			HubVersion:     "v1",
