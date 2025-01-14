@@ -126,8 +126,6 @@ controller:
       value: "false"
     - name: E2E_TEST_MODE
       value: "false"
-    - name: DISABLE_WEBHOOK
-      value: "true"
   envFrom: []
   # -- Resources for the controller pod.
   resources:
