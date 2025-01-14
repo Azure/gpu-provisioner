@@ -17,7 +17,8 @@ controller:
       value: "false"
     - name: E2E_TEST_MODE
       value: "false"
-
+    - name: DISABLE_WEBHOOK
+      value: "true"
 workloadIdentity:
   clientId: ${GPU_PROVISIONER_USER_ASSIGNED_CLIENT_ID}
   tenantId: ${AZURE_TENANT_ID}

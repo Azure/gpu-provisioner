@@ -16,17 +16,14 @@ limitations under the License.
 package suites
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/azure/gpu-provisioner/test/e2e/pkg/environment/common"
-	"github.com/imdario/mergo"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	karpenterv1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/test"
 )
 
@@ -169,85 +166,23 @@ var _ = Describe("GPU NodeClaim", func() {
 		env.EventuallyExpectNodeCount("==", 1)
 		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 	})
-
-	It("should provision one GPU node for v1beta1.NodeClaim", func() {
-		nodeClaimLabels := map[string]string{
-			"karpenter.sh/provisioner-name": "default",
-			"kaito.sh/workspace":            "none",
-		}
-
-		nc := V1beta1NodeClaim(karpenterv1beta1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "wstestnc2",
-				Labels: nodeClaimLabels,
-			},
-			Spec: karpenterv1beta1.NodeClaimSpec{
-				NodeClassRef: &karpenterv1beta1.NodeClassReference{
-					Name: "default",
-					Kind: "AKSNodeClass",
-				},
-				Requirements: []karpenterv1beta1.NodeSelectorRequirementWithMinValues{
-					{
-						NodeSelectorRequirement: v1.NodeSelectorRequirement{
-							Key:      v1.LabelInstanceTypeStable,
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
-						},
-					},
-					{
-						NodeSelectorRequirement: v1.NodeSelectorRequirement{
-							Key:      karpenterv1.NodePoolLabelKey,
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"kaito"},
-						},
-					},
-					{
-						NodeSelectorRequirement: v1.NodeSelectorRequirement{
-							Key:      v1.LabelOSStable,
-							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"linux"},
-						},
-					},
-				},
-				Taints: []v1.Taint{
-					{
-						Key:    "sku",
-						Value:  "gpu",
-						Effect: v1.TaintEffectNoSchedule,
-					},
-				},
-			},
-		})
-
-		DeferCleanup(func() {
-			env.ExpectDeleted(nc)
-			env.EventuallyExpectCreatedNodeClaimCount("==", 0)
-			env.EventuallyExpectNodeCount("==", 0)
-		})
-
-		env.ExpectCreated(nc)
-		env.EventuallyExpectCreatedNodeClaimCount("==", 1)
-		env.EventuallyExpectNodeClaimsReady(nc)
-		env.EventuallyExpectNodeCount("==", 1)
-		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
-	})
 	It("terminate all resources by deleting nodeclaim", func() {
 		nodeClaimLabels := map[string]string{
 			"karpenter.sh/provisioner-name": "default",
 			"kaito.sh/workspace":            "none",
 		}
 
-		nc := V1beta1NodeClaim(karpenterv1beta1.NodeClaim{
+		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "wstestnc3",
+				Name:   "wctestnc3",
 				Labels: nodeClaimLabels,
 			},
-			Spec: karpenterv1beta1.NodeClaimSpec{
-				NodeClassRef: &karpenterv1beta1.NodeClassReference{
+			Spec: karpenterv1.NodeClaimSpec{
+				NodeClassRef: &karpenterv1.NodeClassReference{
 					Name: "default",
 					Kind: "AKSNodeClass",
 				},
-				Requirements: []karpenterv1beta1.NodeSelectorRequirementWithMinValues{
+				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
@@ -300,17 +235,17 @@ var _ = Describe("GPU NodeClaim", func() {
 			"kaito.sh/workspace":            "none",
 		}
 
-		nc := V1beta1NodeClaim(karpenterv1beta1.NodeClaim{
+		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "wstestnc4",
+				Name:   "wctestnc4",
 				Labels: nodeClaimLabels,
 			},
-			Spec: karpenterv1beta1.NodeClaimSpec{
-				NodeClassRef: &karpenterv1beta1.NodeClassReference{
+			Spec: karpenterv1.NodeClaimSpec{
+				NodeClassRef: &karpenterv1.NodeClassReference{
 					Name: "default",
 					Kind: "AKSNodeClass",
 				},
-				Requirements: []karpenterv1beta1.NodeSelectorRequirementWithMinValues{
+				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
@@ -359,33 +294,3 @@ var _ = Describe("GPU NodeClaim", func() {
 	})
 
 })
-
-// V1beta1NodeClaim creates a test v1beta1.NodeClaim with defaults that can be overridden by overrides.
-// Overrides are applied in order, with a last write wins semantic.
-func V1beta1NodeClaim(overrides ...karpenterv1beta1.NodeClaim) *karpenterv1beta1.NodeClaim {
-	override := karpenterv1beta1.NodeClaim{}
-	for _, opts := range overrides {
-		if err := mergo.Merge(&override, opts, mergo.WithOverride); err != nil {
-			panic(fmt.Sprintf("failed to merge: %v", err))
-		}
-	}
-	if override.Name == "" {
-		override.Name = test.RandomName()
-	}
-	if override.Status.ProviderID == "" {
-		override.Status.ProviderID = test.RandomProviderID()
-	}
-	if override.Spec.NodeClassRef == nil {
-		override.Spec.NodeClassRef = &karpenterv1beta1.NodeClassReference{
-			Name: "default",
-		}
-	}
-	if override.Spec.Requirements == nil {
-		override.Spec.Requirements = []karpenterv1beta1.NodeSelectorRequirementWithMinValues{}
-	}
-	return &karpenterv1beta1.NodeClaim{
-		ObjectMeta: test.ObjectMeta(override.ObjectMeta),
-		Spec:       override.Spec,
-		Status:     override.Status,
-	}
-}

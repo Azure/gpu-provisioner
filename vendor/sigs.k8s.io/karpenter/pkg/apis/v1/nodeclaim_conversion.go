@@ -118,9 +118,7 @@ func (in *NodeClaim) ConvertFrom(ctx context.Context, from apis.Convertible) err
 	in.Annotations = lo.Assign(in.Annotations, map[string]string{
 		NodeClassReferenceAnnotationKey: string(nodeClassRefAnnotation),
 	})
-	// skip ExpireAfter because NodePool is not supported
-	// return in.setExpireAfter(ctx, v1beta1NC)
-	return nil
+	return in.setExpireAfter(ctx, v1beta1NC)
 }
 
 // only need to set expireAfter for v1beta1 to v1
@@ -160,13 +158,11 @@ func (in *NodeClaimSpec) convertFrom(ctx context.Context, v1beta1nc *v1beta1.Nod
 
 	in.NodeClassRef = &NodeClassReference{}
 	if v1beta1nc.NodeClassRef != nil {
-		if len(injection.GetNodeClasses(ctx)) != 0 {
-			defaultNodeClassGVK := injection.GetNodeClasses(ctx)[0]
-			in.NodeClassRef = &NodeClassReference{
-				Name:  v1beta1nc.NodeClassRef.Name,
-				Kind:  lo.Ternary(v1beta1nc.NodeClassRef.Kind == "", defaultNodeClassGVK.Kind, v1beta1nc.NodeClassRef.Kind),
-				Group: lo.Ternary(v1beta1nc.NodeClassRef.APIVersion == "", defaultNodeClassGVK.Group, strings.Split(v1beta1nc.NodeClassRef.APIVersion, "/")[0]),
-			}
+		defaultNodeClassGVK := injection.GetNodeClasses(ctx)[0]
+		in.NodeClassRef = &NodeClassReference{
+			Name:  v1beta1nc.NodeClassRef.Name,
+			Kind:  lo.Ternary(v1beta1nc.NodeClassRef.Kind == "", defaultNodeClassGVK.Kind, v1beta1nc.NodeClassRef.Kind),
+			Group: lo.Ternary(v1beta1nc.NodeClassRef.APIVersion == "", defaultNodeClassGVK.Group, strings.Split(v1beta1nc.NodeClassRef.APIVersion, "/")[0]),
 		}
 	}
 

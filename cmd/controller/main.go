@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	karpentercontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	karpenteroperator "sigs.k8s.io/karpenter/pkg/operator"
-	"sigs.k8s.io/karpenter/pkg/webhooks"
 )
 
 func main() {
@@ -46,6 +45,5 @@ func main() {
 		WithControllers(ctx, controllers.NewControllers(
 			op.GetClient(),
 			cloudProvider,
-		)...).
-		WithWebhooks(ctx, webhooks.NewWebhooks()...).Start(ctx, cloudProvider)
+		)...).Start(ctx, cloudProvider)
 }

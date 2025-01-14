@@ -20,7 +20,7 @@ Please check the installation guidance [here](./charts/gpu-provisioner/README.md
 After deploying the controller successfully, one can apply the yaml in `/examples` to create a NodeClaim CR. A real node will be created and added to the cluster by the controller.
 
 ## Important note
-- The gpu-provisioner assumes the NodeClaim CR name is **equal** to the agent pool name. Hence, **the NodeClaim CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.(Invalid NodeClaim will be removed automatically and an InvalidParameterError event will be published.)
+- The gpu-provisioner assumes the NodeClaim CR name is **equal** to the agent pool name. Hence, **the NodeClaim CR name must be 1-11 characters in length, start with a letter, and the only allowed characters are letters and numbers**.
 - The NodeClaim CR needs to have a label with key `kaito.sh/workspace` or `kaito.sh/ragengine`.
 
 ## Source Attribution

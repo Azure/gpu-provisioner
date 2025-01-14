@@ -126,6 +126,8 @@ controller:
       value: "false"
     - name: E2E_TEST_MODE
       value: "false"
+    - name: DISABLE_WEBHOOK
+      value: "true"
   envFrom: []
   # -- Resources for the controller pod.
   resources:
@@ -149,12 +151,6 @@ controller:
   healthProbe:
     # -- The container port to use for http health probe.
     port: 8081
-  webhook:
-    # -- The container port to use for http health probe.
-    port: 8443
-  webhookMetrics:
-    # -- The container port to use for http health probe.
-    port: 8001
 # -- Global log level
 logLevel: debug
 # -- Global log encoding

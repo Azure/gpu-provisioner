@@ -33,7 +33,6 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	_ "sigs.k8s.io/karpenter/pkg/apis/v1"
-	_ "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 )
 
