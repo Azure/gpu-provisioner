@@ -79,6 +79,8 @@ spec:
               value: "{{ .Values.controller.metrics.port }}"
             - name: HEALTH_PROBE_PORT
               value: "{{ .Values.controller.healthProbe.port }}"
+            - name: DISABLE_WEBHOOK
+              value: "true"
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
