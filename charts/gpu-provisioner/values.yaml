@@ -118,8 +118,6 @@ controller:
       value:
     - name: AZURE_CLUSTER_NAME
       value:
-    - name: AZURE_NODE_RESOURCE_GROUP
-      value:
     - name: ARM_RESOURCE_GROUP
       value:
     - name: LEADER_ELECT # disable leader election for better debugging experience

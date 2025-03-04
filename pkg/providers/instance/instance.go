@@ -51,26 +51,23 @@ var (
 )
 
 type Provider struct {
-	azClient          *AZClient
-	kubeClient        client.Client
-	resourceGroup     string
-	nodeResourceGroup string
-	clusterName       string
+	azClient      *AZClient
+	kubeClient    client.Client
+	resourceGroup string
+	clusterName   string
 }
 
 func NewProvider(
 	azClient *AZClient,
 	kubeClient client.Client,
 	resourceGroup string,
-	nodeResourceGroup string,
 	clusterName string,
 ) *Provider {
 	return &Provider{
-		azClient:          azClient,
-		kubeClient:        kubeClient,
-		resourceGroup:     resourceGroup,
-		nodeResourceGroup: nodeResourceGroup,
-		clusterName:       clusterName,
+		azClient:      azClient,
+		kubeClient:    kubeClient,
+		resourceGroup: resourceGroup,
+		clusterName:   clusterName,
 	}
 }
 

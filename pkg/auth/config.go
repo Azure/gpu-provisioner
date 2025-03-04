@@ -52,9 +52,6 @@ type Config struct {
 
 	//Configs only for AKS
 	ClusterName string `json:"clusterName" yaml:"clusterName"`
-	//Config only for AKS
-	NodeResourceGroup string `json:"nodeResourceGroup" yaml:"nodeResourceGroup"`
-
 	// enableDynamicSKUCache defines whether to enable dynamic instance workflow for instance information check
 	EnableDynamicSKUCache bool `json:"enableDynamicSKUCache,omitempty" yaml:"enableDynamicSKUCache,omitempty"`
 	// EnableDetailedCSEMessage defines whether to emit error messages in the CSE error body info
@@ -80,7 +77,6 @@ func (cfg *Config) BaseVars() {
 	cfg.TenantID = os.Getenv("AZURE_TENANT_ID")
 	cfg.UserAssignedIdentityID = os.Getenv("AZURE_CLIENT_ID")
 	cfg.ClusterName = os.Getenv("AZURE_CLUSTER_NAME")
-	cfg.NodeResourceGroup = os.Getenv("AZURE_NODE_RESOURCE_GROUP")
 	cfg.SubscriptionID = os.Getenv("ARM_SUBSCRIPTION_ID")
 }
 
@@ -124,21 +120,15 @@ func (cfg *Config) TrimSpace() {
 	cfg.SubscriptionID = strings.TrimSpace(cfg.SubscriptionID)
 	cfg.ResourceGroup = strings.TrimSpace(cfg.ResourceGroup)
 	cfg.ClusterName = strings.TrimSpace(cfg.ClusterName)
-	cfg.NodeResourceGroup = strings.TrimSpace(cfg.NodeResourceGroup)
 }
 
 // nolint: gocyclo
 func (cfg *Config) validate() error {
-
 	if cfg.SubscriptionID == "" {
 		return fmt.Errorf("subscription ID not set")
 	}
 	if cfg.TenantID == "" {
 		return fmt.Errorf("tenant ID not set")
-	}
-
-	if cfg.NodeResourceGroup == "" {
-		return fmt.Errorf("node resource group is not set")
 	}
 
 	return nil

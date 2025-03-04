@@ -108,7 +108,7 @@ func TestCreate(t *testing.T) {
 
 			// prepare instance provider
 			mockAzClient := instance.NewAZClientFromAPI(agentPoolMocks)
-			instanceProvider := instance.NewProvider(mockAzClient, mockK8sClient, "testRG", "nodeRG", "testCluster")
+			instanceProvider := instance.NewProvider(mockAzClient, mockK8sClient, "testRG", "testCluster")
 
 			// create cloud provider and call create function
 			cloudProvider := New(instanceProvider, nil)
@@ -205,7 +205,7 @@ func TestList(t *testing.T) {
 
 			// prepare instance provider
 			mockAzClient := instance.NewAZClientFromAPI(agentPoolMocks)
-			instanceProvider := instance.NewProvider(mockAzClient, mockK8sClient, "testRG", "nodeRG", "testCluster")
+			instanceProvider := instance.NewProvider(mockAzClient, mockK8sClient, "testRG", "testCluster")
 
 			// create cloud provider and call list function
 			cloudProvider := New(instanceProvider, nil)
@@ -288,7 +288,7 @@ func TestGet(t *testing.T) {
 
 			// prepare instance provider
 			mockAzClient := instance.NewAZClientFromAPI(agentPoolMocks)
-			instanceProvider := instance.NewProvider(mockAzClient, nil, "testRG", "nodeRG", "testCluster")
+			instanceProvider := instance.NewProvider(mockAzClient, nil, "testRG", "testCluster")
 
 			// create cloud provider and call list function
 			cloudProvider := New(instanceProvider, nil)
@@ -369,7 +369,7 @@ func TestDelete(t *testing.T) {
 
 			// prepare instance provider
 			mockAzClient := instance.NewAZClientFromAPI(agentPoolMocks)
-			instanceProvider := instance.NewProvider(mockAzClient, nil, "testRG", "nodeRG", "testCluster")
+			instanceProvider := instance.NewProvider(mockAzClient, nil, "testRG", "testCluster")
 
 			// create cloud provider and call list function
 			cloudProvider := New(instanceProvider, nil)

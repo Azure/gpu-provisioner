@@ -50,7 +50,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		azClient,
 		operator.GetClient(),
 		azConfig.ResourceGroup,
-		azConfig.NodeResourceGroup,
 		azConfig.ClusterName,
 	)
 

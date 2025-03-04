@@ -760,7 +760,7 @@ func TestCreateFailure(t *testing.T) {
 
 func createTestProvider(agentPoolsAPIMocks *fake.MockAgentPoolsAPI, mockK8sClient *fake.MockClient) *Provider {
 	mockAzClient := NewAZClientFromAPI(agentPoolsAPIMocks)
-	return NewProvider(mockAzClient, mockK8sClient, "testRG", "nodeRG", "testCluster")
+	return NewProvider(mockAzClient, mockK8sClient, "testRG", "testCluster")
 }
 
 func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armcontainerservice.ScaleSetPriority,

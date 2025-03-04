@@ -262,7 +262,7 @@ func TestReconcile(t *testing.T) {
 
 			// prepare instance provider
 			mockAzClient := instance.NewAZClientFromAPI(agentPoolMocks)
-			instanceProvider := instance.NewProvider(mockAzClient, fakeClient, "testRG", "nodeRG", "testCluster")
+			instanceProvider := instance.NewProvider(mockAzClient, fakeClient, "testRG", "testCluster")
 
 			// create cloud provider
 			cloudProvider := cloudprovider.New(instanceProvider, nil)
