@@ -9,6 +9,8 @@ controller:
       value: ${AZURE_LOCATION}
     - name: AZURE_CLUSTER_NAME
       value: ${CLUSTER_NAME}
+    - name: AZURE_NODE_RESOURCE_GROUP
+      value: ${AZURE_RESOURCE_GROUP_MC}    
     - name: ARM_RESOURCE_GROUP
       value: ${AZURE_RESOURCE_GROUP}
     - name: LEADER_ELECT # disable leader election for better debugging experience
