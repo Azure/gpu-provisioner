@@ -33,6 +33,8 @@ func main() {
 
 	cloudProvider := metrics.Decorate(azureCloudProvider)
 
+	_ = cloudProvider
+
 	op.
 		WithControllers(ctx, karpentercontrollers.NewControllers(
 			ctx,
