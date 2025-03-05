@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
+)
+
+var (
+	nodeSelectorPredicate, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: v1.NodePoolLabelKey, Operator: metav1.LabelSelectorOpExists},
+		},
+	})
 )
 
 type Controller struct {
@@ -45,6 +54,11 @@ func NewController(kubeClient client.Client) *Controller {
 
 func (c *Controller) Reconcile(ctx context.Context, node *corev1.Node) (reconcile.Result, error) {
 	if !node.GetDeletionTimestamp().IsZero() || len(node.Spec.ProviderID) == 0 {
+		return reconcile.Result{}, nil
+	}
+
+	// skip node which is not created from nodeclaim
+	if _, ok := node.Labels[v1.NodePoolLabelKey]; !ok {
 		return reconcile.Result{}, nil
 	}
 
@@ -105,5 +119,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 			),
 		).
 		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
+		WithEventFilter(nodeSelectorPredicate).
 		Complete(reconcile.AsReconciler(m.GetClient(), c))
 }

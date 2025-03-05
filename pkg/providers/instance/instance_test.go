@@ -786,8 +786,9 @@ func GetAgentPoolObjWithName(apName string, apId string, vmSize string) armconta
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			VMSize: &vmSize,
 			NodeLabels: map[string]*string{
-				"test":               to.Ptr("test"),
-				"kaito.sh/workspace": to.Ptr("none"),
+				"test":                       to.Ptr("test"),
+				"kaito.sh/workspace":         to.Ptr("none"),
+				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
 			},
 		},
 	}
