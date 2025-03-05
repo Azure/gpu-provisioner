@@ -38,6 +38,7 @@ func GetNodeClaimObj(name string, labels map[string]string, taints []v1.Taint, r
 	})
 
 	labels["kaito.sh/workspace"] = "none"
+	labels[karpenterv1.NodePoolLabelKey] = "kaito"
 	return &karpenterv1.NodeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

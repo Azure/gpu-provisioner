@@ -124,6 +124,7 @@ func CreateAgentPoolObjWithNodeClaim(nc *karpenterv1.NodeClaim) armcontainerserv
 			NodeLabels: map[string]*string{
 				"test":               to.Ptr("test"),
 				"kaito.sh/workspace": to.Ptr("none"),
+				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
 			},
 		},
 	}

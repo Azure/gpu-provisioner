@@ -25,9 +25,9 @@ import (
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/workqueue"
-	"knative.dev/pkg/logging"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -69,7 +69,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 		return nc.Name, true
 	})...)
 
-	// instance's related NodeClaim has been removed, and instance has been created for more than 10min
+	// instance's related NodeClaim has been removed, and instance has been created for more than 30s
 	// so we need to garbage these leaked cloudprovider instances and nodes.
 	deletedCloudProviderInstances := lo.Filter(cloudNodeClaims, func(nc *v1.NodeClaim, _ int) bool {
 		if clusterNodeClaimNames.Has(nc.Name) {
@@ -85,16 +85,16 @@ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 
 		return true
 	})
-	logging.FromContext(ctx).Infow("instance garbagecollection status", "garbaged instance count", len(deletedCloudProviderInstances))
+	log.FromContext(ctx).Info("instance garbagecollection status", "garbaged instance count", len(deletedCloudProviderInstances))
 
 	errs := make([]error, len(deletedCloudProviderInstances))
 	workqueue.ParallelizeUntil(ctx, 20, len(deletedCloudProviderInstances), func(i int) {
 		if err := c.cloudProvider.Delete(ctx, deletedCloudProviderInstances[i]); err != nil {
-			logging.FromContext(ctx).Errorf("failed to delete leaked cloudprovider instance(%s), %v", deletedCloudProviderInstances[i].Name, err)
+			log.FromContext(ctx).Error(err, "failed to delete leaked cloudprovider instance", "instance", deletedCloudProviderInstances[i].Name)
 			errs[i] = cloudprovider.IgnoreNodeClaimNotFoundError(err)
 			return
 		}
-		logging.FromContext(ctx).Infow("delete leaked cloudprovider instance successfully", "name", deletedCloudProviderInstances[i].Name)
+		log.FromContext(ctx).Info("delete leaked cloudprovider instance successfully", "name", deletedCloudProviderInstances[i].Name)
 
 		if len(deletedCloudProviderInstances[i].Status.ProviderID) != 0 {
 			nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, deletedCloudProviderInstances[i])
@@ -109,10 +109,10 @@ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 				if nodes[k].DeletionTimestamp.IsZero() {
 					// We delete nodes to trigger the node finalization and deletion flow
 					if err := c.kubeClient.Delete(ctx, nodes[k]); client.IgnoreNotFound(err) != nil {
-						logging.FromContext(ctx).Errorf("failed to delete leaked node(%s), %v", nodes[k].Name, err)
+						log.FromContext(ctx).Error(err, "failed to delete leaked node", "node", nodes[k].Name)
 						subErrs[k] = err
 					} else {
-						logging.FromContext(ctx).Infow("delete leaked node successfully", "name", nodes[k].Name)
+						log.FromContext(ctx).Info("delete leaked node successfully", "name", nodes[k].Name)
 					}
 				}
 			}

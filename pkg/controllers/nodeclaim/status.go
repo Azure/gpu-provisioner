@@ -22,15 +22,26 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
+)
+
+var (
+	nodeSelectorPredicate, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: v1.NodePoolLabelKey, Operator: metav1.LabelSelectorOpExists},
+		},
+	})
 )
 
 type Controller struct {
@@ -44,7 +55,13 @@ func NewController(kubeClient client.Client) *Controller {
 }
 
 func (c *Controller) Reconcile(ctx context.Context, node *corev1.Node) (reconcile.Result, error) {
+	ctx = injection.WithControllerName(ctx, "nodeclaim.status")
 	if !node.GetDeletionTimestamp().IsZero() || len(node.Spec.ProviderID) == 0 {
+		return reconcile.Result{}, nil
+	}
+
+	// skip node which is not created from nodeclaim
+	if _, ok := node.Labels[v1.NodePoolLabelKey]; !ok {
 		return reconcile.Result{}, nil
 	}
 
@@ -74,6 +91,7 @@ func (c *Controller) Reconcile(ctx context.Context, node *corev1.Node) (reconcil
 	}
 
 	if !equality.Semantic.DeepEqual(stored, nodeClaim) {
+		log.FromContext(ctx).Info("update nodeclaim status because node ready status changed", "nodeclaim", nodeClaim.Name, "readyStatus", nodeClaim.StatusConditions().Get(v1.ConditionTypeNodeReady).GetStatus())
 		if err := c.kubeClient.Status().Patch(ctx, nodeClaim, client.MergeFrom(stored)); err != nil {
 			return reconcile.Result{}, client.IgnoreNotFound(err)
 		}
@@ -105,5 +123,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 			),
 		).
 		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
+		WithEventFilter(nodeSelectorPredicate).
 		Complete(reconcile.AsReconciler(m.GetClient(), c))
 }
