@@ -9,7 +9,7 @@ A Helm chart for gpu-provisioner
 To install the chart with the release name `gpu-provisioner`:
 
 ```bash
-export CHART_VERSION=0.3.1
+export CHART_VERSION=0.3.2
 export CLUSTER_NAME=my-cluster
 export AZURE_RESOURCE_GROUP=my-rg
 export AZURE_SUBSCRIPTION_ID=my-subscription-id
