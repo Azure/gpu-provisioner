@@ -54,6 +54,7 @@ func TestReconcile(t *testing.T) {
 					Labels: map[string]string{
 						"agentpool":                      "agentpool1",
 						"kubernetes.azure.com/agentpool": "agentpool1",
+						karpenterv1.NodePoolLabelKey:     "kaito",
 					},
 				},
 				Spec: v1.NodeSpec{
@@ -86,6 +87,7 @@ func TestReconcile(t *testing.T) {
 					Labels: map[string]string{
 						"agentpool":                      "agentpool1",
 						"kubernetes.azure.com/agentpool": "agentpool1",
+						karpenterv1.NodePoolLabelKey:     "kaito",
 					},
 				},
 				Spec: v1.NodeSpec{
