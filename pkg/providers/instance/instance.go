@@ -297,6 +297,11 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armconta
 			continue
 		}
 
+		// skip agentPool which is not created from nodeclaim
+		if !agentPoolIsCreatedFromNodeClaim(apList[index]) {
+			continue
+		}
+
 		instance, err := p.fromKaitoAgentPoolToInstance(ctx, apList[index])
 		if err != nil {
 			return instances, err
@@ -380,6 +385,19 @@ func agentPoolIsOwnedByKaito(ap *armcontainerservice.AgentPool) bool {
 		if _, ok := ap.Properties.NodeLabels[KaitoNodeLabels[i]]; ok {
 			return true
 		}
+	}
+
+	return false
+}
+
+func agentPoolIsCreatedFromNodeClaim(ap *armcontainerservice.AgentPool) bool {
+	if ap == nil || ap.Properties == nil {
+		return false
+	}
+
+	// when agentpool.NodeLabels includes nodepool label, return true, if not, return false
+	if _, ok := ap.Properties.NodeLabels[karpenterv1.NodePoolLabelKey]; ok {
+		return true
 	}
 
 	return false
