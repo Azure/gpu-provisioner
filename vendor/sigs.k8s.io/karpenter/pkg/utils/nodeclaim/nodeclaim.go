@@ -28,31 +28,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-)
-
-const (
-	WorkspaceLabelKey = "kaito.sh/workspace"
-	RagEngineLabelKey = "kaito.sh/ragengine"
-)
-
-var (
-	selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
-		},
-	})
-	selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
-		},
-	})
-	KaitoResourcePredicate = predicate.Or(selector1, selector2)
-
-	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
 )
 
 // PodEventHandler is a watcher on corev1.Pods that maps Pods to NodeClaim based on the node names
@@ -202,16 +180,8 @@ func NodeForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeCl
 func AllNodesForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeClaim) ([]*corev1.Node, error) {
 	// NodeClaims that have no resolved providerID have no nodes mapped to them
 	if nodeClaim.Status.ProviderID == "" {
-		// check common failures caused by bad input
-		// cond := nodeClaim.StatusConditions().Get(v1.ConditionTypeLaunched)
-		// if cond != nil && !cond.IsTrue() && (cond.Message == "all requested instance types were unavailable during launch" || strings.Contains(cond.Message, "is not allowed in your subscription in location")) {
-		// 	return nil, nil // Not recoverable, does not consider as an error
-		// } else {
-		// 	return nil, fmt.Errorf("the nodeClaim(%s) has not been associated with any node yet, message: %s", nodeClaim.Name, cond.Message)
-		// }
 		return nil, nil
 	}
-
 	nodeList := corev1.NodeList{}
 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": nodeClaim.Status.ProviderID}); err != nil {
 		return nil, fmt.Errorf("listing nodes, %w", err)
@@ -229,18 +199,4 @@ func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *core
 		BlockOwnerDeletion: lo.ToPtr(true),
 	})
 	return node
-}
-
-func AllKaitoNodeClaims(ctx context.Context, c client.Client) ([]v1.NodeClaim, error) {
-	kaitoNodeClaims := make([]v1.NodeClaim, 0)
-
-	for i := range KaitoNodeClaimLabels {
-		nodeClaimList := &v1.NodeClaimList{}
-		if err := c.List(ctx, nodeClaimList, client.HasLabels([]string{KaitoNodeClaimLabels[i]})); err != nil {
-			return kaitoNodeClaims, err
-		}
-
-		kaitoNodeClaims = append(kaitoNodeClaims, nodeClaimList.Items...)
-	}
-	return kaitoNodeClaims, nil
 }

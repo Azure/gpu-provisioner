@@ -61,53 +61,28 @@ func NewController(c clock.Clock, kubeClient client.Client, cloudProvider cloudp
 
 func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 	ctx = injection.WithControllerName(ctx, "nodeclaim.garbagecollection")
-	currentNodeClaims, err := nodeclaimutil.AllKaitoNodeClaims(ctx, c.kubeClient)
-	if err != nil {
+
+	nodeClaimList := &v1.NodeClaimList{}
+	if err := c.kubeClient.List(ctx, nodeClaimList); err != nil {
 		return reconcile.Result{}, err
 	}
-
-	if len(currentNodeClaims) == 0 {
-		return reconcile.Result{RequeueAfter: time.Minute * 2}, nil
-	}
-
 	cloudProviderNodeClaims, err := c.cloudProvider.List(ctx)
 	if err != nil {
-		log.FromContext(ctx).Error(err, "cloudprovider failed to list nodeclaims")
 		return reconcile.Result{}, err
 	}
 	cloudProviderNodeClaims = lo.Filter(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) bool {
 		return nc.DeletionTimestamp.IsZero()
 	})
-	cloudProviderProviderIDs := sets.New[string](lo.FilterMap(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) (string, bool) {
-		// skip leaked cloudporiver instances
-		if len(nc.Status.ProviderID) == 0 {
-			return "", false
-		}
-
-		return nc.Status.ProviderID, true
+	cloudProviderProviderIDs := sets.New[string](lo.Map(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) string {
+		return nc.Status.ProviderID
 	})...)
-
 	// Only consider NodeClaims that are Registered since we don't want to fully rely on the CloudProvider
 	// API to trigger deletion of the Node. Instead, we'll wait for our registration timeout to trigger
-	nodeClaims := lo.Filter(lo.ToSlicePtr(currentNodeClaims), func(n *v1.NodeClaim, _ int) bool {
-		if n.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() &&
+	nodeClaims := lo.Filter(lo.ToSlicePtr(nodeClaimList.Items), func(n *v1.NodeClaim, _ int) bool {
+		return n.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() &&
 			n.DeletionTimestamp.IsZero() &&
-			!cloudProviderProviderIDs.Has(n.Status.ProviderID) {
-			return true
-		}
-
-		// If NodeClaim related node is not ready for more than 10min, we recognize the node crashed and
-		// delete this NodeClaim for triggering to create a new node.
-		readyCondition := n.StatusConditions().Root()
-		if n.StatusConditions().Get(v1.ConditionTypeInitialized).IsTrue() &&
-			readyCondition.IsFalse() &&
-			c.clock.Since(readyCondition.LastTransitionTime.Time) > 10*time.Minute {
-			return true
-		}
-
-		return false
+			!cloudProviderProviderIDs.Has(n.Status.ProviderID)
 	})
-	log.FromContext(ctx).Info("nodeclaim garbagecollection status", "garbaged nodeclaim count", len(nodeClaims))
 
 	errs := make([]error, len(nodeClaims))
 	workqueue.ParallelizeUntil(ctx, 20, len(nodeClaims), func(i int) {
@@ -131,7 +106,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
 			"NodeClaim", klog.KRef("", nodeClaims[i].Name),
 			"provider-id", nodeClaims[i].Status.ProviderID,
 			"nodepool", nodeClaims[i].Labels[v1.NodePoolLabelKey],
-		).Info("garbage collecting nodeclaim with no cloudprovider representation")
+		).V(1).Info("garbage collecting nodeclaim with no cloudprovider representation")
 		metrics.NodeClaimsDisruptedTotal.With(prometheus.Labels{
 			metrics.ReasonLabel:       "garbage_collected",
 			metrics.NodePoolLabel:     nodeClaims[i].Labels[v1.NodePoolLabelKey],
