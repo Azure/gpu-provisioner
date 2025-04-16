@@ -26,7 +26,6 @@ const (
 	ConditionTypeLaunched             = "Launched"
 	ConditionTypeRegistered           = "Registered"
 	ConditionTypeInitialized          = "Initialized"
-	ConditionTypeNodeReady            = "NodeReady"
 	ConditionTypeConsolidatable       = "Consolidatable"
 	ConditionTypeDrifted              = "Drifted"
 	ConditionTypeInstanceTerminating  = "InstanceTerminating"
@@ -65,7 +64,6 @@ func (in *NodeClaim) StatusConditions() status.ConditionSet {
 		ConditionTypeLaunched,
 		ConditionTypeRegistered,
 		ConditionTypeInitialized,
-		ConditionTypeNodeReady,
 	).For(in)
 }
 
