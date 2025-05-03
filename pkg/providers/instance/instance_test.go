@@ -49,7 +49,7 @@ func TestNewAgentPoolObject(t *testing.T) {
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: fake.GetNodeClaimObj("nodeclaim-test", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{
 				Requests: v1.ResourceList{
-					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30, resource.DecimalSI)),
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
 				},
 			}, []v1.NodeSelectorRequirement{}),
 			expected: GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
@@ -764,7 +764,7 @@ func createTestProvider(agentPoolsAPIMocks *fake.MockAgentPoolsAPI, mockK8sClien
 }
 
 func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armcontainerservice.ScaleSetPriority,
-	labels map[string]*string, taints []*string, storage int32, vmSize string) armcontainerservice.AgentPool {
+	labels map[string]*string, taints []*string, diskSizeGB int32, vmSize string) armcontainerservice.AgentPool {
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:       labels,
@@ -774,7 +774,7 @@ func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armc
 			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
 			Count:            to.Ptr(int32(1)),
 			ScaleSetPriority: to.Ptr(capacityType),
-			OSDiskSizeGB:     to.Ptr(storage),
+			OSDiskSizeGB:     to.Ptr(diskSizeGB),
 		},
 	}
 }
