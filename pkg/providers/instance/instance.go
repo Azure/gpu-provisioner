@@ -93,7 +93,10 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 		}
 
 		vmSize := instanceTypes[0]
-		apObj := newAgentPoolObject(vmSize, nodeClaim)
+		apObj, apErr := newAgentPoolObject(vmSize, nodeClaim)
+		if apErr != nil {
+			return apErr
+		}
 
 		logging.FromContext(ctx).Debugf("creating Agent pool %s (%s)", apName, vmSize)
 		var err error
@@ -318,7 +321,7 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armconta
 	return instances, nil
 }
 
-func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) armcontainerservice.AgentPool {
+func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcontainerservice.AgentPool, error) {
 	taints := nodeClaim.Spec.Taints
 	taintsStr := []*string{}
 	for _, t := range taints {
@@ -346,7 +349,9 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) armcont
 		storage = nodeClaim.Spec.Resources.Requests.Storage()
 	}
 	var diskSizeGB int32
-	if !storage.IsZero() {
+	if storage.Value() <= 0 {
+		return armcontainerservice.AgentPool{}, fmt.Errorf("storage request of nodeclaim(%s) should be more than 0", nodeClaim.Name)
+	} else {
 		diskSizeGB = int32(storage.Value() >> 30)
 	}
 
@@ -360,7 +365,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) armcont
 			Count:        to.Ptr(int32(1)),
 			OSDiskSizeGB: to.Ptr(diskSizeGB),
 		},
-	}
+	}, nil
 }
 
 func (p *Provider) getNodesByName(ctx context.Context, apName string) ([]*v1.Node, error) {
