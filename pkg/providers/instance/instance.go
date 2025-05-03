@@ -345,6 +345,10 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) armcont
 	if nodeClaim.Spec.Resources.Requests != nil {
 		storage = nodeClaim.Spec.Resources.Requests.Storage()
 	}
+	var diskSizeGB int32
+	if !storage.IsZero() {
+		diskSizeGB = int32(storage.Value() >> 30)
+	}
 
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
@@ -354,7 +358,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) armcont
 			VMSize:       to.Ptr(vmSize),
 			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
 			Count:        to.Ptr(int32(1)),
-			OSDiskSizeGB: to.Ptr(int32(storage.Value())),
+			OSDiskSizeGB: to.Ptr(diskSizeGB),
 		},
 	}
 }
