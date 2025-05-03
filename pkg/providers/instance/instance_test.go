@@ -18,6 +18,7 @@ package instance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -39,10 +40,11 @@ import (
 
 func TestNewAgentPoolObject(t *testing.T) {
 	testCases := []struct {
-		name      string
-		vmSize    string
-		nodeClaim *karpenterv1.NodeClaim
-		expected  armcontainerservice.AgentPool
+		name        string
+		vmSize      string
+		nodeClaim   *karpenterv1.NodeClaim
+		expected    armcontainerservice.AgentPool
+		expectedErr bool
 	}{
 		{
 			name:   "NodeClaim with Storage requirement",
@@ -55,6 +57,7 @@ func TestNewAgentPoolObject(t *testing.T) {
 			expected: GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
 				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
 				[]*string{}, 30, "Standard_NC6s_v3"),
+			expectedErr: false,
 		},
 		{
 			name:   "NodeClaim with no Storage requirement",
@@ -62,15 +65,18 @@ func TestNewAgentPoolObject(t *testing.T) {
 			nodeClaim: fake.GetNodeClaimObj("nodeclaim-test", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{
 				Requests: v1.ResourceList{},
 			}, []v1.NodeSelectorRequirement{}),
-			expected: GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
-				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
-				[]*string{}, 0, "Standard_NC6s_v3"),
+			expected:    armcontainerservice.AgentPool{},
+			expectedErr: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := newAgentPoolObject(tc.vmSize, tc.nodeClaim)
+			result, err := newAgentPoolObject(tc.vmSize, tc.nodeClaim)
+			if tc.expectedErr {
+				assert.EqualError(t, err, fmt.Sprintf("storage request of nodeclaim(%s) should be more than 0", tc.nodeClaim.Name))
+				return
+			}
 			assert.Equal(t, tc.expected.Properties.Type, result.Properties.Type)
 			assert.Equal(t, tc.expected.Properties.OSDiskSizeGB, result.Properties.OSDiskSizeGB)
 		})
@@ -484,13 +490,17 @@ func TestCreateSuccess(t *testing.T) {
 	}{
 		{
 			name: "Successfully create instance",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				ap := GetAgentPoolObjWithName(nodeClaim.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", nodeClaim.Spec.Requirements[0].Values[0])
 
@@ -526,13 +536,17 @@ func TestCreateSuccess(t *testing.T) {
 		},
 		{
 			name: "Successfully create instance after waiting for node to be ready",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				ap := GetAgentPoolObjWithName(nodeClaim.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", nodeClaim.Spec.Requirements[0].Values[0])
 
@@ -610,13 +624,17 @@ func TestCreateFailure(t *testing.T) {
 	}{
 		{
 			name: "Fail to create instance because node is not found and returns error on retry",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				ap := GetAgentPoolObjWithName(nodeClaim.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", nodeClaim.Spec.Requirements[0].Values[0])
 
@@ -645,13 +663,17 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to create instance because node object is not found",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				ap := GetAgentPoolObjWithName(nodeClaim.Name, "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", nodeClaim.Spec.Requirements[0].Values[0])
 
@@ -678,13 +700,17 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to delete instance because poller returns error",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				createResp := armcontainerservice.AgentPoolsClientCreateOrUpdateResponse{
 					AgentPool: armcontainerservice.AgentPool{},
@@ -706,27 +732,50 @@ func TestCreateFailure(t *testing.T) {
 		},
 		{
 			name: "Fail to create instance because agentPool.CreateOrUpdate returns a failure",
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_D4s_v4"},
-				},
-			}),
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_D4s_v4"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				return nil, errors.New("Failed to create agent pool")
 			},
 			expectedError: errors.New("Failed to create agent pool"),
 		},
 		{
-			name:          "Fail to create instance because nodeClaim spec does not have requirement for instance type",
-			nodeClaim:     fake.GetNodeClaimObj("agentpool000", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{}),
+			name: "Fail to create instance because nodeClaim spec does not have requirement for instance type",
+			nodeClaim: fake.GetNodeClaimObj("agentpool000", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{}),
 			expectedError: errors.New("nodeClaim spec has no requirement for instance type"),
 		},
 		{
-			name:          "Fail to create instance because of invalid nodeClaim name",
-			nodeClaim:     fake.GetNodeClaimObj("invalid-name", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{}),
+			name: "Fail to create instance because of invalid nodeClaim name",
+			nodeClaim: fake.GetNodeClaimObj("invalid-name", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{Requests: v1.ResourceList{
+					v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+				}},
+				[]v1.NodeSelectorRequirement{}),
 			expectedError: errors.New("is invalid, must match regex pattern: ^[a-z][a-z0-9]{0,11}$"),
+		},
+		{
+			name: "Fail to create instance because of no storage request",
+			nodeClaim: fake.GetNodeClaimObj("agentpool000", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
+				{
+					Key:      "node.kubernetes.io/instance-type",
+					Operator: "In",
+					Values:   []string{"Standard_D4s_v4"},
+				},
+			}),
+			expectedError: errors.New("storage request of nodeclaim(agentpool000) should be more than 0"),
 		},
 	}
 

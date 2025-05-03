@@ -26,10 +26,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/fake"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/mock/gomock"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
@@ -42,13 +44,19 @@ func TestCreate(t *testing.T) {
 		expectedError     bool
 	}{
 		"successfully create instance": {
-			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{}, karpenterv1.ResourceRequirements{}, []v1.NodeSelectorRequirement{
-				{
-					Key:      "node.kubernetes.io/instance-type",
-					Operator: "In",
-					Values:   []string{"Standard_NC6s_v3"},
+			nodeClaim: fake.GetNodeClaimObj("agentpool0", map[string]string{"test": "test"}, []v1.Taint{},
+				karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI)),
+					},
 				},
-			}),
+				[]v1.NodeSelectorRequirement{
+					{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: "In",
+						Values:   []string{"Standard_NC6s_v3"},
+					},
+				}),
 			mockAgentPoolResp: func(nodeClaim *karpenterv1.NodeClaim, mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientCreateOrUpdateResponse], error) {
 				ap := fake.CreateAgentPoolObjWithNodeClaim(nodeClaim)
 

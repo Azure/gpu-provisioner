@@ -65,4 +65,4 @@ spec:
     - linux
   resources:
     requests:
-      ephemeral-storage: 120Gi
+      storage: 120Gi

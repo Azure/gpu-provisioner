@@ -21,7 +21,9 @@ import (
 	"github.com/azure/gpu-provisioner/test/e2e/pkg/environment/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/test"
@@ -59,6 +61,11 @@ var _ = Describe("GPU NodeClaim", func() {
 				NodeClassRef: &karpenterv1.NodeClassReference{
 					Name: "default",
 					Kind: "AKSNodeClass",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
 				},
 				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
@@ -122,6 +129,11 @@ var _ = Describe("GPU NodeClaim", func() {
 					Name: "default",
 					Kind: "AKSNodeClass",
 				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
+				},
 				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
@@ -181,6 +193,11 @@ var _ = Describe("GPU NodeClaim", func() {
 				NodeClassRef: &karpenterv1.NodeClassReference{
 					Name: "default",
 					Kind: "AKSNodeClass",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
 				},
 				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
@@ -244,6 +261,11 @@ var _ = Describe("GPU NodeClaim", func() {
 				NodeClassRef: &karpenterv1.NodeClassReference{
 					Name: "default",
 					Kind: "AKSNodeClass",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
 				},
 				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
 					{
