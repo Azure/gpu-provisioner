@@ -47,6 +47,7 @@ type Config struct {
 	TenantID       string `json:"tenantId" yaml:"tenantId"`
 	SubscriptionID string `json:"subscriptionId" yaml:"subscriptionId"`
 	ResourceGroup  string `json:"resourceGroup" yaml:"resourceGroup"`
+	DeploymentMode string `json:"deploymentMode" yaml:"deploymentMode"`
 
 	UserAssignedIdentityID string `json:"userAssignedIdentityID" yaml:"userAssignedIdentityID"`
 
@@ -78,6 +79,7 @@ func (cfg *Config) BaseVars() {
 	cfg.UserAssignedIdentityID = os.Getenv("AZURE_CLIENT_ID")
 	cfg.ClusterName = os.Getenv("AZURE_CLUSTER_NAME")
 	cfg.SubscriptionID = os.Getenv("ARM_SUBSCRIPTION_ID")
+	cfg.DeploymentMode = os.Getenv("DEPLOYMENT_MODE")
 }
 
 // BuildAzureConfig returns a Config object for the Azure clients

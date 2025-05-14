@@ -17,6 +17,8 @@ package instance
 
 import (
 	"context"
+	"errors"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"maps"
 	"net/http"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
@@ -70,14 +73,23 @@ func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
 }
 
 func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
-	authorizer, err := auth.NewAuthorizer(cfg, env)
-	if err != nil {
-		return nil, err
+	var cred azcore.TokenCredential
+	var err error
+
+	if cfg.DeploymentMode == "managed" {
+		cred, err = azidentity.NewDefaultAzureCredential(nil)
+	} else if cfg.DeploymentMode == "self-hosted" {
+		authorizer, uerr := auth.NewAuthorizer(cfg, env)
+		if uerr != nil {
+			return nil, uerr
+		}
+		azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
+		azClientConfig.UserAgent = auth.GetUserAgentExtension()
+		cred, err = auth.NewCredential(cfg, azClientConfig.Authorizer)
+	} else {
+		err = errors.New("Invalid deployment mode. Please Make sure the DEPLOYMENT_MODE environment var is set to `self-hosted' or `managed` ")
 	}
 
-	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
-	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg, azClientConfig.Authorizer)
 	if err != nil {
 		return nil, err
 	}
