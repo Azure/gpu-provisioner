@@ -20,10 +20,12 @@ import (
 	"maps"
 	"net/http"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
@@ -70,14 +72,22 @@ func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
 }
 
 func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
-	authorizer, err := auth.NewAuthorizer(cfg, env)
-	if err != nil {
-		return nil, err
+	var cred azcore.TokenCredential
+	var err error
+
+	if cfg.DeploymentMode == "managed" {
+		cred, err = azidentity.NewDefaultAzureCredential(nil)
+	} else {
+		// deploymentMode value is "self-hosted" or "", then use the federated identity.
+		authorizer, uerr := auth.NewAuthorizer(cfg, env)
+		if uerr != nil {
+			return nil, uerr
+		}
+		azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
+		azClientConfig.UserAgent = auth.GetUserAgentExtension()
+		cred, err = auth.NewCredential(cfg, azClientConfig.Authorizer)
 	}
 
-	azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
-	azClientConfig.UserAgent = auth.GetUserAgentExtension()
-	cred, err := auth.NewCredential(cfg, azClientConfig.Authorizer)
 	if err != nil {
 		return nil, err
 	}
