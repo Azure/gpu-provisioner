@@ -17,7 +17,6 @@ package instance
 
 import (
 	"context"
-	"errors"
 	"maps"
 	"net/http"
 
@@ -78,7 +77,8 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 
 	if cfg.DeploymentMode == "managed" {
 		cred, err = azidentity.NewDefaultAzureCredential(nil)
-	} else if cfg.DeploymentMode == "self-hosted" {
+	} else {
+		// deploymentMode value is "self-hosted" or "", then use the federated identity.
 		authorizer, uerr := auth.NewAuthorizer(cfg, env)
 		if uerr != nil {
 			return nil, uerr
@@ -86,8 +86,6 @@ func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 		azClientConfig := cfg.GetAzureClientConfig(authorizer, env)
 		azClientConfig.UserAgent = auth.GetUserAgentExtension()
 		cred, err = auth.NewCredential(cfg, azClientConfig.Authorizer)
-	} else {
-		err = errors.New("Invalid deployment mode. Please Make sure the DEPLOYMENT_MODE environment var is set to `self-hosted' or `managed` ")
 	}
 
 	if err != nil {
