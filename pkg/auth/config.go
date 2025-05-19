@@ -23,12 +23,26 @@ import (
 	"time"
 
 	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 )
 
 const (
 	// toggle
-	dynamicSKUCacheDefault = false
+	dynamicSKUCacheDefault          = false
+	E2E_RP_INGRESS_ENDPOINT         = "rp.e2e.ig.e2e-aks.azure.com"
+	HTTPS_PORT                      = ":443"
+	E2E_RP_INGRESS_ENDPOINT_ADDRESS = E2E_RP_INGRESS_ENDPOINT + HTTPS_PORT
+	// if no frame is received for 30s, the transport will issue a ping health check to the server.
+	http2ReadIdleTimeout = 30 * time.Second
+
+	// we give 10s to the server to respond to the ping. if no response is received,
+	// the transport will close the connection, so that the next request will open a new connection and not
+	// hit a context deadline exceeded error.
+	http2PingTimeout = 10 * time.Second
+
+	// e2e environment variables
+	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
+	e2eBuildVersion              = "AKS_E2E_BUILD_VERSION"
 )
 
 // ClientConfig contains all essential information to create an Azure client.
@@ -43,13 +57,17 @@ type ClientConfig struct {
 
 // Config holds the configuration parsed from the --cloud-config flag
 type Config struct {
-	Location       string `json:"location" yaml:"location"`
-	TenantID       string `json:"tenantId" yaml:"tenantId"`
-	SubscriptionID string `json:"subscriptionId" yaml:"subscriptionId"`
-	ResourceGroup  string `json:"resourceGroup" yaml:"resourceGroup"`
-	DeploymentMode string `json:"deploymentMode" yaml:"deploymentMode"`
-
+	Location               string `json:"location" yaml:"location"`
+	TenantID               string `json:"tenantId" yaml:"tenantId"`
+	SubscriptionID         string `json:"subscriptionId" yaml:"subscriptionId"`
+	ResourceGroup          string `json:"resourceGroup" yaml:"resourceGroup"`
+	DeploymentMode         string `json:"deploymentMode" yaml:"deploymentMode"`
+	CloudEnvironment       string `json:"cloudEnvironment" yaml:"cloudEnvironment"`
 	UserAssignedIdentityID string `json:"userAssignedIdentityID" yaml:"userAssignedIdentityID"`
+
+	// e2e configuration
+	E2EBuildVersion           string `json:"e2eBuildVersion" yaml:"e2eBuildVersion"`
+	E2EOverlayResourceVersion string `json:"overlayResourceVersion" yaml:"overlayResourceVersion"`
 
 	//Configs only for AKS
 	ClusterName string `json:"clusterName" yaml:"clusterName"`
@@ -80,6 +98,13 @@ func (cfg *Config) BaseVars() {
 	cfg.ClusterName = os.Getenv("AZURE_CLUSTER_NAME")
 	cfg.SubscriptionID = os.Getenv("ARM_SUBSCRIPTION_ID")
 	cfg.DeploymentMode = os.Getenv("DEPLOYMENT_MODE")
+	cfg.CloudEnvironment = os.Getenv("CLOUD_ENVIRONMENT")
+
+	e2eMode := utils.WithDefaultBool("E2E_TEST_MODE", false)
+	if e2eMode {
+		cfg.E2EOverlayResourceVersion = os.Getenv(e2eOverlayResourceVersionKey)
+		cfg.E2EBuildVersion = os.Getenv(e2eBuildVersion)
+	}
 }
 
 // BuildAzureConfig returns a Config object for the Azure clients
@@ -105,11 +130,11 @@ func BuildAzureConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func (cfg *Config) GetAzureClientConfig(authorizer autorest.Authorizer, env *azure.Environment) *ClientConfig {
+func (cfg *Config) GetAzureClientConfig(authorizer autorest.Authorizer, resourceEndpoint string) *ClientConfig {
 	azClientConfig := &ClientConfig{
 		Location:                cfg.Location,
 		SubscriptionID:          cfg.SubscriptionID,
-		ResourceManagerEndpoint: env.ResourceManagerEndpoint,
+		ResourceManagerEndpoint: resourceEndpoint,
 		Authorizer:              authorizer,
 	}
 

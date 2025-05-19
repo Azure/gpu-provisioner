@@ -19,23 +19,20 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/services/keyvault/2016-10-01/keyvault"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
-	"github.com/azure/gpu-provisioner/pkg/utils"
-	"github.com/pkg/errors"
-)
-
-const (
-	e2eOverlayResourceVersionKey = "AKS_E2E_OVERLAY_RESOURCE_VERSION"
+	"golang.org/x/net/http2"
 )
 
 // ClientAssertionCredential authenticates an application with assertions provided by a callback function.
@@ -63,35 +60,11 @@ func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCre
 	}
 	c := &ClientAssertionCredential{file: tokenFilePath}
 
-	var cred confidential.Credential
-	isE2E := utils.WithDefaultBool("E2E_TEST_MODE", false)
-	if isE2E {
-		armClientCert, err := getE2ETestingCert(authorizer)
-		if err != nil {
-			return nil, err
-		}
-		certPEM, keyPEM := splitPEMBlock([]byte(to.String(armClientCert)))
-		if len(certPEM) == 0 {
-			return nil, errors.New("malformed cert pem format")
-		}
-
-		// Load client cert
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			return nil, err
-		}
-		leafCert := []tls.Certificate{cert}
-		cred, err = confidential.NewCredFromCert([]*x509.Certificate{leafCert[0].Leaf}, keyPEM)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		cred = confidential.NewCredFromAssertionCallback(
-			func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
-				return c.readJWTFromFS()
-			},
-		)
-	}
+	cred := confidential.NewCredFromAssertionCallback(
+		func(ctx context.Context, _ confidential.AssertionRequestOptions) (string, error) {
+			return c.readJWTFromFS()
+		},
+	)
 
 	// create the confidential client to request an AAD token
 	confidentialClientApp, err := confidential.New(
@@ -104,20 +77,6 @@ func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCre
 	c.client = confidentialClientApp
 
 	return c, nil
-}
-
-// GetToken implements the TokenCredential interface
-func (c *ClientAssertionCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
-	// get the token from the confidential client
-	token, err := c.client.AcquireTokenByCredential(ctx, opts.Scopes)
-	if err != nil {
-		return azcore.AccessToken{}, err
-	}
-
-	return azcore.AccessToken{
-		Token:     token.AccessToken,
-		ExpiresOn: token.ExpiresOn,
-	}, nil
 }
 
 // readJWTFromFS reads the jwt from file system
@@ -134,37 +93,130 @@ func (c *ClientAssertionCredential) readJWTFromFS() (string, error) {
 	return c.assertion, nil
 }
 
-func getE2ETestingCert(authorizer autorest.Authorizer) (*string, error) {
-	e2eOverlayResourceVersion := os.Getenv(e2eOverlayResourceVersionKey)
-	if e2eOverlayResourceVersion == "" {
-		return nil, fmt.Errorf("E2E overlay resource version is not set")
+func GetE2ETLSConfig(ctx context.Context, cred azcore.TokenCredential, cfg *Config) (*http.Client, error) {
+	armClientCert, err := getE2ETestingCert(ctx, cred, cfg)
+	if err != nil {
+		return nil, err
+	}
+	certPEM, keyPEM := splitPEMBlock([]byte(to.String(armClientCert)))
+	if len(certPEM) == 0 {
+		return nil, errors.New("malformed cert pem format")
 	}
 
-	keyVaultUrl := fmt.Sprintf("https://hcp%s.vault.azure.net/", e2eOverlayResourceVersion)
-	client := keyvault.New()
-	client.Authorizer = authorizer
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	result, err := client.GetSecret(ctx, keyVaultUrl, "e2e-arm-client-cert", "")
+	// Load client cert
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	ok := caCertPool.AppendCertsFromPEM([]byte(certPEM))
+	if !ok {
+		return nil, errors.New("cannot append certs from pem")
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            caCertPool,
+		InsecureSkipVerify: true,
+	}
+
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	rpIngressAddress := normalizeHostPort(constructE2ERPIngressEndpointAddress(ctx, cfg))
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == E2E_RP_INGRESS_ENDPOINT_ADDRESS {
+				addr = rpIngressAddress
+			}
+			return dialer.DialContext(ctx, network, addr)
+		},
+		// Configuring DialContext disables HTTP/2 by default.
+		// our use of DialContext does not impair the use of http/2 so we can force it.
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	if err = configureHTTP2Transport(transport); err != nil { //+gocover:ignore:block - can't make this fail.
+		return nil, err
+	}
+	client := &http.Client{
+		Transport: transport,
+	}
+	return client, nil
+}
+
+func normalizeHostPort(hostMaybeWithPort string) string {
+	if _, _, err := net.SplitHostPort(hostMaybeWithPort); err == nil {
+		return hostMaybeWithPort // host already has a port
+	}
+
+	return fmt.Sprintf("%s%s", hostMaybeWithPort, HTTPS_PORT)
+}
+
+// configureHTTP2Transport ensures that our defaultTransport is configured
+// with the http2 additional settings that work around the issue described here:
+// https://github.com/golang/go/issues/59690
+// azure sdk related issue is here:
+// https://github.com/Azure/azure-sdk-for-go/issues/21346#issuecomment-1699665586
+// you should not call this anywhere else.
+func configureHTTP2Transport(t *http.Transport) error {
+	// htt2Trans holds a reference to the default transport and configures "h2" middlewares that
+	// will use the below settings, making the standard http.Transport behave correctly.
+	http2Trans, err := http2.ConfigureTransports(t)
+	if err == nil {
+		// if no frame is received for 30s, the transport will issue a ping health check to the server.
+		http2Trans.ReadIdleTimeout = http2ReadIdleTimeout
+		// we give 10s to the server to respond to the ping. if no response is received,
+		// the transport will close the connection, so that the next request will open a new connection and not
+		// hit a context deadline exceeded error.
+		http2Trans.PingTimeout = http2PingTimeout
+	}
+	return err
+}
+
+func getE2ETestingCert(ctx context.Context, cred azcore.TokenCredential, cfg *Config) (*string, error) {
+	clientCertSecretName := "e2e-arm-client-c" + "ert" // workaround for G101
+
+	keyVaultUrl := fmt.Sprintf("https://hcp%s.vault.azure.net", cfg.E2EOverlayResourceVersion)
+	kvClient, err := azsecrets.NewClient(keyVaultUrl, cred, nil)
 	if err != nil { //+gocover:ignore:block keyvault fetch
 		return nil, err
 	}
+
+	result, err := kvClient.GetSecret(ctx, clientCertSecretName, "", nil)
+	if err != nil { //+gocover:ignore:block keyvault fetch
+		return nil, err
+	}
+
+	if result.Value == nil {
+		return nil, fmt.Errorf("secret %q not found", clientCertSecretName)
+	}
+
 	return result.Value, nil
 }
 
-// split the pem block to cert/key
-func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
-	for {
-		var derBlock *pem.Block
-		derBlock, pemBlock = pem.Decode(pemBlock)
-		if derBlock == nil {
-			break
-		}
-		if derBlock.Type == "CERTIFICATE" {
-			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
-		} else if derBlock.Type == "PRIVATE KEY" {
-			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
-		}
+func constructE2ERPIngressEndpointAddress(ctx context.Context, cfg *Config) string {
+	return fmt.Sprintf("aksrpingress-e2e-%s.%s.cloudapp.azure.com", cfg.E2EBuildVersion, cfg.Location)
+}
+
+// GetToken implements the TokenCredential interface
+func (c *ClientAssertionCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	// get the token from the confidential client
+	token, err := c.client.AcquireTokenByCredential(ctx, opts.Scopes)
+	if err != nil {
+		return azcore.AccessToken{}, err
 	}
-	return certPEM, keyPEM
+
+	return azcore.AccessToken{
+		Token:     token.AccessToken,
+		ExpiresOn: token.ExpiresOn,
+	}, nil
 }

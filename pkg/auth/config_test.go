@@ -16,10 +16,11 @@ limitations under the License.
 package auth
 
 import (
+	"net/http"
 	"os"
 	"testing"
 
-	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/stretchr/testify/assert"
 )
 
 func setEnvVars(vars map[string]string) {
@@ -43,74 +44,67 @@ func TestBaseVars(t *testing.T) {
 		"AZURE_CLUSTER_NAME":  "cluster-789",
 		"ARM_SUBSCRIPTION_ID": "sub-abc",
 		"DEPLOYMENT_MODE":     "mode1",
+		"CLOUD_ENVIRONMENT":   "AzurePublicCloud",
 	}
 	setEnvVars(envs)
 	defer unsetEnvVars([]string{
 		"LOCATION", "ARM_RESOURCE_GROUP", "AZURE_TENANT_ID", "AZURE_CLIENT_ID",
-		"AZURE_CLUSTER_NAME", "ARM_SUBSCRIPTION_ID", "DEPLOYMENT_MODE",
+		"AZURE_CLUSTER_NAME", "ARM_SUBSCRIPTION_ID", "DEPLOYMENT_MODE", "CLOUD_ENVIRONMENT",
 	})
 
 	cfg := &Config{}
 	cfg.BaseVars()
 
-	if cfg.Location != "eastus" {
-		t.Errorf("expected Location to be 'eastus', got %s", cfg.Location)
-	}
-	if cfg.ResourceGroup != "test-rg" {
-		t.Errorf("expected ResourceGroup to be 'test-rg', got %s", cfg.ResourceGroup)
-	}
-	if cfg.TenantID != "tenant-123" {
-		t.Errorf("expected TenantID to be 'tenant-123', got %s", cfg.TenantID)
-	}
-	if cfg.UserAssignedIdentityID != "client-456" {
-		t.Errorf("expected UserAssignedIdentityID to be 'client-456', got %s", cfg.UserAssignedIdentityID)
-	}
-	if cfg.ClusterName != "cluster-789" {
-		t.Errorf("expected ClusterName to be 'cluster-789', got %s", cfg.ClusterName)
-	}
-	if cfg.SubscriptionID != "sub-abc" {
-		t.Errorf("expected SubscriptionID to be 'sub-abc', got %s", cfg.SubscriptionID)
-	}
-	if cfg.DeploymentMode != "mode1" {
-		t.Errorf("expected DeploymentMode to be 'mode1', got %s", cfg.DeploymentMode)
-	}
+	assert.Equal(t, "eastus", cfg.Location)
+	assert.Equal(t, "test-rg", cfg.ResourceGroup)
+	assert.Equal(t, "tenant-123", cfg.TenantID)
+	assert.Equal(t, "client-456", cfg.UserAssignedIdentityID)
+	assert.Equal(t, "cluster-789", cfg.ClusterName)
+	assert.Equal(t, "sub-abc", cfg.SubscriptionID)
+	assert.Equal(t, "mode1", cfg.DeploymentMode)
+	assert.Equal(t, "AzurePublicCloud", cfg.CloudEnvironment)
 }
 
 func TestBuildAzureConfig_EnableDynamicSKUCache(t *testing.T) {
-	os.Setenv("ARM_SUBSCRIPTION_ID", "sub-abc")
-	os.Setenv("AZURE_TENANT_ID", "tenant-123")
-	os.Setenv("AZURE_ENABLE_DYNAMIC_SKU_CACHE", "true")
-	defer unsetEnvVars([]string{"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE"})
+	envs := map[string]string{
+		"ARM_SUBSCRIPTION_ID":            "sub-abc",
+		"AZURE_TENANT_ID":                "tenant-123",
+		"AZURE_ENABLE_DYNAMIC_SKU_CACHE": "true",
+	}
+	setEnvVars(envs)
+	defer unsetEnvVars([]string{
+		"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE",
+	})
 
 	cfg, err := BuildAzureConfig()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !cfg.EnableDynamicSKUCache {
-		t.Errorf("expected EnableDynamicSKUCache to be true")
-	}
+	assert.NoError(t, err)
+	assert.True(t, cfg.EnableDynamicSKUCache)
 }
 
 func TestBuildAzureConfig_InvalidDynamicSKUCache(t *testing.T) {
-	os.Setenv("ARM_SUBSCRIPTION_ID", "sub-abc")
-	os.Setenv("AZURE_TENANT_ID", "tenant-123")
-	os.Setenv("AZURE_ENABLE_DYNAMIC_SKU_CACHE", "notabool")
-	defer unsetEnvVars([]string{"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE"})
+	envs := map[string]string{
+		"ARM_SUBSCRIPTION_ID":            "sub-abc",
+		"AZURE_TENANT_ID":                "tenant-123",
+		"AZURE_ENABLE_DYNAMIC_SKU_CACHE": "notabool",
+	}
+	setEnvVars(envs)
+	defer unsetEnvVars([]string{
+		"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE",
+	})
 
 	_, err := BuildAzureConfig()
-	if err == nil {
-		t.Errorf("expected error for invalid AZURE_ENABLE_DYNAMIC_SKU_CACHE")
-	}
+	assert.Error(t, err)
 }
 
 func TestBuildAzureConfig_MissingRequired(t *testing.T) {
-	os.Unsetenv("ARM_SUBSCRIPTION_ID")
-	os.Unsetenv("AZURE_TENANT_ID")
+	envs := map[string]string{}
+	setEnvVars(envs)
+	defer unsetEnvVars([]string{
+		"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID",
+	})
 
 	_, err := BuildAzureConfig()
-	if err == nil {
-		t.Errorf("expected error for missing required env vars")
-	}
+	assert.Error(t, err)
 }
 
 func TestTrimSpace(t *testing.T) {
@@ -121,18 +115,10 @@ func TestTrimSpace(t *testing.T) {
 		ClusterName:    " cluster ",
 	}
 	cfg.TrimSpace()
-	if cfg.TenantID != "tenant" {
-		t.Errorf("expected TenantID to be 'tenant', got '%s'", cfg.TenantID)
-	}
-	if cfg.SubscriptionID != "sub" {
-		t.Errorf("expected SubscriptionID to be 'sub', got '%s'", cfg.SubscriptionID)
-	}
-	if cfg.ResourceGroup != "rg" {
-		t.Errorf("expected ResourceGroup to be 'rg', got '%s'", cfg.ResourceGroup)
-	}
-	if cfg.ClusterName != "cluster" {
-		t.Errorf("expected ClusterName to be 'cluster', got '%s'", cfg.ClusterName)
-	}
+	assert.Equal(t, "tenant", cfg.TenantID)
+	assert.Equal(t, "sub", cfg.SubscriptionID)
+	assert.Equal(t, "rg", cfg.ResourceGroup)
+	assert.Equal(t, "cluster", cfg.ClusterName)
 }
 
 func TestValidate(t *testing.T) {
@@ -140,35 +126,29 @@ func TestValidate(t *testing.T) {
 		TenantID:       "tenant",
 		SubscriptionID: "sub",
 	}
-	if err := cfg.validate(); err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	assert.NoError(t, cfg.validate())
 
 	cfg.TenantID = ""
-	if err := cfg.validate(); err == nil {
-		t.Errorf("expected error for missing TenantID")
-	}
+	assert.Error(t, cfg.validate())
 
 	cfg.TenantID = "tenant"
 	cfg.SubscriptionID = ""
-	if err := cfg.validate(); err == nil {
-		t.Errorf("expected error for missing SubscriptionID")
-	}
+	assert.Error(t, cfg.validate())
 }
 
 func TestBuildAzureConfig_DefaultDynamicSKUCache(t *testing.T) {
-	os.Setenv("ARM_SUBSCRIPTION_ID", "sub-abc")
-	os.Setenv("AZURE_TENANT_ID", "tenant-123")
-	os.Unsetenv("AZURE_ENABLE_DYNAMIC_SKU_CACHE")
-	defer unsetEnvVars([]string{"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE"})
+	envs := map[string]string{
+		"ARM_SUBSCRIPTION_ID": "sub-abc",
+		"AZURE_TENANT_ID":     "tenant-123",
+	}
+	setEnvVars(envs)
+	defer unsetEnvVars([]string{
+		"ARM_SUBSCRIPTION_ID", "AZURE_TENANT_ID", "AZURE_ENABLE_DYNAMIC_SKU_CACHE",
+	})
 
 	cfg, err := BuildAzureConfig()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.EnableDynamicSKUCache != dynamicSKUCacheDefault {
-		t.Errorf("expected EnableDynamicSKUCache to be %v", dynamicSKUCacheDefault)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, dynamicSKUCacheDefault, cfg.EnableDynamicSKUCache)
 }
 
 func TestConfig_GetAzureClientConfig(t *testing.T) {
@@ -176,12 +156,15 @@ func TestConfig_GetAzureClientConfig(t *testing.T) {
 		Location:       "eastus",
 		SubscriptionID: "sub-abc",
 	}
-	env := azure.PublicCloud
-	clientCfg := cfg.GetAzureClientConfig(nil, &env)
-	if clientCfg.Location != "eastus" {
-		t.Errorf("expected Location to be 'eastus', got %s", clientCfg.Location)
+	clientCfg := cfg.GetAzureClientConfig(nil, "resourceEndpoint")
+	assert.Equal(t, "eastus", clientCfg.Location)
+	assert.Equal(t, "sub-abc", clientCfg.SubscriptionID)
+}
+
+func TestConfigureHTTP2Transport(t *testing.T) {
+	transport := &http.Transport{
+		ForceAttemptHTTP2: true,
 	}
-	if clientCfg.SubscriptionID != "sub-abc" {
-		t.Errorf("expected SubscriptionID to be 'sub-abc', got %s", clientCfg.SubscriptionID)
-	}
+	err := configureHTTP2Transport(transport)
+	assert.NoError(t, err)
 }

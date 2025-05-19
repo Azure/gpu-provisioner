@@ -120,6 +120,8 @@ controller:
       value:
     - name: ARM_RESOURCE_GROUP
       value:
+    - name: CLOUD_ENVIRONMENT
+      value: "AzurePublic"
     - name: LEADER_ELECT # disable leader election for better debugging experience
       value: "false"
     - name: E2E_TEST_MODE

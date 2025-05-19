@@ -16,6 +16,7 @@ limitations under the License.
 package auth
 
 import (
+	"encoding/pem"
 	"fmt"
 
 	"github.com/azure/gpu-provisioner/pkg/utils/project"
@@ -23,4 +24,21 @@ import (
 
 func GetUserAgentExtension() string {
 	return fmt.Sprintf("gpu-provisioner-aks/v%s", project.Version)
+}
+
+// split the pem block to cert/key
+func splitPEMBlock(pemBlock []byte) (certPEM []byte, keyPEM []byte) {
+	for {
+		var derBlock *pem.Block
+		derBlock, pemBlock = pem.Decode(pemBlock)
+		if derBlock == nil {
+			break
+		}
+		if derBlock.Type == "CERTIFICATE" {
+			certPEM = append(certPEM, pem.EncodeToMemory(derBlock)...)
+		} else if derBlock.Type == "PRIVATE KEY" {
+			keyPEM = append(keyPEM, pem.EncodeToMemory(derBlock)...)
+		}
+	}
+	return certPEM, keyPEM
 }

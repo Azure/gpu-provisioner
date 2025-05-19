@@ -23,13 +23,13 @@ package fake
 
 import (
 	"context"
-	"reflect"
 	"fmt"
+	"reflect"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"go.uber.org/mock/gomock"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
@@ -122,8 +122,8 @@ func CreateAgentPoolObjWithNodeClaim(nc *karpenterv1.NodeClaim) armcontainerserv
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			VMSize: to.Ptr(nc.Spec.Requirements[0].Values[0]),
 			NodeLabels: map[string]*string{
-				"test":               to.Ptr("test"),
-				"kaito.sh/workspace": to.Ptr("none"),
+				"test":                       to.Ptr("test"),
+				"kaito.sh/workspace":         to.Ptr("none"),
 				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
 			},
 		},

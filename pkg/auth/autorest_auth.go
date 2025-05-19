@@ -23,13 +23,12 @@ import (
 	"time"
 
 	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
-// authResult contains the subset of results from token acquisition operation in ConfidentialClientApplication
+// authResult contains the subset of results from a token acquisition operation in ConfidentialClientApplication
 // For details see https://aka.ms/msal-net-authenticationresult
 type authResult struct {
 	accessToken    string
@@ -38,7 +37,7 @@ type authResult struct {
 	declinedScopes []string
 }
 
-func NewAuthorizer(config *Config, env *azure.Environment) (autorest.Authorizer, error) {
+func NewAuthorizer(ctx context.Context, config *Config, resourceEndpoint string) (autorest.Authorizer, error) {
 
 	// Azure AD Workload Identity webhook will inject the following env vars:
 	// 	AZURE_FEDERATED_TOKEN_FILE is the service account token path
@@ -63,7 +62,9 @@ func NewAuthorizer(config *Config, env *azure.Environment) (autorest.Authorizer,
 		return nil, fmt.Errorf("failed to create confidential client app: %w", err)
 	}
 
-	result, err := confidentialClientApp.AcquireTokenByCredential(context.Background(), []string{strings.TrimSuffix(env.ResourceManagerEndpoint, "/") + "/.default"})
+	result, err := confidentialClientApp.AcquireTokenByCredential(
+		ctx,
+		[]string{strings.TrimSuffix(resourceEndpoint, "/") + "/.default"})
 	if err != nil {
 		klog.ErrorS(err, "failed to acquire token")
 		return autorest.NewBearerAuthorizer(authResult{}), errors.Wrap(err, "failed to acquire token")
@@ -86,7 +87,7 @@ func (a *authResult) WithAuthorization() autorest.PrepareDecorator {
 	return autorest.WithBearerAuthorization(a.accessToken)
 }
 
-// readJWTFromFS reads the jwt from file system
+// readJWTFromFS reads the jwt from a file system
 func readJWTFromFS(tokenFilePath string) (string, error) {
 	token, err := os.ReadFile(tokenFilePath)
 	if err != nil {
