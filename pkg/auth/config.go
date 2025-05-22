@@ -47,12 +47,11 @@ const (
 
 // ClientConfig contains all essential information to create an Azure client.
 type ClientConfig struct {
-	CloudName               string
-	Location                string
-	SubscriptionID          string
-	ResourceManagerEndpoint string
-	Authorizer              autorest.Authorizer
-	UserAgent               string
+	CloudName      string
+	Location       string
+	SubscriptionID string
+	Authorizer     autorest.Authorizer
+	UserAgent      string
 }
 
 // Config holds the configuration parsed from the --cloud-config flag
@@ -132,10 +131,9 @@ func BuildAzureConfig() (*Config, error) {
 
 func (cfg *Config) GetAzureClientConfig(authorizer autorest.Authorizer, resourceEndpoint string) *ClientConfig {
 	azClientConfig := &ClientConfig{
-		Location:                cfg.Location,
-		SubscriptionID:          cfg.SubscriptionID,
-		ResourceManagerEndpoint: resourceEndpoint,
-		Authorizer:              authorizer,
+		Location:       cfg.Location,
+		SubscriptionID: cfg.SubscriptionID,
+		Authorizer:     authorizer,
 	}
 
 	return azClientConfig

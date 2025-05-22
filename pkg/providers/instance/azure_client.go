@@ -27,12 +27,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
-	"github.com/google/uuid"
-	"k8s.io/klog/v2"
-
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
+	"github.com/google/uuid"
+	"k8s.io/klog/v2"
 )
 
 type CloudEnvironmentName string
@@ -77,10 +77,11 @@ func CreateAzClient(ctx context.Context, cfg *auth.Config) (*AZClient, error) {
 	e2eMode := utils.WithDefaultBool("E2E_TEST_MODE", false)
 
 	// Defaulting env to Azure Public Cloud.
-	cloudConfig := getCloudConfiguration(cfg.CloudEnvironment, e2eMode)
+	_, resourceManagerEndpoint := getCloudConfiguration(cfg.CloudEnvironment, e2eMode)
+
 	var err error
 
-	azClient, err := NewAZClient(ctx, cfg, cloudConfig.Services[cloud.ResourceManager].Endpoint, e2eMode)
+	azClient, err := NewAZClient(ctx, cfg, resourceManagerEndpoint, e2eMode)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +132,7 @@ func NewAZClient(ctx context.Context, cfg *auth.Config, resourceEndpoint string,
 
 func setE2eArmClientOptions(cfg *auth.Config, transporter *http.Client) *arm.ClientOptions {
 
-	cloudConfig := getCloudConfiguration(cfg.CloudEnvironment, true)
+	cloudConfig, _ := getCloudConfiguration(cfg.CloudEnvironment, true)
 
 	return &arm.ClientOptions{
 		ClientOptions: policy.ClientOptions{
@@ -153,15 +154,19 @@ func setE2eArmClientOptions(cfg *auth.Config, transporter *http.Client) *arm.Cli
 	}
 }
 
-func getCloudConfiguration(cloudName string, e2eMode bool) cloud.Configuration {
+func getCloudConfiguration(cloudName string, e2eMode bool) (cloud.Configuration, string) {
 	var cloudConfig cloud.Configuration
+	resourceManagerEndpoint := azure.PublicCloud.ResourceManagerEndpoint
+
 	switch strings.ToLower(cloudName) {
 	case string(AzurePublicCloud):
 		cloudConfig = cloud.AzurePublic
 	case string(AzureUSGovernmentCloud):
 		cloudConfig = cloud.AzureGovernment
+		resourceManagerEndpoint = azure.USGovernmentCloud.ResourceManagerEndpoint
 	case string(AzureChinaCloud):
 		cloudConfig = cloud.AzureChina
+		resourceManagerEndpoint = azure.ChinaCloud.ResourceManagerEndpoint
 	default:
 		cloudConfig = cloud.AzurePublic
 	}
@@ -169,6 +174,7 @@ func getCloudConfiguration(cloudName string, e2eMode bool) cloud.Configuration {
 	if cloudConfig.Services == nil {
 		cloudConfig.Services = make(map[cloud.ServiceName]cloud.ServiceConfiguration)
 	}
+
 	if e2eMode {
 		// Set the resource manager endpoint to the E2E test endpoint
 		cloudConfig.Services[cloud.ResourceManager] = cloud.ServiceConfiguration{
@@ -176,5 +182,5 @@ func getCloudConfiguration(cloudName string, e2eMode bool) cloud.Configuration {
 			Endpoint: "https://" + auth.E2E_RP_INGRESS_ENDPOINT_ADDRESS,
 		}
 	}
-	return cloudConfig
+	return cloudConfig, resourceManagerEndpoint
 }
