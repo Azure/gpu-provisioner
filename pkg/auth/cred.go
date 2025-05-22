@@ -29,7 +29,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
-	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"golang.org/x/net/http2"
@@ -43,7 +42,7 @@ type ClientAssertionCredential struct {
 }
 
 // NewCredential provides a token credential for msi and service principal auth
-func NewCredential(cfg *Config, authorizer autorest.Authorizer) (azcore.TokenCredential, error) {
+func NewCredential(cfg *Config) (azcore.TokenCredential, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("failed to create credential, nil config provided")
 	}

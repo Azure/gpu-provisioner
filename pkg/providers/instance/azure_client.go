@@ -98,25 +98,17 @@ func NewAZClient(ctx context.Context, cfg *auth.Config, resourceEndpoint string,
 		cred, err = azidentity.NewDefaultAzureCredential(nil)
 	} else {
 		// deploymentMode value is "self-hosted" or "", then use the federated identity.
-		authorizer, uerr := auth.NewAuthorizer(ctx, cfg, resourceEndpoint)
-		if uerr != nil {
-			return nil, uerr
-		}
-		azClientConfig := cfg.GetAzureClientConfig(authorizer, resourceEndpoint)
-		azClientConfig.UserAgent = auth.GetUserAgentExtension()
-		cred, err = auth.NewCredential(cfg, azClientConfig.Authorizer)
+		cred, err = auth.NewCredential(cfg)
 	}
-
 	if err != nil {
 		return nil, err
 	}
 
 	if e2eMode {
-		transporter, err := auth.GetE2ETLSConfig(ctx, cred, cfg)
+		opts, err = setE2eArmClientOptions(ctx, cfg, cred)
 		if err != nil {
 			return nil, err
 		}
-		opts = setE2eArmClientOptions(cfg, transporter)
 	}
 
 	agentPoolClient, err := armcontainerservice.NewAgentPoolsClient(cfg.SubscriptionID, cred, opts)
@@ -130,9 +122,13 @@ func NewAZClient(ctx context.Context, cfg *auth.Config, resourceEndpoint string,
 	}, nil
 }
 
-func setE2eArmClientOptions(cfg *auth.Config, transporter *http.Client) *arm.ClientOptions {
-
+func setE2eArmClientOptions(ctx context.Context, cfg *auth.Config, cred azcore.TokenCredential) (*arm.ClientOptions, error) {
 	cloudConfig, _ := getCloudConfiguration(cfg.CloudEnvironment, true)
+
+	transporter, err := auth.GetE2ETLSConfig(ctx, cred, cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	return &arm.ClientOptions{
 		ClientOptions: policy.ClientOptions{
@@ -151,7 +147,7 @@ func setE2eArmClientOptions(cfg *auth.Config, transporter *http.Client) *arm.Cli
 			},
 			Cloud: cloudConfig,
 		},
-	}
+	}, nil
 }
 
 func getCloudConfiguration(cloudName string, e2eMode bool) (cloud.Configuration, string) {

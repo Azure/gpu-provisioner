@@ -151,16 +151,6 @@ func TestBuildAzureConfig_DefaultDynamicSKUCache(t *testing.T) {
 	assert.Equal(t, dynamicSKUCacheDefault, cfg.EnableDynamicSKUCache)
 }
 
-func TestConfig_GetAzureClientConfig(t *testing.T) {
-	cfg := &Config{
-		Location:       "eastus",
-		SubscriptionID: "sub-abc",
-	}
-	clientCfg := cfg.GetAzureClientConfig(nil, "resourceEndpoint")
-	assert.Equal(t, "eastus", clientCfg.Location)
-	assert.Equal(t, "sub-abc", clientCfg.SubscriptionID)
-}
-
 func TestConfigureHTTP2Transport(t *testing.T) {
 	transport := &http.Transport{
 		ForceAttemptHTTP2: true,

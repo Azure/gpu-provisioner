@@ -27,10 +27,7 @@ type ChainedTokenCredentialOptions struct {
 }
 
 // ChainedTokenCredential links together multiple credentials and tries them sequentially when authenticating. By default,
-// it tries all the credentials until one authenticates, after which it always uses that credential. For more information,
-// see [ChainedTokenCredential overview].
-//
-// [ChainedTokenCredential overview]: https://aka.ms/azsdk/go/identity/credential-chains#chainedtokencredential-overview
+// it tries all the credentials until one authenticates, after which it always uses that credential.
 type ChainedTokenCredential struct {
 	cond                 *sync.Cond
 	iterating            bool
@@ -48,9 +45,6 @@ func NewChainedTokenCredential(sources []azcore.TokenCredential, options *Chaine
 	for _, source := range sources {
 		if source == nil { // cannot have a nil credential in the chain or else the application will panic when GetToken() is called on nil
 			return nil, errors.New("sources cannot contain nil")
-		}
-		if mc, ok := source.(*ManagedIdentityCredential); ok {
-			mc.mic.chained = true
 		}
 	}
 	cp := make([]azcore.TokenCredential, len(sources))

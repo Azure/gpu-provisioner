@@ -129,7 +129,7 @@ func BuildAzureConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func (cfg *Config) GetAzureClientConfig(authorizer autorest.Authorizer, resourceEndpoint string) *ClientConfig {
+func (cfg *Config) GetAzureClientConfig(authorizer autorest.Authorizer) *ClientConfig {
 	azClientConfig := &ClientConfig{
 		Location:       cfg.Location,
 		SubscriptionID: cfg.SubscriptionID,
