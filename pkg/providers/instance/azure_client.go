@@ -27,11 +27,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/google/uuid"
+	"k8s.io/klog/v2"
+
 	"github.com/azure/gpu-provisioner/pkg/auth"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
-	"github.com/google/uuid"
-	"k8s.io/klog/v2"
 )
 
 type CloudEnvironmentName string
@@ -162,7 +163,7 @@ func getCloudConfiguration(cloudName string, e2eMode bool) cloud.Configuration {
 	case string(AzureChinaCloud):
 		cloudConfig = cloud.AzureChina
 	default:
-		panic("cloud config does not exist")
+		cloudConfig = cloud.AzurePublic
 	}
 
 	if cloudConfig.Services == nil {
