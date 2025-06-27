@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
+    azurev1alpha1 "github.com/Azure/karpenter-provider-azure/pkg/apis/v1alpha1"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/utils"
@@ -355,13 +355,28 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 		diskSizeGB = int32(storage.Value() >> 30)
 	}
 
+	// Determine OSSKU from NodeClassRef -> AKSNodeClass.imageFamily, default to Ubuntu
+	ossku := armcontainerservice.OSSKUUbuntu
+	if nodeClaim.Spec.NodeClassRef != nil && nodeClaim.Spec.NodeClassRef.Kind == "AKSNodeClass" {
+		aksNodeClass := &azurev1alpha1.AKSNodeClass{}
+		if err == nil && aksNodeClass.Spec.ImageFamily != "" {
+			switch strings.ToLower(aksNodeClass.Spec.ImageFamily) {
+			case "azurelinux":
+				ossku = armcontainerservice.OSSKUAzureLinux
+			case "ubuntu":
+				ossku = armcontainerservice.OSSKUUbuntu
+			}
+		}
+	}
+
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:   labels,
-			NodeTaints:   taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			NodeTaints:   taintsStr,
 			Type:         to.Ptr(scaleSetsType),
 			VMSize:       to.Ptr(vmSize),
 			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
+			OSSKU:        to.Ptr(ossku), 
 			Count:        to.Ptr(int32(1)),
 			OSDiskSizeGB: to.Ptr(diskSizeGB),
 		},
