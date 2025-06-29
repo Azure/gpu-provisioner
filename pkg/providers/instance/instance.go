@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-    azurev1alpha1 "github.com/Azure/karpenter-provider-azure/pkg/apis/v1alpha1"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/utils"
@@ -355,19 +355,32 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 		diskSizeGB = int32(storage.Value() >> 30)
 	}
 
-	// Determine OSSKU from NodeClassRef -> AKSNodeClass.imageFamily, default to Ubuntu
+	// Determine OSSKU from NodeClaim labels, annotations, or NodeClassRef, default to Ubuntu
 	ossku := armcontainerservice.OSSKUUbuntu
-	if nodeClaim.Spec.NodeClassRef != nil && nodeClaim.Spec.NodeClassRef.Kind == "AKSNodeClass" {
-		aksNodeClass := &azurev1alpha1.AKSNodeClass{}
-		if err == nil && aksNodeClass.Spec.ImageFamily != "" {
-			switch strings.ToLower(aksNodeClass.Spec.ImageFamily) {
-			case "azurelinux":
-				ossku = armcontainerservice.OSSKUAzureLinux
-			case "ubuntu":
-				ossku = armcontainerservice.OSSKUUbuntu
-			}
+	
+	// First check for a direct label on the NodeClaim
+	if imageFamily, ok := nodeClaim.Labels["kaito.sh/node-image-family"]; ok {
+		switch strings.ToLower(imageFamily) {
+		case "azurelinux":
+			ossku = armcontainerservice.OSSKUAzureLinux
+		case "ubuntu", "ubuntu2204":
+			ossku = armcontainerservice.OSSKUUbuntu
+		default:
+			klog.Warningf("Unknown imageFamily %s in NodeClaim label, defaulting to Ubuntu", imageFamily)
+		}
+	} else if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
+		// Check annotations as fallback
+		switch strings.ToLower(imageFamily) {
+		case "azurelinux":
+			ossku = armcontainerservice.OSSKUAzureLinux
+		case "ubuntu", "ubuntu2204":
+			ossku = armcontainerservice.OSSKUUbuntu
+		default:
+			klog.Warningf("Unknown imageFamily %s in NodeClaim annotation, defaulting to Ubuntu", imageFamily)
 		}
 	}
+	// Note: NodeClassRef support could be added in the future if needed,
+	// but requires importing external dependencies
 
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
