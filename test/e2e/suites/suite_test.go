@@ -31,64 +31,6 @@ import (
 
 var env *common.Environment
 
-// Helper function to create base NodeClaim specification
-func createBaseNodeClaimSpec() karpenterv1.NodeClaimSpec {
-	return karpenterv1.NodeClaimSpec{
-		NodeClassRef: &karpenterv1.NodeClassReference{
-			Name: "default",
-			Kind: "AKSNodeClass",
-		},
-		Resources: karpenterv1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
-			},
-		},
-		Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
-			{
-				NodeSelectorRequirement: v1.NodeSelectorRequirement{
-					Key:      v1.LabelInstanceTypeStable,
-					Operator: v1.NodeSelectorOpIn,
-					Values:   []string{"Standard_NC12s_v3"},
-				},
-			},
-			{
-				NodeSelectorRequirement: v1.NodeSelectorRequirement{
-					Key:      karpenterv1.NodePoolLabelKey,
-					Operator: v1.NodeSelectorOpIn,
-					Values:   []string{"kaito"},
-				},
-			},
-			{
-				NodeSelectorRequirement: v1.NodeSelectorRequirement{
-					Key:      v1.LabelOSStable,
-					Operator: v1.NodeSelectorOpIn,
-					Values:   []string{"linux"},
-				},
-			},
-		},
-		Taints: []v1.Taint{
-			{
-				Key:    "sku",
-				Value:  "gpu",
-				Effect: v1.TaintEffectNoSchedule,
-			},
-		},
-	}
-}
-
-// Helper function to create NodeClaim with custom labels and annotations
-func createNodeClaimWithMetadata(name string, labels map[string]string, annotations map[string]string) *karpenterv1.NodeClaim {
-	nc := test.NodeClaim(karpenterv1.NodeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Spec: createBaseNodeClaimSpec(),
-	})
-	return nc
-}
-
 func TestGPUNodeClaim(t *testing.T) {
 	RegisterFailHandler(Fail)
 	BeforeSuite(func() {
