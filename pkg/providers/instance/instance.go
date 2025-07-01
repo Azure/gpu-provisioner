@@ -356,29 +356,6 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 	}
 
 	// Determine OSSKU from NodeClaim labels, annotations, or NodeClassRef, default to Ubuntu
-	ossku := armcontainerservice.OSSKUUbuntu
-	
-	// First check for a direct label on the NodeClaim
-	if imageFamily, ok := nodeClaim.Labels["kaito.sh/node-image-family"]; ok {
-		switch strings.ToLower(imageFamily) {
-		case "azurelinux":
-			ossku = armcontainerservice.OSSKUAzureLinux
-		case "ubuntu", "ubuntu2204":
-			ossku = armcontainerservice.OSSKUUbuntu
-		default:
-			klog.Warningf("Unknown imageFamily %s in NodeClaim label, defaulting to Ubuntu", imageFamily)
-		}
-	} else if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
-		// Check annotations as fallback
-		switch strings.ToLower(imageFamily) {
-		case "azurelinux":
-			ossku = armcontainerservice.OSSKUAzureLinux
-		case "ubuntu", "ubuntu2204":
-			ossku = armcontainerservice.OSSKUUbuntu
-		default:
-			klog.Warningf("Unknown imageFamily %s in NodeClaim annotation, defaulting to Ubuntu", imageFamily)
-		}
-	}
 	// Note: NodeClassRef support could be added in the future if needed,
 	// but requires importing external dependencies
 
@@ -389,7 +366,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 			Type:         to.Ptr(scaleSetsType),
 			VMSize:       to.Ptr(vmSize),
 			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
-			OSSKU:        to.Ptr(ossku), 
+			OSSKU:        determineOSSKU(nodeClaim), 
 			Count:        to.Ptr(int32(1)),
 			OSDiskSizeGB: to.Ptr(diskSizeGB),
 		},
@@ -438,4 +415,33 @@ func agentPoolIsCreatedFromNodeClaim(ap *armcontainerservice.AgentPool) bool {
 	}
 
 	return false
+}
+
+// determineOSSKU determines the OS SKU from NodeClaim labels or annotations, defaulting to Ubuntu
+func determineOSSKU(nodeClaim *karpenterv1.NodeClaim) *armcontainerservice.OSSKU {
+	// Helper function to convert image family to OSSKU
+	convertImageFamilyToOSSKU := func(imageFamily, source string) *armcontainerservice.OSSKU {
+		switch strings.ToLower(imageFamily) {
+		case "azurelinux":
+			return to.Ptr(armcontainerservice.OSSKUAzureLinux)
+		case "ubuntu", "ubuntu2204":
+			return to.Ptr(armcontainerservice.OSSKUUbuntu)
+		default:
+			klog.Warningf("Unknown imageFamily %s in NodeClaim %s, defaulting to Ubuntu", imageFamily, source)
+			return to.Ptr(armcontainerservice.OSSKUUbuntu)
+		}
+	}
+
+	// First check for a direct label on the NodeClaim
+	if imageFamily, ok := nodeClaim.Labels["kaito.sh/node-image-family"]; ok {
+		return convertImageFamilyToOSSKU(imageFamily, "label")
+	}
+	
+	// Check annotations as fallback
+	if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
+		return convertImageFamilyToOSSKU(imageFamily, "annotation")
+	}
+
+	// Default to Ubuntu if no image family is specified
+	return to.Ptr(armcontainerservice.OSSKUUbuntu)
 }
