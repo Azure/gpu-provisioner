@@ -366,7 +366,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 			Type:         to.Ptr(scaleSetsType),
 			VMSize:       to.Ptr(vmSize),
 			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
-			OSSKU:        determineOSSKU(nodeClaim), 
+			OSSKU:        determineOSSKU(nodeClaim),
 			Count:        to.Ptr(int32(1)),
 			OSDiskSizeGB: to.Ptr(diskSizeGB),
 		},
@@ -431,12 +431,10 @@ func determineOSSKU(nodeClaim *karpenterv1.NodeClaim) *armcontainerservice.OSSKU
 			return to.Ptr(armcontainerservice.OSSKUUbuntu)
 		}
 	}
-
 	// First check for a direct label on the NodeClaim
 	if imageFamily, ok := nodeClaim.Labels["kaito.sh/node-image-family"]; ok {
 		return convertImageFamilyToOSSKU(imageFamily, "label")
 	}
-	
 	// Check annotations as fallback
 	if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
 		return convertImageFamilyToOSSKU(imageFamily, "annotation")
