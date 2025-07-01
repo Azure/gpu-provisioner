@@ -1,22 +1,43 @@
-name: markdown link
+name: Markdown Link Check
 
 on:
   pull_request:
     paths:
       - '**.md'
       - 'docs/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '**.md'
+      - 'docs/**'
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC to catch broken links
+    - cron: '0 2 * * 0'
 
 jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      - uses: gaurav-nelson/github-action-markdown-link-check@v1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          # this will only show errors in the output
+          # Show only errors in the output for cleaner logs
           use-quiet-mode: 'yes'
-          # this will show detailed HTTP status for checked links
+          # Show detailed HTTP status for checked links
           use-verbose-mode: 'yes'
+          # Check all markdown files in the repository
           folder-path: './'
+          # Base branch for comparison
           base-branch: 'main'
-          max-depth: '2'
+          # Maximum depth for recursive directory search
+          max-depth: '3'
+          # Configuration file for custom settings
+          config-file: '.github/workflows/markdown-link-check-config.json'
+          # Check modified files only in PR context
+          check-modified-files-only: 'yes'
