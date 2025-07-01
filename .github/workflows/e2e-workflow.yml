@@ -52,6 +52,20 @@ jobs:
         with:
           ref: ${{ inputs.git_sha }}
 
+      - name: Validate inputs
+        run: |
+          echo "🔍 Validating workflow inputs..."
+          echo "Git SHA: ${{ inputs.git_sha }}"
+          echo "Region: ${{ inputs.region }}"
+          echo "K8s Version: ${{ inputs.k8s_version }}"
+          echo "Is Release: ${{ inputs.isRelease }}"
+          
+          # Validate required inputs
+          if [ -z "${{ inputs.git_sha }}" ]; then
+            echo "❌ Error: git_sha is required"
+            exit 1
+          fi
+
       - name: Set e2e Resource and Cluster Name
         run: |
           rand=$(git rev-parse --short ${{ inputs.git_sha }})
@@ -76,7 +90,7 @@ jobs:
           go-version: ${{ env.GO_VERSION  }}
 
       - name: Az login
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        uses: azure/login@v2
         with:
           client-id: ${{ secrets.E2E_CLIENT_ID }}
           tenant-id: ${{ secrets.E2E_TENANT_ID }}
@@ -103,17 +117,19 @@ jobs:
             az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
 
       - name: Build gpu-provisioner image
-        if: ${{ !github.event.client_payload.isRelease }}
+        if: ${{ !inputs.isRelease }}
         shell: bash
         run: |
+          echo "🏗️ Building GPU provisioner image..."
           make docker-build
         env:
           REGISTRY: ${{ env.REGISTRY }}
           VERSION: ${{ env.VERSION }}
 
-      - name: create cluster
+      - name: Create AKS cluster
         shell: bash
         run: |
+          echo "☸️ Creating AKS cluster: ${{ env.CLUSTER_NAME }}"
           make az-mkaks
         env:
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
@@ -125,9 +141,11 @@ jobs:
       - name: Install GPU-Provisioner helm chart
         shell: bash
         run: |
-          echo "IDENTITY_CLIENT_ID=$(az identity show --name kaitoprovisioner -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
+          echo "📦 Installing GPU-Provisioner Helm chart..."
+          echo "IDENTITY_CLIENT_ID=$(az identity show --name gpuIdentity -g "${{ env.CLUSTER_NAME }}" --query 'clientId' -otsv)" >> $GITHUB_ENV
           make az-patch-helm
           helm install gpu-provisioner ./charts/gpu-provisioner --namespace gpu-provisioner --create-namespace
+          echo "⏳ Waiting for deployment to be ready..."
           kubectl wait --for=condition=available deploy "gpu-provisioner" -n gpu-provisioner --timeout=300s
         env:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
@@ -136,16 +154,11 @@ jobs:
           REGISTRY: ${{ env.REGISTRY }}
           VERSION: ${{ env.VERSION }}
 
-      - uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
-        with:
-          client-id: ${{ secrets.E2E_CLIENT_ID }}
-          tenant-id: ${{ secrets.E2E_TENANT_ID }}
-          subscription-id: ${{ secrets.E2E_SUBSCRIPTION_ID }}
-
       - name: Create Role Assignment
         uses: azure/CLI@v2.1.0
         with:
           inlineScript: |
+            echo "🔐 Creating role assignment for GPU identity..."
             IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
             az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.E2E_SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}"  --role "Contributor"
 
@@ -153,18 +166,23 @@ jobs:
         uses: azure/CLI@v2.1.0
         with:
           inlineScript: |
+            echo "🔗 Creating federated identity credential..."
             AKS_OIDC_ISSUER="$(az aks show -n "${{ env.CLUSTER_NAME }}" -g "${{ env.CLUSTER_NAME }}" --query 'oidcIssuerProfile.issuerUrl' -otsv)"
             az identity federated-credential create --name gpu-fed-credential --identity-name gpuIdentity --resource-group "${{ env.CLUSTER_NAME }}" \
             --issuer "${AKS_OIDC_ISSUER}" --subject system:serviceaccount:"gpu-provisioner:gpu-provisioner" --audience api://AzureADTokenExchange
 
-      - name: Run e2e test
+      - name: Run E2E tests
         run: |
+          echo "🧪 Running E2E tests..."
           make e2etests
 
-      - name: Cleanup e2e resources
+      - name: Cleanup E2E resources
         if: ${{ always() }}
         uses: azure/CLI@v2.1.0
         with:
           inlineScript: |
             set +e
+            echo "🧹 Cleaning up E2E resources..."
+            echo "Deleting resource group: ${{ env.CLUSTER_NAME }}"
             az group delete --name "${{ env.CLUSTER_NAME }}" --yes --no-wait || true
+            echo "✅ Cleanup completed (or failed gracefully)"
