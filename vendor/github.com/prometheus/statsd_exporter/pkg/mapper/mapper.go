@@ -15,7 +15,7 @@ package mapper
 
 import (
 	"fmt"
-	"os"
+	"io/ioutil"
 	"regexp"
 	"sync"
 	"time"
@@ -43,7 +43,7 @@ var (
 
 type MetricMapper struct {
 	Registerer prometheus.Registerer
-	Defaults   MapperConfigDefaults `yaml:"defaults"`
+	Defaults   mapperConfigDefaults `yaml:"defaults"`
 	Mappings   []MetricMapping      `yaml:"mappings"`
 	FSM        *fsm.FSM
 	doFSM      bool
@@ -57,24 +57,22 @@ type MetricMapper struct {
 }
 
 type SummaryOptions struct {
-	Quantiles  []MetricObjective `yaml:"quantiles"`
+	Quantiles  []metricObjective `yaml:"quantiles"`
 	MaxAge     time.Duration     `yaml:"max_age"`
 	AgeBuckets uint32            `yaml:"age_buckets"`
 	BufCap     uint32            `yaml:"buf_cap"`
 }
 
 type HistogramOptions struct {
-	Buckets                     []float64 `yaml:"buckets"`
-	NativeHistogramBucketFactor float64   `yaml:"native_histogram_bucket_factor"`
-	NativeHistogramMaxBuckets   uint32    `yaml:"native_histogram_max_buckets"`
+	Buckets []float64 `yaml:"buckets"`
 }
 
-type MetricObjective struct {
+type metricObjective struct {
 	Quantile float64 `yaml:"quantile"`
 	Error    float64 `yaml:"error"`
 }
 
-var defaultQuantiles = []MetricObjective{
+var defaultQuantiles = []metricObjective{
 	{Quantile: 0.5, Error: 0.05},
 	{Quantile: 0.9, Error: 0.01},
 	{Quantile: 0.99, Error: 0.001},
@@ -89,12 +87,6 @@ func (m *MetricMapper) InitFromYAMLString(fileContents string) error {
 
 	if len(n.Defaults.HistogramOptions.Buckets) == 0 {
 		n.Defaults.HistogramOptions.Buckets = prometheus.DefBuckets
-	}
-	if n.Defaults.HistogramOptions.NativeHistogramBucketFactor == 0 {
-		n.Defaults.HistogramOptions.NativeHistogramBucketFactor = 1.1
-	}
-	if n.Defaults.HistogramOptions.NativeHistogramMaxBuckets <= 0 {
-		n.Defaults.HistogramOptions.NativeHistogramMaxBuckets = 256
 	}
 
 	if len(n.Defaults.SummaryOptions.Quantiles) == 0 {
@@ -241,10 +233,6 @@ func (m *MetricMapper) InitFromYAMLString(fileContents string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.Logger == nil {
-		m.Logger = log.NewNopLogger()
-	}
-
 	m.Defaults = n.Defaults
 	m.Mappings = n.Mappings
 
@@ -271,11 +259,15 @@ func (m *MetricMapper) InitFromYAMLString(fileContents string) error {
 		m.MappingsCount.Set(float64(len(n.Mappings)))
 	}
 
+	if m.Logger == nil {
+		m.Logger = log.NewNopLogger()
+	}
+
 	return nil
 }
 
 func (m *MetricMapper) InitFromFile(fileName string) error {
-	mappingStr, err := os.ReadFile(fileName)
+	mappingStr, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return err
 	}
