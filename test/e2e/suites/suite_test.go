@@ -383,7 +383,7 @@ var _ = Describe("GPU NodeClaim", func() {
 		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 
 		// Verify the node is running Azure Linux
-		Expect(node.Status.NodeInfo.OSImage).To(ContainSubstring("Azure"),
+		Expect(node.Status.NodeInfo.OSImage).To(Or(ContainSubstring("Azure"), ContainSubstring("Mariner")),
 			"Node should be running Azure Linux, got OS: %s", node.Status.NodeInfo.OSImage)
 	})
 
@@ -459,7 +459,7 @@ var _ = Describe("GPU NodeClaim", func() {
 		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 
 		// Verify the node is running Azure Linux
-		Expect(node.Status.NodeInfo.OSImage).To(ContainSubstring("Azure"),
+		Expect(node.Status.NodeInfo.OSImage).To(Or(ContainSubstring("Azure"), ContainSubstring("Mariner")),
 			"Node should be running Azure Linux, got OS: %s", node.Status.NodeInfo.OSImage)
 	})
 
@@ -531,7 +531,7 @@ var _ = Describe("GPU NodeClaim", func() {
 		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 
 		// Verify the node is running Azure Linux (case-insensitive support)
-		Expect(node.Status.NodeInfo.OSImage).To(ContainSubstring("Azure"),
+		Expect(node.Status.NodeInfo.OSImage).To(Or(ContainSubstring("Azure"), ContainSubstring("Mariner")),
 			"Node should be running Azure Linux with case-insensitive support, got OS: %s", node.Status.NodeInfo.OSImage)
 	})
 
