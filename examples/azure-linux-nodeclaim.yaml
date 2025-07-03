@@ -1,15 +1,15 @@
 apiVersion: karpenter.sh/v1
 kind: NodeClaim
 metadata:
-  name: azure-linux-gpu-nodeclaim
+  name: azlinuxgpu
   labels:
     kaito.sh/workspace: "llama-azure-linux"
     kaito.sh/node-image-family: "AzureLinux"
 spec:
   nodeClassRef:
-    apiVersion: karpenter.azure.com/v1alpha1
+    name: gpuonly1
     kind: AKSNodeClass
-    name: default
+    group: karpenter.azure.com
   requirements:
     # GPU instance type
     - key: node.kubernetes.io/instance-type

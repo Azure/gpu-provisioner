@@ -1,7 +1,7 @@
 apiVersion: karpenter.sh/v1
 kind: NodeClaim
 metadata:
-  name: azure-linux-annotation-nodeclaim
+  name: azlv2
   labels:
     kaito.sh/workspace: "mistral-azure-linux"
   annotations:
@@ -10,9 +10,9 @@ metadata:
     description: "NodeClaim using Azure Linux via annotation"
 spec:
   nodeClassRef:
-    apiVersion: karpenter.azure.com/v1alpha1
+    name: gpuonly1
     kind: AKSNodeClass
-    name: default
+    group: karpenter.azure.com
   requirements:
     # Larger GPU instance for more demanding models
     - key: node.kubernetes.io/instance-type

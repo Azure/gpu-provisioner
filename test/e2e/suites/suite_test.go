@@ -324,7 +324,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "azlinuxtestnc",
+				Name:   "azlinuxnc",
 				Labels: nodeClaimLabels,
 			},
 			Spec: karpenterv1.NodeClaimSpec{
@@ -399,7 +399,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        "azlinuxannotationtestnc",
+				Name:        "azlinuxannot",
 				Labels:      nodeClaimLabels,
 				Annotations: nodeClaimAnnotations,
 			},
@@ -472,7 +472,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "azlinuxcasetestnc",
+				Name:   "azlinuxcase",
 				Labels: nodeClaimLabels,
 			},
 			Spec: karpenterv1.NodeClaimSpec{
@@ -544,7 +544,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "fallbacktestnc",
+				Name:   "fallbacknc",
 				Labels: nodeClaimLabels,
 			},
 			Spec: karpenterv1.NodeClaimSpec{
@@ -686,7 +686,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "azlinuxtestnc2",
+				Name:   "azlinuxnc2",
 				Labels: nodeClaimLabels,
 			},
 			Spec: karpenterv1.NodeClaimSpec{
@@ -760,7 +760,7 @@ var _ = Describe("GPU NodeClaim", func() {
 
 		nc := test.NodeClaim(karpenterv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:        "azlinuxannotationtestnc2",
+				Name:        "azlinuxann2",
 				Labels:      nodeClaimLabels,
 				Annotations: nodeClaimAnnotations,
 			},
