@@ -45,12 +45,6 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
 	if !nodeClaim.StatusConditions().Get(v1.ConditionTypeRegistered).IsUnknown() {
 		return reconcile.Result{}, nil
 	}
-
-	if !nodeClaim.StatusConditions().Get(v1.ConditionTypeLaunched).IsTrue() {
-		nodeClaim.StatusConditions().SetUnknownWithReason(v1.ConditionTypeRegistered, "NodeClaimNotLaunched", "node claim is not launched")
-		return reconcile.Result{}, nil
-	}
-
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("provider-id", nodeClaim.Status.ProviderID))
 	node, err := nodeclaimutil.NodeForNodeClaim(ctx, r.kubeClient, nodeClaim)
 	if err != nil {
@@ -64,15 +58,15 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
 		}
 		return reconcile.Result{}, fmt.Errorf("getting node for nodeclaim, %w", err)
 	}
-	// _, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
-	// 	return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
-	// })
+	_, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
+		return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
+	})
 	// check if sync succeeded but setting the registered status condition failed
 	// if sync succeeded, then the label will be present and the taint will be gone
-	// if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
-	// 	nodeClaim.StatusConditions().SetFalse(v1.ConditionTypeRegistered, "UnregisteredTaintNotFound", fmt.Sprintf("Invariant violated, %s taint must be present on Karpenter-managed nodes", v1.UnregisteredTaintKey))
-	// 	return reconcile.Result{}, fmt.Errorf("missing required startup taint, %s", v1.UnregisteredTaintKey)
-	// }
+	if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
+		nodeClaim.StatusConditions().SetFalse(v1.ConditionTypeRegistered, "UnregisteredTaintNotFound", fmt.Sprintf("Invariant violated, %s taint must be present on Karpenter-managed nodes", v1.UnregisteredTaintKey))
+		return reconcile.Result{}, fmt.Errorf("missing required startup taint, %s", v1.UnregisteredTaintKey)
+	}
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("Node", klog.KRef("", node.Name)))
 	if err = r.syncNode(ctx, nodeClaim, node); err != nil {
 		if errors.IsConflict(err) {
@@ -83,9 +77,6 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
 	log.FromContext(ctx).Info("registered nodeclaim")
 	nodeClaim.StatusConditions().SetTrue(v1.ConditionTypeRegistered)
 	nodeClaim.Status.NodeName = node.Name
-	// gpu-provisioner: update allocatable and capactity from node as well
-	nodeClaim.Status.Allocatable = node.Status.Allocatable
-	nodeClaim.Status.Capacity = node.Status.Capacity
 
 	metrics.NodesCreatedTotal.With(prometheus.Labels{
 		metrics.NodePoolLabel: nodeClaim.Labels[v1.NodePoolLabelKey],

@@ -23,15 +23,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/clock"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"sigs.k8s.io/karpenter/pkg/operator/injection"
+
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 )
@@ -46,8 +49,8 @@ type Controller struct {
 	kubeClient    client.Client
 	cloudProvider cloudprovider.CloudProvider
 
-	drift *Drift
-	// consolidation *Consolidation
+	drift         *Drift
+	consolidation *Consolidation
 }
 
 // NewController constructs a nodeclaim disruption controller. Note that every sub-controller has a dependency on its nodepool.
@@ -57,7 +60,7 @@ func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider clou
 		kubeClient:    kubeClient,
 		cloudProvider: cloudProvider,
 		drift:         &Drift{cloudProvider: cloudProvider},
-		// consolidation: &Consolidation{kubeClient: kubeClient, clock: clk},
+		consolidation: &Consolidation{kubeClient: kubeClient, clock: clk},
 	}
 }
 
@@ -70,19 +73,19 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (re
 	}
 
 	stored := nodeClaim.DeepCopy()
-	// nodePoolName, ok := nodeClaim.Labels[v1.NodePoolLabelKey]
-	// if !ok {
-	// 	return reconcile.Result{}, nil
-	// }
+	nodePoolName, ok := nodeClaim.Labels[v1.NodePoolLabelKey]
+	if !ok {
+		return reconcile.Result{}, nil
+	}
 	nodePool := &v1.NodePool{}
-	// if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
-	// 	return reconcile.Result{}, client.IgnoreNotFound(err)
-	// }
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+		return reconcile.Result{}, client.IgnoreNotFound(err)
+	}
 	var results []reconcile.Result
 	var errs error
 	reconcilers := []nodeClaimReconciler{
 		c.drift,
-		// c.consolidation,
+		c.consolidation,
 	}
 	for _, reconciler := range reconcilers {
 		res, err := reconciler.Reconcile(ctx, nodePool, nodeClaim)
@@ -117,12 +120,11 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return builder.
 		Named("nodeclaim.disruption").
 		For(&v1.NodeClaim{}).
-		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
-		// Watches(
-		// 	&v1.NodePool{},
-		// 	nodeclaimutil.NodePoolEventHandler(c.kubeClient),
-		// ).
+		Watches(
+			&v1.NodePool{},
+			nodeclaimutil.NodePoolEventHandler(c.kubeClient),
+		).
 		Watches(
 			&corev1.Pod{},
 			nodeclaimutil.PodEventHandler(c.kubeClient),
