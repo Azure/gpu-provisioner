@@ -51,23 +51,37 @@ var (
 )
 
 type Provider struct {
-	azClient      *AZClient
-	kubeClient    client.Client
-	resourceGroup string
-	clusterName   string
+	azClient       interface{} // Can be *AZClient or *ArcAZClient
+	kubeClient     client.Client
+	resourceGroup  string
+	clusterName    string
+	subscriptionID string
 }
 
 func NewProvider(
-	azClient *AZClient,
+	azClient interface{},
 	kubeClient client.Client,
 	resourceGroup string,
 	clusterName string,
+	subscriptionID string,
 ) *Provider {
 	return &Provider{
-		azClient:      azClient,
-		kubeClient:    kubeClient,
-		resourceGroup: resourceGroup,
-		clusterName:   clusterName,
+		azClient:       azClient,
+		kubeClient:     kubeClient,
+		resourceGroup:  resourceGroup,
+		clusterName:    clusterName,
+		subscriptionID: subscriptionID,
+	}
+}
+
+// buildAgentPoolParams creates AgentPoolParams for the interface calls
+func (p *Provider) buildAgentPoolParams(agentPoolName string, agentPoolSpec interface{}) AgentPoolParams {
+	return AgentPoolParams{
+		SubscriptionID: p.subscriptionID,
+		ResourceGroup:  p.resourceGroup,
+		ClusterName:    p.clusterName,
+		AgentPoolName:  agentPoolName,
+		AgentPoolSpec:  agentPoolSpec,
 	}
 }
 
@@ -83,7 +97,7 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 		return nil, fmt.Errorf("agentpool name(%s) is invalid, must match regex pattern: ^[a-z][a-z0-9]{0,11}$", apName)
 	}
 
-	var ap *armcontainerservice.AgentPool
+	var instance *Instance
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		return false
 	}, func() error {
@@ -99,21 +113,39 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 		}
 
 		logging.FromContext(ctx).Debugf("creating Agent pool %s (%s)", apName, vmSize)
-		var err error
-		ap, err = createAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, apName, p.clusterName, apObj)
+
+		agentPoolClient := p.extractAgentPoolClient()
+		if agentPoolClient == nil {
+			return fmt.Errorf("unsupported client type")
+		}
+
+		params := p.buildAgentPoolParams(apName, apObj)
+		agentPoolInfo, err := agentPoolClient.CreateOrUpdate(ctx, params)
 		if err != nil {
 			switch {
 			case strings.Contains(err.Error(), "Operation is not allowed because there's an in progress create node pool operation"):
 				// when gpu-provisioner restarted after crash for unknown reason, we may come across this error that agent pool creating
 				// is in progress, so we just need to wait node ready based on the apObj.
-				ap = &apObj
+				// Create a temporary instance from the original spec
+				instance = p.createInstanceFromAgentPoolObject(apObj, apName)
 				return nil
 			default:
 				logging.FromContext(ctx).Errorf("failed to create agent pool for nodeclaim(%s), %v", nodeClaim.Name, err)
 				return fmt.Errorf("agentPool.BeginCreateOrUpdate for %q failed: %w", apName, err)
 			}
 		}
-		logging.FromContext(ctx).Debugf("created agent pool %s", *ap.ID)
+
+		// Create instance ID
+		instanceID := fmt.Sprintf("azure:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ContainerService/managedClusters/%s/agentPools/%s",
+			p.subscriptionID, p.resourceGroup, p.clusterName, apName)
+
+		// Directly convert AgentPoolInfo to Instance
+		instance, err = p.convertAgentPoolInfoToInstance(ctx, agentPoolInfo, instanceID)
+		if err != nil {
+			return err
+		}
+
+		logging.FromContext(ctx).Debugf("created agent pool %s", instanceID)
 		return nil
 	})
 	if err != nil {
@@ -146,8 +178,11 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 		if err != nil {
 			return nil, err
 		}
+		}
+		return instance, err
 	}
-	return instance, err
+
+	return nil, fmt.Errorf("failed to create instance")
 }
 
 func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
@@ -155,7 +190,19 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
 	}
-	apObj, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
+
+	agentPoolClient := p.extractAgentPoolClient()
+	if agentPoolClient == nil {
+		return nil, fmt.Errorf("unsupported client type")
+	}
+
+	params := AgentPoolParams{
+		ResourceGroup: p.resourceGroup,
+		ClusterName:   p.clusterName,
+		AgentPoolName: apName,
+	}
+
+	agentPoolInfo, err := agentPoolClient.Get(ctx, params)
 	if err != nil {
 		if strings.Contains(err.Error(), "Agent Pool not found") {
 			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
@@ -164,24 +211,79 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
 	}
 
-	return p.convertAgentPoolToInstance(ctx, apObj, id)
+	// Directly convert AgentPoolInfo to Instance
+	return p.convertAgentPoolInfoToInstance(ctx, agentPoolInfo, id)
 }
 
 func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
-	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
+	agentPoolClient := p.extractAgentPoolClient()
+	if agentPoolClient == nil {
+		return nil, fmt.Errorf("unsupported client type")
+	}
+
+	params := AgentPoolParams{
+		ResourceGroup: p.resourceGroup,
+		ClusterName:   p.clusterName,
+	}
+
+	agentPoolInfos, err := agentPoolClient.List(ctx, params)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
 		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
 	}
 
-	instances, err := p.fromAPListToInstances(ctx, apList)
-	return instances, cloudprovider.IgnoreNodeClaimNotFoundError(err)
+	// Directly convert AgentPoolInfos to Instances
+	instances := []*Instance{}
+	if len(agentPoolInfos) == 0 {
+		return instances, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("agentpools not found"))
+	}
+
+	for _, info := range agentPoolInfos {
+		// For filtering, we still need to check if it's owned by Kaito and created from NodeClaim
+		// We can do this directly from AgentPoolInfo
+		if !p.agentPoolInfoIsOwnedByKaito(info) {
+			continue
+		}
+
+		if !p.agentPoolInfoIsCreatedFromNodeClaim(info) {
+			continue
+		}
+
+		// Create a temporary ID for the instance (this mimics the old behavior)
+		instanceID := fmt.Sprintf("azure:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ContainerService/managedClusters/%s/agentPools/%s",
+			p.subscriptionID, p.resourceGroup, p.clusterName, *info.Name)
+
+		instance, err := p.convertAgentPoolInfoToInstanceWithNodes(ctx, info, instanceID)
+		if err != nil {
+			return instances, err
+		}
+		if instance != nil {
+			instances = append(instances, instance)
+		}
+	}
+
+	if len(instances) == 0 {
+		return instances, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("agentpools not found"))
+	}
+
+	return instances, cloudprovider.IgnoreNodeClaimNotFoundError(nil)
 }
 
 func (p *Provider) Delete(ctx context.Context, apName string) error {
 	klog.InfoS("Instance.Delete", "agentpool name", apName)
 
-	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
+	agentPoolClient := p.extractAgentPoolClient()
+	if agentPoolClient == nil {
+		return fmt.Errorf("unsupported client type")
+	}
+
+	params := AgentPoolParams{
+		ResourceGroup: p.resourceGroup,
+		ClusterName:   p.clusterName,
+		AgentPoolName: apName,
+	}
+
+	err := agentPoolClient.Delete(ctx, params)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
 		return fmt.Errorf("agentPool.Delete for %q failed: %w", apName, err)
@@ -189,26 +291,7 @@ func (p *Provider) Delete(ctx context.Context, apName string) error {
 	return nil
 }
 
-func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool, id string) (*Instance, error) {
-	if apObj == nil || len(id) == 0 {
-		return nil, fmt.Errorf("agent pool or provider id is nil")
-	}
-
-	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
-		return lo.FromPtr(k)
-	})
-
-	return &Instance{
-		Name:     apObj.Name,
-		ID:       to.Ptr(id),
-		Type:     apObj.Properties.VMSize,
-		SubnetID: apObj.Properties.VnetSubnetID,
-		Tags:     apObj.Properties.Tags,
-		State:    apObj.Properties.ProvisioningState,
-		Labels:   instanceLabels,
-		ImageID:  apObj.Properties.NodeImageVersion,
-	}, nil
-}
+// getNodesByName returns nodes with the specified agent pool name
 
 func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
 	if apObj == nil {
@@ -406,6 +489,187 @@ func agentPoolIsCreatedFromNodeClaim(ap *armcontainerservice.AgentPool) bool {
 
 	// when agentpool.NodeLabels includes nodepool label, return true, if not, return false
 	if _, ok := ap.Properties.NodeLabels[karpenterv1.NodePoolLabelKey]; ok {
+		return true
+	}
+
+	return false
+}
+
+// extractAgentPoolClient extracts the AgentPoolClient from the azClient interface
+func (p *Provider) extractAgentPoolClient() AgentPoolClient {
+	switch c := p.azClient.(type) {
+	case *AZClient:
+		return c // AZClient now implements AgentPoolClient directly
+	case *ArcAZClient:
+		return c // ArcAZClient now implements AgentPoolClient directly
+	case AgentPoolClient:
+		return c // Already an AgentPoolClient
+	default:
+		return nil
+	}
+}
+
+// buildAgentPoolParams creates AgentPoolParams from the provider's configuration
+func (p *Provider) buildAgentPoolParams(agentPoolName string, agentPoolSpec armcontainerservice.AgentPool) AgentPoolParams {
+	return AgentPoolParams{
+		SubscriptionID: p.subscriptionID,
+		ResourceGroup:  p.resourceGroup,
+		ClusterName:    p.clusterName,
+		AgentPoolName:  agentPoolName,
+		AgentPoolSpec:  agentPoolSpec,
+	}
+}
+
+// createInstanceFromAgentPoolObject creates a temporary instance from the original agent pool spec
+func (p *Provider) createInstanceFromAgentPoolObject(apObj armcontainerservice.AgentPool, apName string) *Instance {
+	instanceID := fmt.Sprintf("azure:///subscriptions/%s/resourceGroups/%s/providers/Microsoft.ContainerService/managedClusters/%s/agentPools/%s",
+		p.subscriptionID, p.resourceGroup, p.clusterName, apName)
+
+	return &Instance{
+		id:       instanceID,
+		apName:   apName,
+		apObj:    &apObj,
+		vmSize:   *apObj.Properties.VMSize,
+		location: p.location,
+		status:   "Creating",
+	}
+}
+
+// waitForNodeReady waits for the node to be ready and returns the final instance
+func (p *Provider) waitForNodeReady(ctx context.Context, instance *Instance) (*Instance, error) {
+	b := wait.Backoff{
+		Steps:    15,
+		Duration: 1 * time.Second,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}
+
+	var finalInstance *Instance
+	err := retry.OnError(b, func(err error) bool {
+		return true
+	}, func() error {
+		// Try to get the updated instance from the API
+		agentPoolClient := p.extractAgentPoolClient()
+		if agentPoolClient == nil {
+			return fmt.Errorf("unsupported client type")
+		}
+
+		agentPoolInfo, err := agentPoolClient.Get(ctx, instance.apName)
+		if err != nil {
+			return err
+		}
+
+		finalInstance, err = p.convertAgentPoolInfoToInstance(ctx, agentPoolInfo, instance.id)
+		if err != nil {
+			return err
+		}
+
+		// Check if we have node information
+		if finalInstance.node == nil {
+			return fmt.Errorf("node not ready yet")
+		}
+
+		return nil
+	})
+
+	return finalInstance, err
+}
+
+// convertAgentPoolInfoToInstance directly converts AgentPoolInfo to Instance
+func (p *Provider) convertAgentPoolInfoToInstance(ctx context.Context, info *AgentPoolInfo, id string) (*Instance, error) {
+	if info == nil {
+		return nil, fmt.Errorf("agent pool info is nil")
+	}
+
+	// Convert map[string]*string to map[string]string for labels
+	instanceLabels := make(map[string]string)
+	for k, v := range info.NodeLabels {
+		if v != nil {
+			instanceLabels[k] = *v
+		}
+	}
+
+	return &Instance{
+		Name:     info.Name,
+		ID:       to.Ptr(id),
+		Type:     info.VMSize,
+		SubnetID: info.VnetSubnetID,
+		Tags:     info.Tags,
+		State:    info.ProvisioningState,
+		Labels:   instanceLabels,
+		ImageID:  info.NodeImageVersion,
+	}, nil
+}
+
+// agentPoolInfoIsOwnedByKaito checks if the agent pool was created from nodeclaim
+
+// convertAgentPoolInfoToInstanceWithNodes converts AgentPoolInfo to Instance and handles node lookup
+func (p *Provider) convertAgentPoolInfoToInstanceWithNodes(ctx context.Context, info *AgentPoolInfo, instanceID string) (*Instance, error) {
+	if info == nil {
+		return nil, fmt.Errorf("agent pool info is nil")
+	}
+
+	// Convert map[string]*string to map[string]string for labels
+	instanceLabels := make(map[string]string)
+	for k, v := range info.NodeLabels {
+		if v != nil {
+			instanceLabels[k] = *v
+		}
+	}
+
+	ins := &Instance{
+		Name:     info.Name,
+		Type:     info.VMSize,
+		SubnetID: info.VnetSubnetID,
+		Tags:     info.Tags,
+		State:    info.ProvisioningState,
+		Labels:   instanceLabels,
+		ImageID:  info.NodeImageVersion,
+	}
+
+	// Try to get the node to set the provider ID
+	if info.Name != nil {
+		nodes, err := p.getNodesByName(ctx, *info.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(nodes) == 1 && len(nodes[0].Spec.ProviderID) != 0 {
+			ins.ID = to.Ptr(nodes[0].Spec.ProviderID)
+		} else {
+			ins.ID = to.Ptr(instanceID)
+		}
+	} else {
+		ins.ID = to.Ptr(instanceID)
+	}
+
+	return ins, nil
+}
+
+// agentPoolInfoIsOwnedByKaito checks if AgentPoolInfo is owned by Kaito
+func (p *Provider) agentPoolInfoIsOwnedByKaito(info *AgentPoolInfo) bool {
+	if info == nil || info.NodeLabels == nil {
+		return false
+	}
+
+	// when agentpool.NodeLabels includes labels from kaito, return true, if not, return false
+	for i := range KaitoNodeLabels {
+		if _, ok := info.NodeLabels[KaitoNodeLabels[i]]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+// agentPoolInfoIsCreatedFromNodeClaim checks if AgentPoolInfo was created from NodeClaim
+func (p *Provider) agentPoolInfoIsCreatedFromNodeClaim(info *AgentPoolInfo) bool {
+	if info == nil || info.NodeLabels == nil {
+		return false
+	}
+
+	// when agentpool.NodeLabels includes nodepool label, return true, if not, return false
+	if _, ok := info.NodeLabels[karpenterv1.NodePoolLabelKey]; ok {
 		return true
 	}
 

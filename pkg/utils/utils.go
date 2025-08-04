@@ -24,12 +24,28 @@ import (
 )
 
 // ParseAgentPoolNameFromID parses the id stored on the instance ID
+// Supports both AKS and Arc platform formats
 func ParseAgentPoolNameFromID(id string) (string, error) {
+	// Try AKS format first
+	if strings.HasPrefix(id, "azure://") {
+		return parseAKSAgentPoolNameFromID(id)
+	}
+
+	// Try Arc format
+	if strings.HasPrefix(id, "moc://") {
+		return parseArcAgentPoolNameFromID(id)
+	}
+
+	return "", fmt.Errorf("unsupported ID format: %s", id)
+}
+
+// parseAKSAgentPoolNameFromID parses AKS format IDs
+func parseAKSAgentPoolNameFromID(id string) (string, error) {
 	///subscriptions/%s/resourceGroups/%s/providers/Microsoft.Compute/virtualMachineScaleSets/<VMSSName>/virtualMachines/0
 	r := regexp.MustCompile(`azure:///subscriptions/.*/resourceGroups/.*/providers/Microsoft.Compute/virtualMachineScaleSets/(?P<VMSSName>.*)/virtualMachines/.*`)
 	matches := r.FindStringSubmatch(id)
 	if matches == nil {
-		return "", fmt.Errorf("id does not match the regxp for ParseAgentPoolNameFromID %s", id)
+		return "", fmt.Errorf("id does not match the regex for AKS ParseAgentPoolNameFromID %s", id)
 	}
 
 	for i, name := range r.SubexpNames() {
@@ -37,12 +53,30 @@ func ParseAgentPoolNameFromID(id string) (string, error) {
 			nodeName := matches[i]
 			agentPoolName := strings.Split(nodeName, "-") // agentpool name is the second substring
 			if len(agentPoolName) == 0 {
-				return "", fmt.Errorf("cannot parse agentpool name for ParseAgentPoolNameFromID %s", id)
+				return "", fmt.Errorf("cannot parse agentpool name for AKS ParseAgentPoolNameFromID %s", id)
 			}
 			return agentPoolName[1], nil
 		}
 	}
-	return "", fmt.Errorf("error while parsing id %s", id)
+	return "", fmt.Errorf("error while parsing AKS id %s", id)
+}
+
+// parseArcAgentPoolNameFromID parses Arc format IDs
+// /e.g. moc://kaito-c93a5c39-gpuvmv1-md-dq8c8-ntvb7
+// Pattern: moc://<cluster>-<hash>-<agentpool>-md-<hash>-<hash>
+func parseArcAgentPoolNameFromID(id string) (string, error) {
+	r := regexp.MustCompile(`moc://[^-]+-[^-]+-(?P<AgentPoolName>[^-]+)-md-[^-]+-[^-]+`)
+	matches := r.FindStringSubmatch(id)
+	if matches == nil {
+		return "", fmt.Errorf("id does not match the regex for Arc ParseAgentPoolNameFromID %s", id)
+	}
+
+	for i, name := range r.SubexpNames() {
+		if name == "AgentPoolName" {
+			return matches[i], nil
+		}
+	}
+	return "", fmt.Errorf("error while parsing Arc id %s", id)
 }
 
 // WithDefaultBool returns the boolean value of the supplied environment variable or, if not present,

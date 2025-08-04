@@ -162,3 +162,4 @@ settings:
     clusterName:
 # -- Determine if the controller is deployed in self-hosted mode or managed. Default is self-hosted
 deploymentMode: self-hosted
+clusterType: aks

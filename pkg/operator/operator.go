@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/azure/gpu-provisioner/pkg/auth"
+	"github.com/azure/gpu-provisioner/pkg/cloudprovider"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
 	"knative.dev/pkg/logging"
 	"sigs.k8s.io/karpenter/pkg/operator"
@@ -38,7 +39,14 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		logging.FromContext(ctx).Errorf("creating Azure config, %s", err)
 	}
 
-	azClient, err := instance.CreateAzClient(azConfig)
+	// Use the new factory pattern to create the appropriate client
+	factory, err := cloudprovider.NewClientFactory(azConfig.SubscriptionID)
+	if err != nil {
+		logging.FromContext(ctx).Errorf("creating client factory, %s", err)
+		panic(fmt.Sprintf("Configure azure client factory fails: %v", err))
+	}
+
+	azClient, err := factory.CreateAzClient(ctx, azConfig)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("creating Azure client, %s", err)
 		// Let us panic here, instead of crashing in the following code.
@@ -51,6 +59,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		operator.GetClient(),
 		azConfig.ResourceGroup,
 		azConfig.ClusterName,
+		azConfig.SubscriptionID,
 	)
 
 	return ctx, &Operator{

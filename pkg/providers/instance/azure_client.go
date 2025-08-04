@@ -17,14 +17,17 @@ package instance
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/http"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -32,7 +35,10 @@ import (
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	armopts "github.com/azure/gpu-provisioner/pkg/utils/opts"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 const (
@@ -50,6 +56,156 @@ type AZClient struct {
 	agentPoolsClient AgentPoolsAPI
 }
 
+// Implement AgentPoolClient interface directly in AZClient
+func (c *AZClient) CreateOrUpdate(ctx context.Context, params AgentPoolParams) (*AgentPoolInfo, error) {
+	// Convert NodeClaim to AKS AgentPool internally
+	agentPool, err := c.nodeClaimToAgentPool(params.VMSize, params.NodeClaim)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert NodeClaim to AgentPool: %w", err)
+	}
+
+	poller, err := c.agentPoolsClient.BeginCreateOrUpdate(
+		ctx,
+		params.ResourceGroup,
+		params.ClusterName,
+		params.AgentPoolName,
+		agentPool,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin create or update agent pool: %w", err)
+	}
+
+	resp, err := poller.PollUntilDone(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to poll until done: %w", err)
+	}
+
+	return c.convertToAgentPoolInfo(&resp.AgentPool), nil
+}
+
+func (c *AZClient) Get(ctx context.Context, params AgentPoolParams) (*AgentPoolInfo, error) {
+	resp, err := c.agentPoolsClient.Get(
+		ctx,
+		params.ResourceGroup,
+		params.ClusterName,
+		params.AgentPoolName,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agent pool: %w", err)
+	}
+
+	return c.convertToAgentPoolInfo(&resp.AgentPool), nil
+}
+
+func (c *AZClient) Delete(ctx context.Context, params AgentPoolParams) error {
+	poller, err := c.agentPoolsClient.BeginDelete(
+		ctx,
+		params.ResourceGroup,
+		params.ClusterName,
+		params.AgentPoolName,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to begin delete agent pool: %w", err)
+	}
+
+	_, err = poller.PollUntilDone(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to poll until done: %w", err)
+	}
+
+	return nil
+}
+
+func (c *AZClient) List(ctx context.Context, params AgentPoolParams) ([]*AgentPoolInfo, error) {
+	pager := c.agentPoolsClient.NewListPager(
+		params.ResourceGroup,
+		params.ClusterName,
+		nil,
+	)
+
+	var agentPools []*AgentPoolInfo
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next page: %w", err)
+		}
+
+		for _, ap := range page.Value {
+			agentPools = append(agentPools, c.convertToAgentPoolInfo(ap))
+		}
+	}
+
+	return agentPools, nil
+}
+
+func (c *AZClient) convertToAgentPoolInfo(ap *armcontainerservice.AgentPool) *AgentPoolInfo {
+	if ap == nil || ap.Properties == nil {
+		return nil
+	}
+
+	return &AgentPoolInfo{
+		Name:              ap.Name,
+		ID:                ap.ID,
+		ProvisioningState: ap.Properties.ProvisioningState,
+		VMSize:            ap.Properties.VMSize,
+		Count:             ap.Properties.Count,
+		NodeLabels:        ap.Properties.NodeLabels,
+		Tags:              ap.Properties.Tags,
+		VnetSubnetID:      ap.Properties.VnetSubnetID,
+		NodeImageVersion:  ap.Properties.NodeImageVersion,
+	}
+}
+
+// nodeClaimToAgentPool converts NodeClaim to AKS AgentPool
+func (c *AZClient) nodeClaimToAgentPool(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcontainerservice.AgentPool, error) {
+	taints := nodeClaim.Spec.Taints
+	taintsStr := []*string{}
+	for _, t := range taints {
+		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+	}
+
+	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
+	labels := map[string]*string{karpenterv1.NodePoolLabelKey: to.Ptr("kaito")}
+	for k, v := range nodeClaim.Labels {
+		labels[k] = to.Ptr(v)
+	}
+
+	if strings.Contains(vmSize, "Standard_N") {
+		labels = lo.Assign(labels, map[string]*string{"kaito.sh/machine-type": to.Ptr("gpu")})
+	} else {
+		labels = lo.Assign(labels, map[string]*string{"kaito.sh/machine-type": to.Ptr("cpu")})
+	}
+
+	// Add creation timestamp label
+	labels["kaito.sh/creation-timestamp"] = to.Ptr(nodeClaim.CreationTimestamp.UTC().Format("2006-01-02T15-04-05Z"))
+
+	storage := &resource.Quantity{}
+	if nodeClaim.Spec.Resources.Requests != nil {
+		storage = nodeClaim.Spec.Resources.Requests.Storage()
+	}
+	var diskSizeGB int32
+	if storage.Value() <= 0 {
+		return armcontainerservice.AgentPool{}, fmt.Errorf("storage request of nodeclaim(%s) should be more than 0", nodeClaim.Name)
+	} else {
+		diskSizeGB = int32(storage.Value() >> 30)
+	}
+
+	return armcontainerservice.AgentPool{
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			NodeLabels:   labels,
+			NodeTaints:   taintsStr,
+			Type:         to.Ptr(scaleSetsType),
+			VMSize:       to.Ptr(vmSize),
+			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
+			Count:        to.Ptr(int32(1)),
+			OSDiskSizeGB: to.Ptr(diskSizeGB),
+		},
+	}, nil
+}
+
 func NewAZClientFromAPI(
 	agentPoolsClient AgentPoolsAPI,
 ) *AZClient {
@@ -58,12 +214,12 @@ func NewAZClientFromAPI(
 	}
 }
 
-func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
+func CreateAKSAzClient(cfg *auth.Config) (*AZClient, error) {
 	// Defaulting env to Azure Public Cloud.
 	env := azure.PublicCloud
 	var err error
 
-	azClient, err := NewAZClient(cfg, &env)
+	azClient, err := NewAKSAZClient(cfg, &env)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +227,7 @@ func CreateAzClient(cfg *auth.Config) (*AZClient, error) {
 	return azClient, nil
 }
 
-func NewAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
+func NewAKSAZClient(cfg *auth.Config, env *azure.Environment) (*AZClient, error) {
 	var cred azcore.TokenCredential
 	var err error
 
