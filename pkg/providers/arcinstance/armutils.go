@@ -18,8 +18,8 @@ package arcinstance
 import (
 	"context"
 
-	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/hybridcontainerservice/armhybridcontainerservice"
+	"github.com/azure/gpu-provisioner/pkg/utils/common"
 	"k8s.io/klog/v2"
 )
 
@@ -41,20 +41,10 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, connectedCluster
 	klog.InfoS("deleteAgentPool", "agentpool", apName)
 	poller, err := client.BeginDelete(ctx, connectedClusterResourceURI, apName, nil)
 	if err != nil {
-		azErr := sdkerrors.IsResponseError(err)
-		if azErr != nil && azErr.ErrorCode == "NotFound" {
-			return nil
-		}
-		return err
+		return common.ShouldIgnoreNotFoundError(err)
 	}
 	_, err = poller.PollUntilDone(ctx, nil)
-	if err != nil {
-		azErr := sdkerrors.IsResponseError(err)
-		if azErr != nil && azErr.ErrorCode == "NotFound" {
-			return nil
-		}
-	}
-	return err
+	return common.ShouldIgnoreNotFoundError(err)
 }
 
 func getAgentPool(ctx context.Context, client AgentPoolsAPI, connectedClusterResourceURI, apName string) (*armhybridcontainerservice.AgentPool, error) {

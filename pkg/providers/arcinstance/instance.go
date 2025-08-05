@@ -25,7 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/hybridcontainerservice/armhybridcontainerservice"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/utils"
+	"github.com/azure/gpu-provisioner/pkg/utils/common"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -39,15 +39,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 )
 
-const (
-	LabelMachineType       = "kaito.sh/machine-type"
-	NodeClaimCreationLabel = "kaito.sh/creation-timestamp"
-	// use self-defined layout in order to satisfy node label syntax
-	CreationTimestampLayout = "2006-01-02T15-04-05Z"
-)
-
 var (
-	KaitoNodeLabels    = []string{"kaito.sh/workspace", "kaito.sh/ragengine"}
 	AgentPoolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9]{0,11}$`)
 )
 
@@ -164,9 +156,31 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 	return instance, err
 }
 
+// ParseAgentPoolNameFromID parses the id stored on the instance ID
+func ArcParseAgentPoolNameFromID(id string) (string, error) {
+	///e.g. moc://kaito-c93a5c39-gpuvmv1-md-dq8c8-ntvb7
+	// Pattern: moc://<cluster>-<hash>-<agentpool>-md-<hash>-<hash>
+	r := regexp.MustCompile(`moc://[^-]+-[^-]+-(?P<AgentPoolName>[^-]+)-md-[^-]+-[^-]+`)
+	matches := r.FindStringSubmatch(id)
+	if matches == nil {
+		return "", fmt.Errorf("id does not match the regex for ParseAgentPoolNameFromID %s", id)
+	}
+
+	for i, name := range r.SubexpNames() {
+		if name == "AgentPoolName" {
+			agentPoolName := matches[i]
+			if agentPoolName == "" {
+				return "", fmt.Errorf("cannot parse agentpool name for ParseAgentPoolNameFromID %s", id)
+			}
+			return agentPoolName, nil
+		}
+	}
+	return "", fmt.Errorf("error while parsing id %s", id)
+}
+
 func (p *Provider) Get(ctx context.Context, id string) (*instance.Instance, error) {
 	klog.InfoS("Instance.Get", "id", id)
-	apName, err := utils.ParseAgentPoolNameFromID(id)
+	apName, err := ArcParseAgentPoolNameFromID(id)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
 	}
@@ -312,12 +326,12 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybri
 	}
 	for index := range apList {
 		// skip agentPool that is not owned by kaito
-		if !agentPoolIsOwnedByKaito(apList[index]) {
+		if !common.AgentPoolIsOwnedByKaito(apList[index].Properties.NodeLabels) {
 			continue
 		}
 
 		// skip agentPool which is not created from nodeclaim
-		if !agentPoolIsCreatedFromNodeClaim(apList[index]) {
+		if !common.AgentPoolIsCreatedFromNodeClaim(apList[index].Properties.NodeLabels) {
 			continue
 		}
 
@@ -338,28 +352,9 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybri
 }
 
 func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armhybridcontainerservice.AgentPool, error) {
-	taints := nodeClaim.Spec.Taints
-	taintsStr := []*string{}
-	for _, t := range taints {
-		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
-	}
-
-	// Note: AgentPoolType enum not available in hybrid container service API
-	// The hybrid service likely manages the agent pool type automatically
-	// todo: why nodepool label is used here
-	labels := map[string]*string{karpenterv1.NodePoolLabelKey: to.Ptr("kaito")}
-	for k, v := range nodeClaim.Labels {
-		labels[k] = to.Ptr(v)
-	}
-
-	if strings.Contains(vmSize, "Standard_N") {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
-	} else {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("cpu")})
-	}
-	// NodeClaimCreationLabel is used for recording the create timestamp of agentPool resource.
-	// then used by garbage collection controller to cleanup orphan agentpool which lived more than 10min
-	labels[NodeClaimCreationLabel] = to.Ptr(nodeClaim.CreationTimestamp.UTC().Format(CreationTimestampLayout))
+	// Create common labels and taints
+	labels := common.CreateAgentPoolLabels(nodeClaim, vmSize)
+	taintsStr := common.CreateAgentPoolTaints(nodeClaim.Spec.Taints)
 
 	storage := &resource.Quantity{}
 	if nodeClaim.Spec.Resources.Requests != nil {
@@ -373,7 +368,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armhyb
 	return armhybridcontainerservice.AgentPool{
 		Properties: &armhybridcontainerservice.AgentPoolProperties{
 			NodeLabels: labels,
-			NodeTaints: taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
+			NodeTaints: taintsStr,
 			VMSize:     to.Ptr(vmSize),
 			OSType:     to.Ptr(armhybridcontainerservice.OsTypeLinux),
 			Count:      to.Ptr(int32(1)),
@@ -414,32 +409,4 @@ func (p *Provider) getNodesByName(ctx context.Context, apName string) ([]*v1.Nod
 	}
 
 	return matchingNodes, nil
-}
-
-func agentPoolIsOwnedByKaito(ap *armhybridcontainerservice.AgentPool) bool {
-	if ap == nil || ap.Properties == nil {
-		return false
-	}
-
-	// when agentpool.NodeLabels includes labels from kaito, return true, if not, return false
-	for i := range KaitoNodeLabels {
-		if _, ok := ap.Properties.NodeLabels[KaitoNodeLabels[i]]; ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-func agentPoolIsCreatedFromNodeClaim(ap *armhybridcontainerservice.AgentPool) bool {
-	if ap == nil || ap.Properties == nil {
-		return false
-	}
-
-	// when agentpool.NodeLabels includes nodepool label, return true, if not, return false
-	if _, ok := ap.Properties.NodeLabels[karpenterv1.NodePoolLabelKey]; ok {
-		return true
-	}
-
-	return false
 }
