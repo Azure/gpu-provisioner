@@ -23,6 +23,7 @@ import (
 
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/azure/gpu-provisioner/pkg/utils/common"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,11 +36,11 @@ import (
 var _ cloudprovider.CloudProvider = &CloudProvider{}
 
 type CloudProvider struct {
-	instanceProvider *instance.Provider
+	instanceProvider common.InstanceProvider
 	kubeClient       client.Client
 }
 
-func New(instanceProvider *instance.Provider, kubeClient client.Client) *CloudProvider {
+func New(instanceProvider common.InstanceProvider, kubeClient client.Client) *CloudProvider {
 	return &CloudProvider{
 		instanceProvider: instanceProvider,
 		kubeClient:       kubeClient,

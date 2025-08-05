@@ -21,15 +21,17 @@ import (
 	"os"
 
 	"github.com/azure/gpu-provisioner/pkg/auth"
+	"github.com/azure/gpu-provisioner/pkg/providers/arcinstance"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	"github.com/azure/gpu-provisioner/pkg/utils/common"
 	"knative.dev/pkg/logging"
 	"sigs.k8s.io/karpenter/pkg/operator"
 )
 
-// Operator is injected into the AWS CloudProvider's factories
+// Operator is injected into the CloudProvider's factories
 type Operator struct {
 	*operator.Operator
-	InstanceProvider *instance.Provider
+	InstanceProvider common.InstanceProvider
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -38,20 +40,52 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		logging.FromContext(ctx).Errorf("creating Azure config, %s", err)
 	}
 
-	azClient, err := instance.CreateAzClient(azConfig)
-	if err != nil {
-		logging.FromContext(ctx).Errorf("creating Azure client, %s", err)
-		// Let us panic here, instead of crashing in the following code.
-		// TODO: move this to an init container
-		panic(fmt.Sprintf("Configure azure client fails. Please ensure federatedcredential has been created for identity %s.", os.Getenv("AZURE_CLIENT_ID")))
+	// Get cloud provider type from environment variable
+	cloudProvider := os.Getenv("CLOUD_PROVIDER")
+	if cloudProvider == "" {
+		cloudProvider = "aks" // default to AKS
 	}
 
-	instanceProvider := instance.NewProvider(
-		azClient,
-		operator.GetClient(),
-		azConfig.ResourceGroup,
-		azConfig.ClusterName,
-	)
+	var instanceProvider common.InstanceProvider
+
+	switch cloudProvider {
+	case "aks":
+		azClient, err := instance.CreateAzClient(azConfig)
+		if err != nil {
+			logging.FromContext(ctx).Errorf("creating Azure client, %s", err)
+			// Let us panic here, instead of crashing in the following code.
+			// TODO: move this to an init container
+			panic(fmt.Sprintf("Configure azure client fails. Please ensure federatedcredential has been created for identity %s.", os.Getenv("AZURE_CLIENT_ID")))
+		}
+
+		aksProvider := instance.NewProvider(
+			azClient,
+			operator.GetClient(),
+			azConfig.ResourceGroup,
+			azConfig.ClusterName,
+		)
+		instanceProvider = common.NewAKSInstanceProviderAdapter(aksProvider)
+
+	case "arc":
+		arcClient, err := arcinstance.NewArcClient(azConfig.SubscriptionID)
+		if err != nil {
+			logging.FromContext(ctx).Errorf("creating Arc client, %s", err)
+			panic(fmt.Sprintf("Configure Arc client fails: %v", err))
+		}
+
+		instanceProvider = arcinstance.NewProvider(
+			arcClient,
+			operator.GetClient(),
+			azConfig.SubscriptionID,
+			azConfig.ResourceGroup,
+			azConfig.ClusterName,
+		)
+
+	default:
+		panic(fmt.Sprintf("Unsupported CLOUD_PROVIDER: %s. Supported values are 'aks' and 'arc'", cloudProvider))
+	}
+
+	logging.FromContext(ctx).Infof("Using cloud provider: %s", cloudProvider)
 
 	return ctx, &Operator{
 		Operator:         operator,
