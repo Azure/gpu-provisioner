@@ -23,33 +23,50 @@ import (
 )
 
 // AKSInstanceProviderAdapter adapts the AKS instance.Provider to implement common.InstanceProvider
+
 type AKSInstanceProviderAdapter struct {
 	provider *instance.Provider
 }
 
 // NewAKSInstanceProviderAdapter creates a new adapter for AKS instance provider
+
 func NewAKSInstanceProviderAdapter(provider *instance.Provider) InstanceProvider {
+
 	return &AKSInstanceProviderAdapter{
+
 		provider: provider,
 	}
+
 }
 
 // Create implements InstanceProvider interface
+
 func (a *AKSInstanceProviderAdapter) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*instance.Instance, error) {
+
 	return a.provider.Create(ctx, nodeClaim)
+
 }
 
 // Get implements InstanceProvider interface
+
 func (a *AKSInstanceProviderAdapter) Get(ctx context.Context, providerID string) (*instance.Instance, error) {
+
 	return a.provider.Get(ctx, providerID)
+
 }
 
 // List implements InstanceProvider interface
+
 func (a *AKSInstanceProviderAdapter) List(ctx context.Context) ([]*instance.Instance, error) {
+
 	return a.provider.List(ctx)
+
 }
 
 // Delete implements InstanceProvider interface
+
 func (a *AKSInstanceProviderAdapter) Delete(ctx context.Context, providerID string) error {
+
 	return a.provider.Delete(ctx, providerID)
+
 }

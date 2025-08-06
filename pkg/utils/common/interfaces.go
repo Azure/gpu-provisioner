@@ -18,9 +18,8 @@ package common
 import (
 	"context"
 
-	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
+	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 // InstanceProvider defines the interface that all instance providers must implement

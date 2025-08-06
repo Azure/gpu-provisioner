@@ -24,47 +24,81 @@ import (
 )
 
 func createAgentPool(ctx context.Context, client AgentPoolsAPI, connectedClusterResourceURI, apName string, ap armhybridcontainerservice.AgentPool) (*armhybridcontainerservice.AgentPool, error) {
+
 	klog.InfoS("createAgentPool", "agentpool", apName)
 
 	poller, err := client.BeginCreateOrUpdate(ctx, connectedClusterResourceURI, apName, ap, nil)
+
 	if err != nil {
+
 		return nil, err
+
 	}
+
 	res, err := poller.PollUntilDone(ctx, nil)
+
 	if err != nil {
+
 		return nil, err
+
 	}
+
 	return &res.AgentPool, nil
+
 }
 
 func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, connectedClusterResourceURI, apName string) error {
+
 	klog.InfoS("deleteAgentPool", "agentpool", apName)
+
 	poller, err := client.BeginDelete(ctx, connectedClusterResourceURI, apName, nil)
+
 	if err != nil {
+
 		return common.ShouldIgnoreNotFoundError(err)
+
 	}
+
 	_, err = poller.PollUntilDone(ctx, nil)
+
 	return common.ShouldIgnoreNotFoundError(err)
+
 }
 
 func getAgentPool(ctx context.Context, client AgentPoolsAPI, connectedClusterResourceURI, apName string) (*armhybridcontainerservice.AgentPool, error) {
+
 	resp, err := client.Get(ctx, connectedClusterResourceURI, apName, nil)
+
 	if err != nil {
+
 		return nil, err
+
 	}
 
 	return &resp.AgentPool, nil
+
 }
 
 func listAgentPools(ctx context.Context, client AgentPoolsAPI, connectedClusterResourceURI string) ([]*armhybridcontainerservice.AgentPool, error) {
+
 	var apList []*armhybridcontainerservice.AgentPool
+
 	pager := client.NewListByProvisionedClusterPager(connectedClusterResourceURI, nil)
+
 	for pager.More() {
+
 		page, err := pager.NextPage(ctx)
+
 		if err != nil {
+
 			return nil, err
+
 		}
+
 		apList = append(apList, page.Value...)
+
 	}
+
 	return apList, nil
+
 }
