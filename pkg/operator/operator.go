@@ -21,9 +21,9 @@ import (
 	"os"
 
 	"github.com/azure/gpu-provisioner/pkg/auth"
+	"github.com/azure/gpu-provisioner/pkg/providers"
 	"github.com/azure/gpu-provisioner/pkg/providers/arcinstance"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/utils/common"
 	"knative.dev/pkg/logging"
 	"sigs.k8s.io/karpenter/pkg/operator"
 )
@@ -31,7 +31,7 @@ import (
 // Operator is injected into the CloudProvider's factories
 type Operator struct {
 	*operator.Operator
-	InstanceProvider common.InstanceProvider
+	InstanceProvider providers.InstanceProvider
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -46,7 +46,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		cloudProvider = "aks" // default to AKS
 	}
 
-	var instanceProvider common.InstanceProvider
+	var instanceProvider providers.InstanceProvider
 
 	switch cloudProvider {
 	case "aks":
@@ -58,13 +58,12 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 			panic(fmt.Sprintf("Configure azure client fails. Please ensure federatedcredential has been created for identity %s.", os.Getenv("AZURE_CLIENT_ID")))
 		}
 
-		aksProvider := instance.NewProvider(
+		instanceProvider = instance.NewProvider(
 			azClient,
 			operator.GetClient(),
 			azConfig.ResourceGroup,
 			azConfig.ClusterName,
 		)
-		instanceProvider = common.NewAKSInstanceProviderAdapter(aksProvider)
 
 	case "arc":
 		arcClient, err := arcinstance.NewArcClient(azConfig.SubscriptionID)

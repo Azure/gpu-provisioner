@@ -24,6 +24,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/azure/gpu-provisioner/pkg/providers"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
@@ -36,13 +37,6 @@ import (
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
-)
-
-const (
-	LabelMachineType       = "kaito.sh/machine-type"
-	NodeClaimCreationLabel = "kaito.sh/creation-timestamp"
-	// use self-defined layout in order to satisfy node label syntax
-	CreationTimestampLayout = "2006-01-02T15-04-05Z"
 )
 
 var (
@@ -73,7 +67,7 @@ func NewProvider(
 
 // Create an instance given the constraints.
 // instanceTypes should be sorted by priority for spot capacity type.
-func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*Instance, error) {
+func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*providers.Instance, error) {
 	klog.InfoS("Instance.Create", "nodeClaim", klog.KObj(nodeClaim))
 
 	// We made a strong assumption here. The nodeClaim name should be a valid agent pool name without "-".
@@ -150,7 +144,7 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 	return instance, err
 }
 
-func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
+func (p *Provider) Get(ctx context.Context, id string) (*providers.Instance, error) {
 	apName, err := utils.ParseAgentPoolNameFromID(id)
 	if err != nil {
 		return nil, fmt.Errorf("getting agentpool name, %w", err)
@@ -167,7 +161,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 	return p.convertAgentPoolToInstance(ctx, apObj, id)
 }
 
-func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
+func (p *Provider) List(ctx context.Context) ([]*providers.Instance, error) {
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
@@ -189,7 +183,7 @@ func (p *Provider) Delete(ctx context.Context, apName string) error {
 	return nil
 }
 
-func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool, id string) (*Instance, error) {
+func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool, id string) (*providers.Instance, error) {
 	if apObj == nil || len(id) == 0 {
 		return nil, fmt.Errorf("agent pool or provider id is nil")
 	}
@@ -198,7 +192,7 @@ func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcon
 		return lo.FromPtr(k)
 	})
 
-	return &Instance{
+	return &providers.Instance{
 		Name:     apObj.Name,
 		ID:       to.Ptr(id),
 		Type:     apObj.Properties.VMSize,
@@ -210,7 +204,7 @@ func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcon
 	}, nil
 }
 
-func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
+func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*providers.Instance, error) {
 	if apObj == nil {
 		return nil, fmt.Errorf("agent pool is nil")
 	}
@@ -246,7 +240,7 @@ func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj 
 	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
 		return lo.FromPtr(k)
 	})
-	return &Instance{
+	return &providers.Instance{
 		Name: apObj.Name,
 		// ID:       to.Ptr(fmt.Sprint("azure://", p.getVMSSNodeProviderID(lo.FromPtr(subID), tokens[0]))),
 		ID:       to.Ptr(nodes[0].Spec.ProviderID),
@@ -260,7 +254,7 @@ func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj 
 
 // fromKaitoAgentPoolToInstance is used to convert agentpool that owned by kaito to Instance, and agentPools that have no
 // associated node are also included in order to garbage leaked agentPools.
-func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*Instance, error) {
+func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armcontainerservice.AgentPool) (*providers.Instance, error) {
 	if apObj == nil {
 		return nil, fmt.Errorf("agent pool is nil")
 	}
@@ -268,7 +262,7 @@ func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armc
 	instanceLabels := lo.MapValues(apObj.Properties.NodeLabels, func(k *string, _ string) string {
 		return lo.FromPtr(k)
 	})
-	ins := &Instance{
+	ins := &providers.Instance{
 		Name:     apObj.Name,
 		Type:     apObj.Properties.VMSize,
 		SubnetID: apObj.Properties.VnetSubnetID,
@@ -289,8 +283,8 @@ func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armc
 	return ins, nil
 }
 
-func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armcontainerservice.AgentPool) ([]*Instance, error) {
-	instances := []*Instance{}
+func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armcontainerservice.AgentPool) ([]*providers.Instance, error) {
+	instances := []*providers.Instance{}
 	if len(apList) == 0 {
 		return instances, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("agentpools not found"))
 	}
@@ -336,13 +330,13 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 	}
 
 	if strings.Contains(vmSize, "Standard_N") {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
+		labels = lo.Assign(labels, map[string]*string{providers.LabelMachineType: to.Ptr("gpu")})
 	} else {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("cpu")})
+		labels = lo.Assign(labels, map[string]*string{providers.LabelMachineType: to.Ptr("cpu")})
 	}
 	// NodeClaimCreationLabel is used for recording the create timestamp of agentPool resource.
 	// then used by garbage collection controller to cleanup orphan agentpool which lived more than 10min
-	labels[NodeClaimCreationLabel] = to.Ptr(nodeClaim.CreationTimestamp.UTC().Format(CreationTimestampLayout))
+	labels[providers.NodeClaimCreationLabel] = to.Ptr(nodeClaim.CreationTimestamp.UTC().Format(providers.CreationTimestampLayout))
 
 	storage := &resource.Quantity{}
 	if nodeClaim.Spec.Resources.Requests != nil {

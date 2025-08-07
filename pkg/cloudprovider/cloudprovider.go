@@ -22,8 +22,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/status"
-	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/utils/common"
+	"github.com/azure/gpu-provisioner/pkg/providers"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,11 +35,11 @@ import (
 var _ cloudprovider.CloudProvider = &CloudProvider{}
 
 type CloudProvider struct {
-	instanceProvider common.InstanceProvider
+	instanceProvider providers.InstanceProvider
 	kubeClient       client.Client
 }
 
-func New(instanceProvider common.InstanceProvider, kubeClient client.Client) *CloudProvider {
+func New(instanceProvider providers.InstanceProvider, kubeClient client.Client) *CloudProvider {
 	return &CloudProvider{
 		instanceProvider: instanceProvider,
 		kubeClient:       kubeClient,
@@ -109,7 +108,7 @@ func (c *CloudProvider) GetSupportedNodeClasses() []status.Object {
 	return []status.Object{}
 }
 
-func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *instance.Instance) *karpenterv1.NodeClaim {
+func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *providers.Instance) *karpenterv1.NodeClaim {
 	nodeClaim := &karpenterv1.NodeClaim{}
 	if instanceObj == nil {
 		return nodeClaim
@@ -134,8 +133,8 @@ func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *in
 
 	nodeClaim.Labels = labels
 	nodeClaim.Annotations = annotations
-	if timestamp, ok := labels[instance.NodeClaimCreationLabel]; ok {
-		if creationTime, err := time.Parse(instance.CreationTimestampLayout, timestamp); err == nil {
+	if timestamp, ok := labels[providers.NodeClaimCreationLabel]; ok {
+		if creationTime, err := time.Parse(providers.CreationTimestampLayout, timestamp); err == nil {
 			nodeClaim.CreationTimestamp = metav1.Time{Time: creationTime}
 		}
 	}

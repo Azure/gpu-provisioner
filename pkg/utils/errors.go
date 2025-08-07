@@ -13,17 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package instance
+package utils
 
-// Instance a struct to isolate weather vm or vmss
-type Instance struct {
-	Name         *string // agentPoolName or instance/vmName
-	State        *string
-	ID           *string
-	ImageID      *string
-	Type         *string
-	CapacityType *string
-	SubnetID     *string
-	Tags         map[string]*string
-	Labels       map[string]string
+import (
+	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
+)
+
+// IsAzureNotFoundError checks if an error is an Azure "NotFound" error
+func IsAzureNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	azErr := sdkerrors.IsResponseError(err)
+	return azErr != nil && azErr.ErrorCode == "NotFound"
+}
+
+// ShouldIgnoreNotFoundError returns nil if the error is a "NotFound" error, otherwise returns the original error
+func ShouldIgnoreNotFoundError(err error) error {
+	if IsAzureNotFoundError(err) {
+		return nil
+	}
+	return err
 }

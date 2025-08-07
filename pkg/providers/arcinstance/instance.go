@@ -24,8 +24,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/hybridcontainerservice/armhybridcontainerservice"
-	"github.com/azure/gpu-provisioner/pkg/providers/instance"
-	"github.com/azure/gpu-provisioner/pkg/utils/common"
+	"github.com/azure/gpu-provisioner/pkg/providers"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -106,7 +106,7 @@ func NewProvider(
 
 // instanceTypes should be sorted by priority for spot capacity type.
 
-func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*instance.Instance, error) {
+func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*providers.Instance, error) {
 
 	klog.InfoS("Instance.Create", "nodeClaim", klog.KObj(nodeClaim))
 
@@ -285,7 +285,7 @@ func ArcParseAgentPoolNameFromID(id string) (string, error) {
 
 }
 
-func (p *Provider) Get(ctx context.Context, id string) (*instance.Instance, error) {
+func (p *Provider) Get(ctx context.Context, id string) (*providers.Instance, error) {
 
 	klog.InfoS("Instance.Get", "id", id)
 
@@ -317,7 +317,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*instance.Instance, erro
 
 }
 
-func (p *Provider) List(ctx context.Context) ([]*instance.Instance, error) {
+func (p *Provider) List(ctx context.Context) ([]*providers.Instance, error) {
 
 	klog.InfoS("Instance.List")
 
@@ -355,7 +355,7 @@ func (p *Provider) Delete(ctx context.Context, apName string) error {
 
 }
 
-func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool, id string) (*instance.Instance, error) {
+func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool, id string) (*providers.Instance, error) {
 
 	if apObj == nil || len(id) == 0 {
 
@@ -369,7 +369,7 @@ func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armhyb
 
 	})
 
-	return &instance.Instance{
+	return &providers.Instance{
 
 		Name: apObj.Name,
 
@@ -391,7 +391,7 @@ func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armhyb
 
 }
 
-func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool) (*instance.Instance, error) {
+func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool) (*providers.Instance, error) {
 
 	if apObj == nil {
 
@@ -453,7 +453,7 @@ func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj 
 
 	})
 
-	return &instance.Instance{
+	return &providers.Instance{
 
 		Name: apObj.Name,
 
@@ -478,7 +478,7 @@ func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj 
 
 // associated node are also included in order to garbage leaked agentPools.
 
-func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool) (*instance.Instance, error) {
+func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armhybridcontainerservice.AgentPool) (*providers.Instance, error) {
 
 	if apObj == nil {
 
@@ -492,7 +492,7 @@ func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armh
 
 	})
 
-	ins := &instance.Instance{
+	ins := &providers.Instance{
 
 		Name: apObj.Name,
 
@@ -525,9 +525,9 @@ func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armh
 
 }
 
-func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybridcontainerservice.AgentPool) ([]*instance.Instance, error) {
+func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybridcontainerservice.AgentPool) ([]*providers.Instance, error) {
 
-	instances := []*instance.Instance{}
+	instances := []*providers.Instance{}
 
 	if len(apList) == 0 {
 
@@ -539,7 +539,7 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybri
 
 		// skip agentPool that is not owned by kaito
 
-		if !common.AgentPoolIsOwnedByKaito(apList[index].Properties.NodeLabels) {
+		if !utils.AgentPoolIsOwnedByKaito(apList[index].Properties.NodeLabels) {
 
 			continue
 
@@ -547,7 +547,7 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armhybri
 
 		// skip agentPool which is not created from nodeclaim
 
-		if !common.AgentPoolIsCreatedFromNodeClaim(apList[index].Properties.NodeLabels) {
+		if !utils.AgentPoolIsCreatedFromNodeClaim(apList[index].Properties.NodeLabels) {
 
 			continue
 
@@ -583,9 +583,9 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armhyb
 
 	// Create common labels and taints
 
-	labels := common.CreateAgentPoolLabels(nodeClaim, vmSize)
+	labels := utils.CreateAgentPoolLabels(nodeClaim, vmSize)
 
-	taintsStr := common.CreateAgentPoolTaints(nodeClaim.Spec.Taints)
+	taintsStr := utils.CreateAgentPoolTaints(nodeClaim.Spec.Taints)
 
 	storage := &resource.Quantity{}
 

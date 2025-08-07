@@ -19,7 +19,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/hybridcontainerservice/armhybridcontainerservice"
-	"github.com/azure/gpu-provisioner/pkg/utils/common"
+	"github.com/azure/gpu-provisioner/pkg/utils"
 	"k8s.io/klog/v2"
 )
 
@@ -55,13 +55,13 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, connectedCluster
 
 	if err != nil {
 
-		return common.ShouldIgnoreNotFoundError(err)
+		return utils.ShouldIgnoreNotFoundError(err)
 
 	}
 
 	_, err = poller.PollUntilDone(ctx, nil)
 
-	return common.ShouldIgnoreNotFoundError(err)
+	return utils.ShouldIgnoreNotFoundError(err)
 
 }
 

@@ -13,13 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package common
+package providers
 
 import (
 	"context"
 
-	"github.com/azure/gpu-provisioner/pkg/providers/instance"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+)
+
+const (
+	LabelMachineType       = "kaito.sh/machine-type"
+	NodeClaimCreationLabel = "kaito.sh/creation-timestamp"
+	// use self-defined layout in order to satisfy node label syntax
+	CreationTimestampLayout = "2006-01-02T15-04-05Z"
 )
 
 // InstanceProvider defines the interface that all instance providers must implement
@@ -27,14 +33,26 @@ import (
 // Since both AKS and Arc use the same instance.Instance type, we can simplify the interface
 type InstanceProvider interface {
 	// Create creates a new instance based on the NodeClaim requirements
-	Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*instance.Instance, error)
+	Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim) (*Instance, error)
 
 	// Get retrieves an instance by its provider ID
-	Get(ctx context.Context, providerID string) (*instance.Instance, error)
+	Get(ctx context.Context, providerID string) (*Instance, error)
 
 	// List retrieves all instances managed by this provider
-	List(ctx context.Context) ([]*instance.Instance, error)
+	List(ctx context.Context) ([]*Instance, error)
 
 	// Delete removes an instance by its provider ID
 	Delete(ctx context.Context, providerID string) error
+}
+
+type Instance struct {
+	Name         *string // agentPoolName or instance/vmName
+	State        *string
+	ID           *string
+	ImageID      *string
+	Type         *string
+	CapacityType *string
+	SubnetID     *string
+	Tags         map[string]*string
+	Labels       map[string]string
 }
