@@ -41,9 +41,12 @@ func main() {
 			op.GetClient(),
 			op.EventRecorder,
 			cloudProvider,
+			nil, // overlayUndecoratedCloudProvider
+			nil, // cluster
+			nil, // instanceTypeStore
 		)...).
 		WithControllers(ctx, controllers.NewControllers(
 			op.GetClient(),
 			cloudProvider,
-		)...).Start(ctx, cloudProvider)
+		)...).Start(ctx)
 }
