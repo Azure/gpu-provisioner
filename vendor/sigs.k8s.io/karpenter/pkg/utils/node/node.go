@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -188,10 +189,22 @@ func GetCondition(n *corev1.Node, match corev1.NodeConditionType) corev1.NodeCon
 }
 
 func IsManaged(node *corev1.Node, cp cloudprovider.CloudProvider) bool {
-	return lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
+	if hasSupportedNodeClass := lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
 		_, ok := node.Labels[v1.NodeClassLabelKey(object.GVK(nodeClass).GroupKind())]
 		return ok
-	})
+	}); hasSupportedNodeClass {
+		return true
+	}
+
+	if nodeclaimutils.WorkspaceSelector.Matches(labels.Set(node.GetLabels())) {
+		return true
+	}
+
+	if nodeclaimutils.RagEngineSelector.Matches(labels.Set(node.GetLabels())) {
+		return true
+	}
+
+	return false
 }
 
 // IsManagedPredicateFuncs is used to filter controller-runtime NodeClaim watches to NodeClaims managed by the given cloudprovider.

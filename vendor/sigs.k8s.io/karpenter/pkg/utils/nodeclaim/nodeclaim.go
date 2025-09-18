@@ -26,6 +26,7 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,25 +43,34 @@ const (
 )
 
 var (
-	selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	WorkspaceSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
 		},
 	})
-	selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+
+	RagEngineSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
 		},
 	})
-	KaitoResourcePredicate = predicate.Or(selector1, selector2)
-
-	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
 )
 
 func IsManaged(nodeClaim *v1.NodeClaim, cp cloudprovider.CloudProvider) bool {
-	return lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
+	if hasSupportedNodeClass := lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
 		return object.GVK(nodeClass).GroupKind() == nodeClaim.Spec.NodeClassRef.GroupKind()
-	})
+	}); hasSupportedNodeClass {
+		return true
+	}
+
+	if WorkspaceSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
+		return true
+	}
+
+	if RagEngineSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
+		return true
+	}
+	return false
 }
 
 // IsManagedPredicateFuncs is used to filter controller-runtime NodeClaim watches to NodeClaims managed by the given cloudprovider.
@@ -269,18 +279,4 @@ func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *core
 		BlockOwnerDeletion: lo.ToPtr(true),
 	})
 	return node
-}
-
-func AllKaitoNodeClaims(ctx context.Context, c client.Client) ([]v1.NodeClaim, error) {
-	kaitoNodeClaims := make([]v1.NodeClaim, 0)
-
-	for i := range KaitoNodeClaimLabels {
-		nodeClaimList := &v1.NodeClaimList{}
-		if err := c.List(ctx, nodeClaimList, client.HasLabels([]string{KaitoNodeClaimLabels[i]})); err != nil {
-			return kaitoNodeClaims, err
-		}
-
-		kaitoNodeClaims = append(kaitoNodeClaims, nodeClaimList.Items...)
-	}
-	return kaitoNodeClaims, nil
 }

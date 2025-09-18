@@ -33,7 +33,7 @@ import (
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
-	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
+	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 )
 
 type Controller struct {
@@ -60,12 +60,12 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 		return nc.DeletionTimestamp.IsZero()
 	})
 
-	kaitoNodeClaims, err := nodeclaimutil.AllKaitoNodeClaims(ctx, c.kubeClient)
+	kaitoNodeClaims, err := nodeclaimutils.ListManaged(ctx, c.kubeClient, c.cloudProvider)
 	if err != nil {
 		return reconciler.Result{}, err
 	}
 
-	clusterNodeClaimNames := sets.New[string](lo.FilterMap(kaitoNodeClaims, func(nc v1.NodeClaim, _ int) (string, bool) {
+	clusterNodeClaimNames := sets.New[string](lo.FilterMap(kaitoNodeClaims, func(nc *v1.NodeClaim, _ int) (string, bool) {
 		return nc.Name, true
 	})...)
 
@@ -97,7 +97,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 		log.FromContext(ctx).Info("delete leaked cloudprovider instance successfully", "name", deletedCloudProviderInstances[i].Name)
 
 		if len(deletedCloudProviderInstances[i].Status.ProviderID) != 0 {
-			nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, deletedCloudProviderInstances[i])
+			nodes, err := nodeclaimutils.AllNodesForNodeClaim(ctx, c.kubeClient, deletedCloudProviderInstances[i])
 			if err != nil {
 				errs[i] = err
 				return

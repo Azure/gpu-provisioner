@@ -83,6 +83,8 @@ spec:
               value: "true"
             - name: DEPLOYMENT_MODE
               value: {{ .Values.deploymentMode }}
+            - name: FEATURE_GATES
+              value: "NodeRepair=true"
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
