@@ -84,39 +84,33 @@ func (c *Controller) Reconcile(ctx context.Context, n *v1.NodeClaim) (reconcile.
 //nolint:gocyclo
 func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (reconcile.Result, error) {
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("Node", klog.KRef("", nodeClaim.Status.NodeName), "provider-id", nodeClaim.Status.ProviderID))
-	log.FromContext(ctx).Info("finalize nodeclaim", "nodeclaim", nodeClaim.Name)
 	if !controllerutil.ContainsFinalizer(nodeClaim, v1.TerminationFinalizer) {
 		return reconcile.Result{}, nil
 	}
 	if err := c.ensureTerminationGracePeriodTerminationTimeAnnotation(ctx, nodeClaim); err != nil {
 		return reconcile.Result{}, fmt.Errorf("adding nodeclaim terminationGracePeriod annotation, %w", err)
 	}
-
-	// only delete nodes if the NodeClaim has been registered.
-	if nodeClaim.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() {
-		nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, nodeClaim)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		for _, node := range nodes {
-			// If we still get the Node, but it's already marked as terminating, we don't need to call Delete again
-			if node.DeletionTimestamp.IsZero() {
-				// We delete nodes to trigger the node finalization and deletion flow
-				if err = c.kubeClient.Delete(ctx, node); client.IgnoreNotFound(err) != nil {
-					return reconcile.Result{}, err
-				}
+	nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, nodeClaim)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	for _, node := range nodes {
+		// If we still get the Node, but it's already marked as terminating, we don't need to call Delete again
+		if node.DeletionTimestamp.IsZero() {
+			// We delete nodes to trigger the node finalization and deletion flow
+			if err = c.kubeClient.Delete(ctx, node); client.IgnoreNotFound(err) != nil {
+				return reconcile.Result{}, err
 			}
 		}
-		// We wait until all the nodes associated with this nodeClaim have completed their deletion before triggering the finalization of the nodeClaim
-		if len(nodes) > 0 {
-			log.FromContext(ctx).Info("wait nodes removed before terminating nodeclaims", "nodeclaim", nodeClaim.Name, "nodeCount", len(nodes))
-			return reconcile.Result{}, nil
-		}
 	}
-
+	// We wait until all the nodes associated with this nodeClaim have completed their deletion before triggering the finalization of the nodeClaim
+	if len(nodes) > 0 {
+		return reconcile.Result{}, nil
+	}
+	var isInstanceTerminated bool
 	// We can expect ProviderID to be empty when there is a failure while launching the nodeClaim
 	if nodeClaim.Status.ProviderID != "" {
-		isInstanceTerminated, err := termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
+		isInstanceTerminated, err = termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
 		if err != nil {
 			// 404 = the nodeClaim no longer exists
 			if errors.IsNotFound(err) {
@@ -142,7 +136,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (rec
 		// can cause races due to the fact that it fully replaces the list on a change
 		// Here, we are updating the finalizer list
 		// https://github.com/kubernetes/kubernetes/issues/111643#issuecomment-2016489732
-		if err := c.kubeClient.Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
+		if err = c.kubeClient.Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
 			if errors.IsConflict(err) {
 				return reconcile.Result{Requeue: true}, nil
 			}
@@ -199,7 +193,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 		Named("nodeclaim.termination").
 		For(&v1.NodeClaim{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
 		Watches(
 			&corev1.Node{},
 			nodeclaimutil.NodeEventHandler(c.kubeClient),
