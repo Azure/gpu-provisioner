@@ -99,6 +99,16 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpente
 	return []*cloudprovider.InstanceType{}, nil
 }
 
+func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
+	return []cloudprovider.RepairPolicy{
+		{
+			ConditionType:      corev1.NodeReady,
+			ConditionStatus:    corev1.ConditionFalse,
+			TolerationDuration: 10 * time.Minute,
+		},
+	}
+}
+
 // Name returns the CloudProvider implementation name.
 func (c *CloudProvider) Name() string {
 	return "azure"

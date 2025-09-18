@@ -36,6 +36,27 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
+const (
+	WorkspaceLabelKey = "kaito.sh/workspace"
+	RagEngineLabelKey = "kaito.sh/ragengine"
+)
+
+var (
+	selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
+		},
+	})
+	selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
+		},
+	})
+	KaitoResourcePredicate = predicate.Or(selector1, selector2)
+
+	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
+)
+
 func IsManaged(nodeClaim *v1.NodeClaim, cp cloudprovider.CloudProvider) bool {
 	return lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
 		return object.GVK(nodeClass).GroupKind() == nodeClaim.Spec.NodeClassRef.GroupKind()
@@ -248,4 +269,18 @@ func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *core
 		BlockOwnerDeletion: lo.ToPtr(true),
 	})
 	return node
+}
+
+func AllKaitoNodeClaims(ctx context.Context, c client.Client) ([]v1.NodeClaim, error) {
+	kaitoNodeClaims := make([]v1.NodeClaim, 0)
+
+	for i := range KaitoNodeClaimLabels {
+		nodeClaimList := &v1.NodeClaimList{}
+		if err := c.List(ctx, nodeClaimList, client.HasLabels([]string{KaitoNodeClaimLabels[i]})); err != nil {
+			return kaitoNodeClaims, err
+		}
+
+		kaitoNodeClaims = append(kaitoNodeClaims, nodeClaimList.Items...)
+	}
+	return kaitoNodeClaims, nil
 }
