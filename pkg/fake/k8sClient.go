@@ -123,6 +123,10 @@ func (m *MockClient) getObjectListFromMap(list k8sClient.ObjectList) k8sClient.O
 	return nil
 }
 
+func (m *MockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...k8sClient.ApplyOption) error {
+	return nil
+}
+
 func (m *MockClient) Create(ctx context.Context, obj k8sClient.Object, opts ...k8sClient.CreateOption) error {
 	m.CreateOrUpdateObjectInMap(obj)
 
