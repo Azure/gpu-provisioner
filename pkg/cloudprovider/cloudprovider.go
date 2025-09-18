@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
@@ -115,7 +116,7 @@ func (c *CloudProvider) Name() string {
 }
 
 func (c *CloudProvider) GetSupportedNodeClasses() []status.Object {
-	return []status.Object{}
+	return []status.Object{&v1alpha1.KaitoNodeClass{}}
 }
 
 func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *instance.Instance) *karpenterv1.NodeClaim {

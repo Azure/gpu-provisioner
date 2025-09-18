@@ -25,6 +25,14 @@ GO_INSTALL := ./hack/go-install.sh
 TEST_SUITE ?= "..."
 TEST_TIMEOUT ?= "1h"
 
+REPO_ROOT ?= $(shell pwd)
+LOCALBIN ?= $(REPO_ROOT)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+
 ## --------------------------------------
 ## Tooling Binaries
 ## --------------------------------------
@@ -190,3 +198,18 @@ release-manifest:
 	git checkout -b release-${VERSION}
 	git add ./Makefile ./charts/gpu-provisioner/Chart.yaml ./charts/gpu-provisioner/values.yaml ./charts/gpu-provisioner/README.md
 	git commit -s -m "release: update manifest and helm charts for ${VERSION}"
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary. If wrong version is installed, it will be overwritten.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	test -s $(CONTROLLER_GEN) && $(CONTROLLER_GEN) --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: manifests
+manifests: controller-gen ## Generate CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=charts/gpu-provisioner/crds
+

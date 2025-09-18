@@ -20,3 +20,4 @@ _output/
 /coverage.txt
 /coverage.out
 gpu-provisioner-values.yaml
+bin

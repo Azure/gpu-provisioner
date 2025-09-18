@@ -16,13 +16,20 @@ limitations under the License.
 package main
 
 import (
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 	"github.com/azure/gpu-provisioner/pkg/cloudprovider"
 	"github.com/azure/gpu-provisioner/pkg/controllers"
 	"github.com/azure/gpu-provisioner/pkg/operator"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
 	karpentercontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	karpenteroperator "sigs.k8s.io/karpenter/pkg/operator"
 )
+
+func init() {
+	// karpenter use scheme.Scheme by default
+	v1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+}
 
 func main() {
 	ctx, op := operator.NewOperator(karpenteroperator.NewOperator())
