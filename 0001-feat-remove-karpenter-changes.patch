@@ -1,0 +1,697 @@
+From 5cd51c939426ec234e850d1513fbb363158fbf1b Mon Sep 17 00:00:00 2001
+From: rambohe-ch <rambohe.ch@gmail.com>
+Date: Thu, 18 Sep 2025 17:14:11 +1000
+Subject: [PATCH] feat: remove karpenter changes
+
+Signed-off-by: rambohe-ch <rambohe.ch@gmail.com>
+---
+ .../karpenter/pkg/apis/v1/nodeclaim_status.go |  2 -
+ .../karpenter/pkg/controllers/controllers.go  | 62 +++++++++++--------
+ .../node/termination/controller.go            |  2 -
+ .../node/termination/terminator/terminator.go |  6 +-
+ .../nodeclaim/disruption/controller.go        | 36 ++++++-----
+ .../nodeclaim/garbagecollection/controller.go | 43 +++----------
+ .../nodeclaim/lifecycle/controller.go         | 13 ++--
+ .../nodeclaim/lifecycle/initialization.go     |  2 +-
+ .../controllers/nodeclaim/lifecycle/launch.go |  6 +-
+ .../nodeclaim/lifecycle/registration.go       | 23 +++----
+ .../nodeclaim/termination/controller.go       | 41 +++++-------
+ .../karpenter/pkg/operator/operator.go        | 20 +++---
+ .../pkg/utils/nodeclaim/nodeclaim.go          | 44 -------------
+ 13 files changed, 111 insertions(+), 189 deletions(-)
+
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/apis/v1/nodeclaim_status.go b/vendor/sigs.k8s.io/karpenter/pkg/apis/v1/nodeclaim_status.go
+index 7147b67..aca25a4 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/apis/v1/nodeclaim_status.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/apis/v1/nodeclaim_status.go
+@@ -26,7 +26,6 @@ const (
+ 	ConditionTypeLaunched             = "Launched"
+ 	ConditionTypeRegistered           = "Registered"
+ 	ConditionTypeInitialized          = "Initialized"
+-	ConditionTypeNodeReady            = "NodeReady"
+ 	ConditionTypeConsolidatable       = "Consolidatable"
+ 	ConditionTypeDrifted              = "Drifted"
+ 	ConditionTypeInstanceTerminating  = "InstanceTerminating"
+@@ -65,7 +64,6 @@ func (in *NodeClaim) StatusConditions() status.ConditionSet {
+ 		ConditionTypeLaunched,
+ 		ConditionTypeRegistered,
+ 		ConditionTypeInitialized,
+-		ConditionTypeNodeReady,
+ 	).For(in)
+ }
+ 
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/controllers.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/controllers.go
+index 238e1ce..ad18dd1 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/controllers.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/controllers.go
+@@ -28,18 +28,32 @@ import (
+ 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+ 	"sigs.k8s.io/karpenter/pkg/operator/options"
+ 
++	migrationcrd "sigs.k8s.io/karpenter/pkg/controllers/migration/crd"
+ 	migration "sigs.k8s.io/karpenter/pkg/controllers/migration/resource"
++	nodepoolreadiness "sigs.k8s.io/karpenter/pkg/controllers/nodepool/readiness"
+ 
+ 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
++	"sigs.k8s.io/karpenter/pkg/controllers/disruption"
++	"sigs.k8s.io/karpenter/pkg/controllers/disruption/orchestration"
+ 	"sigs.k8s.io/karpenter/pkg/controllers/leasegarbagecollection"
++	metricsnode "sigs.k8s.io/karpenter/pkg/controllers/metrics/node"
++	metricsnodepool "sigs.k8s.io/karpenter/pkg/controllers/metrics/nodepool"
++	metricspod "sigs.k8s.io/karpenter/pkg/controllers/metrics/pod"
+ 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination"
+ 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator"
++	nodeclaimconsistency "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/consistency"
+ 	nodeclaimdisruption "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption"
+ 	"sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/expiration"
+ 	nodeclaimgarbagecollection "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection"
+ 	nodeclaimlifecycle "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle"
+ 	podevents "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/podevents"
+ 	nodeclaimtermination "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination"
++	nodepoolcounter "sigs.k8s.io/karpenter/pkg/controllers/nodepool/counter"
++	nodepoolhash "sigs.k8s.io/karpenter/pkg/controllers/nodepool/hash"
++	nodepoolvalidation "sigs.k8s.io/karpenter/pkg/controllers/nodepool/validation"
++	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
++	"sigs.k8s.io/karpenter/pkg/controllers/state"
++	"sigs.k8s.io/karpenter/pkg/controllers/state/informer"
+ 	"sigs.k8s.io/karpenter/pkg/events"
+ )
+ 
+@@ -52,47 +66,45 @@ func NewControllers(
+ 	cloudProvider cloudprovider.CloudProvider,
+ ) []controller.Controller {
+ 
+-	// cluster := state.NewCluster(clock, kubeClient)
+-	// p := provisioning.NewProvisioner(kubeClient, recorder, cloudProvider, cluster)
++	cluster := state.NewCluster(clock, kubeClient)
++	p := provisioning.NewProvisioner(kubeClient, recorder, cloudProvider, cluster)
+ 	evictionQueue := terminator.NewQueue(kubeClient, recorder)
+-	// disruptionQueue := orchestration.NewQueue(kubeClient, recorder, cluster, clock, p)
++	disruptionQueue := orchestration.NewQueue(kubeClient, recorder, cluster, clock, p)
+ 
+ 	controllers := []controller.Controller{
+-		// p,
+-		evictionQueue,
+-		// disruptionQueue,
+-		// disruption.NewController(clock, kubeClient, p, cloudProvider, recorder, cluster, disruptionQueue),
+-		// provisioning.NewPodController(kubeClient, p),
+-		// provisioning.NewNodeController(kubeClient, p),
+-		// nodepoolhash.NewController(kubeClient),
++		p, evictionQueue, disruptionQueue,
++		disruption.NewController(clock, kubeClient, p, cloudProvider, recorder, cluster, disruptionQueue),
++		provisioning.NewPodController(kubeClient, p),
++		provisioning.NewNodeController(kubeClient, p),
++		nodepoolhash.NewController(kubeClient),
+ 		expiration.NewController(clock, kubeClient),
+-		// informer.NewDaemonSetController(kubeClient, cluster),
+-		// informer.NewNodeController(kubeClient, cluster),
+-		// informer.NewPodController(kubeClient, cluster),
+-		// informer.NewNodePoolController(kubeClient, cluster),
+-		// informer.NewNodeClaimController(kubeClient, cluster),
++		informer.NewDaemonSetController(kubeClient, cluster),
++		informer.NewNodeController(kubeClient, cluster),
++		informer.NewPodController(kubeClient, cluster),
++		informer.NewNodePoolController(kubeClient, cluster),
++		informer.NewNodeClaimController(kubeClient, cluster),
+ 		termination.NewController(clock, kubeClient, cloudProvider, terminator.NewTerminator(clock, kubeClient, evictionQueue, recorder), recorder),
+-		// metricspod.NewController(kubeClient),
+-		// metricsnodepool.NewController(kubeClient),
+-		// metricsnode.NewController(cluster),
+-		// nodepoolreadiness.NewController(kubeClient, cloudProvider),
+-		// nodepoolcounter.NewController(kubeClient, cluster),
+-		// nodepoolvalidation.NewController(kubeClient),
++		metricspod.NewController(kubeClient),
++		metricsnodepool.NewController(kubeClient),
++		metricsnode.NewController(cluster),
++		nodepoolreadiness.NewController(kubeClient, cloudProvider),
++		nodepoolcounter.NewController(kubeClient, cluster),
++		nodepoolvalidation.NewController(kubeClient),
+ 		podevents.NewController(clock, kubeClient),
+-		// nodeclaimconsistency.NewController(clock, kubeClient, recorder),
++		nodeclaimconsistency.NewController(clock, kubeClient, recorder),
+ 		nodeclaimlifecycle.NewController(clock, kubeClient, cloudProvider, recorder),
+ 		nodeclaimgarbagecollection.NewController(clock, kubeClient, cloudProvider),
+ 		nodeclaimtermination.NewController(kubeClient, cloudProvider, recorder),
+ 		nodeclaimdisruption.NewController(clock, kubeClient, cloudProvider),
+ 		leasegarbagecollection.NewController(kubeClient),
+ 		status.NewController[*v1.NodeClaim](kubeClient, mgr.GetEventRecorderFor("karpenter")),
+-		// status.NewController[*v1.NodePool](kubeClient, mgr.GetEventRecorderFor("karpenter")),
++		status.NewController[*v1.NodePool](kubeClient, mgr.GetEventRecorderFor("karpenter")),
+ 	}
+ 
+ 	if !options.FromContext(ctx).DisableWebhook {
+ 		controllers = append(controllers, migration.NewController[*v1.NodeClaim](kubeClient))
+-		// controllers = append(controllers, migration.NewController[*v1.NodePool](kubeClient))
+-		// controllers = append(controllers, migrationcrd.NewController(kubeClient, cloudProvider))
++		controllers = append(controllers, migration.NewController[*v1.NodePool](kubeClient))
++		controllers = append(controllers, migrationcrd.NewController(kubeClient, cloudProvider))
+ 	}
+ 
+ 	return controllers
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/controller.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/controller.go
+index e794908..a2197cf 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/controller.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/controller.go
+@@ -85,7 +85,6 @@ func (c *Controller) Reconcile(ctx context.Context, n *corev1.Node) (reconcile.R
+ 
+ //nolint:gocyclo
+ func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile.Result, error) {
+-	log.FromContext(ctx).Info("finalize node", "node", node.Name)
+ 	if !controllerutil.ContainsFinalizer(node, v1.TerminationFinalizer) {
+ 		return reconcile.Result{}, nil
+ 	}
+@@ -148,7 +147,6 @@ func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile
+ 	}
+ 	for _, nodeClaim := range nodeClaims {
+ 		isInstanceTerminated, err := termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
+-		log.FromContext(ctx).Info("ensure terminated nodeclaim", "nodeclaim", nodeClaim.Name, "isInstanceTerminated", isInstanceTerminated, "error", err)
+ 		if err != nil {
+ 			// 404 = the nodeClaim no longer exists
+ 			if errors.IsNotFound(err) {
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator/terminator.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator/terminator.go
+index dff1027..8c44446 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator/terminator.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator/terminator.go
+@@ -99,7 +99,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
+ 	if err != nil {
+ 		return fmt.Errorf("listing pods on node, %w", err)
+ 	}
+-	log.FromContext(ctx).Info("drain pods on node", "node", node.Name, "podsCount", len(pods), "nodeGracePeriodExpirationTime", nodeGracePeriodExpirationTime)
+ 
+ 	podsToDelete := lo.Filter(pods, func(p *corev1.Pod, _ int) bool {
+ 		return podutil.IsWaitingEviction(p, t.clock) && !podutil.IsTerminating(p)
+@@ -110,7 +109,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
+ 
+ 	// evictablePods are pods that aren't yet terminating are eligible to have the eviction API called against them
+ 	evictablePods := lo.Filter(pods, func(p *corev1.Pod, _ int) bool { return podutil.IsEvictable(p) })
+-	log.FromContext(ctx).Info("evict pods", "podsCount", len(evictablePods))
+ 	t.Evict(evictablePods)
+ 
+ 	// podsWaitingEvictionCount is the number of pods that either haven't had eviction called against them yet
+@@ -119,7 +117,6 @@ func (t *Terminator) Drain(ctx context.Context, node *corev1.Node, nodeGracePeri
+ 	if podsWaitingEvictionCount > 0 {
+ 		return NewNodeDrainError(fmt.Errorf("%d pods are waiting to be evicted", len(pods)))
+ 	}
+-	log.FromContext(ctx).Info("waiting eviction pods", "podsCount", podsWaitingEvictionCount)
+ 	return nil
+ }
+ 
+@@ -163,7 +160,6 @@ func (t *Terminator) EvictInOrder(pods ...[]*corev1.Pod) {
+ }
+ 
+ func (t *Terminator) DeleteExpiringPods(ctx context.Context, pods []*corev1.Pod, nodeGracePeriodTerminationTime *time.Time) error {
+-	log.FromContext(ctx).Info("delete expiring pods", "podsCount", len(pods), "terminationTime", nodeGracePeriodTerminationTime)
+ 	for _, pod := range pods {
+ 		// check if the node has an expiration time and the pod needs to be deleted
+ 		deleteTime := t.podDeleteTimeWithGracePeriod(nodeGracePeriodTerminationTime, pod)
+@@ -184,7 +180,7 @@ func (t *Terminator) DeleteExpiringPods(ctx context.Context, pods []*corev1.Pod,
+ 				"pod.terminationGracePeriodSeconds", *pod.Spec.TerminationGracePeriodSeconds,
+ 				"delete.gracePeriodSeconds", *gracePeriodSeconds,
+ 				"nodeclaim.terminationTime", *nodeGracePeriodTerminationTime,
+-			).Info("deleting pod")
++			).V(1).Info("deleting pod")
+ 		}
+ 	}
+ 	return nil
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption/controller.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption/controller.go
+index 9cbaf0e..e96fa7c 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption/controller.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption/controller.go
+@@ -23,15 +23,18 @@ import (
+ 	corev1 "k8s.io/api/core/v1"
+ 	"k8s.io/apimachinery/pkg/api/equality"
+ 	"k8s.io/apimachinery/pkg/api/errors"
++	"k8s.io/apimachinery/pkg/types"
+ 	"k8s.io/utils/clock"
+ 	controllerruntime "sigs.k8s.io/controller-runtime"
+ 	"sigs.k8s.io/controller-runtime/pkg/client"
+ 	"sigs.k8s.io/controller-runtime/pkg/controller"
+ 	"sigs.k8s.io/controller-runtime/pkg/manager"
+ 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
++
++	"sigs.k8s.io/karpenter/pkg/operator/injection"
++
+ 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+ 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+-	"sigs.k8s.io/karpenter/pkg/operator/injection"
+ 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
+ 	"sigs.k8s.io/karpenter/pkg/utils/result"
+ )
+@@ -46,8 +49,8 @@ type Controller struct {
+ 	kubeClient    client.Client
+ 	cloudProvider cloudprovider.CloudProvider
+ 
+-	drift *Drift
+-	// consolidation *Consolidation
++	drift         *Drift
++	consolidation *Consolidation
+ }
+ 
+ // NewController constructs a nodeclaim disruption controller. Note that every sub-controller has a dependency on its nodepool.
+@@ -57,7 +60,7 @@ func NewController(clk clock.Clock, kubeClient client.Client, cloudProvider clou
+ 		kubeClient:    kubeClient,
+ 		cloudProvider: cloudProvider,
+ 		drift:         &Drift{cloudProvider: cloudProvider},
+-		// consolidation: &Consolidation{kubeClient: kubeClient, clock: clk},
++		consolidation: &Consolidation{kubeClient: kubeClient, clock: clk},
+ 	}
+ }
+ 
+@@ -70,19 +73,19 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (re
+ 	}
+ 
+ 	stored := nodeClaim.DeepCopy()
+-	// nodePoolName, ok := nodeClaim.Labels[v1.NodePoolLabelKey]
+-	// if !ok {
+-	// 	return reconcile.Result{}, nil
+-	// }
++	nodePoolName, ok := nodeClaim.Labels[v1.NodePoolLabelKey]
++	if !ok {
++		return reconcile.Result{}, nil
++	}
+ 	nodePool := &v1.NodePool{}
+-	// if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+-	// 	return reconcile.Result{}, client.IgnoreNotFound(err)
+-	// }
++	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
++		return reconcile.Result{}, client.IgnoreNotFound(err)
++	}
+ 	var results []reconcile.Result
+ 	var errs error
+ 	reconcilers := []nodeClaimReconciler{
+ 		c.drift,
+-		// c.consolidation,
++		c.consolidation,
+ 	}
+ 	for _, reconciler := range reconcilers {
+ 		res, err := reconciler.Reconcile(ctx, nodePool, nodeClaim)
+@@ -117,12 +120,11 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
+ 	return builder.
+ 		Named("nodeclaim.disruption").
+ 		For(&v1.NodeClaim{}).
+-		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
+ 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
+-		// Watches(
+-		// 	&v1.NodePool{},
+-		// 	nodeclaimutil.NodePoolEventHandler(c.kubeClient),
+-		// ).
++		Watches(
++			&v1.NodePool{},
++			nodeclaimutil.NodePoolEventHandler(c.kubeClient),
++		).
+ 		Watches(
+ 			&corev1.Pod{},
+ 			nodeclaimutil.PodEventHandler(c.kubeClient),
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection/controller.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection/controller.go
+index c41982d..15b2b77 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection/controller.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection/controller.go
+@@ -61,53 +61,28 @@ func NewController(c clock.Clock, kubeClient client.Client, cloudProvider cloudp
+ 
+ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
+ 	ctx = injection.WithControllerName(ctx, "nodeclaim.garbagecollection")
+-	currentNodeClaims, err := nodeclaimutil.AllKaitoNodeClaims(ctx, c.kubeClient)
+-	if err != nil {
+-		return reconcile.Result{}, err
+-	}
+ 
+-	if len(currentNodeClaims) == 0 {
+-		return reconcile.Result{RequeueAfter: time.Minute * 2}, nil
++	nodeClaimList := &v1.NodeClaimList{}
++	if err := c.kubeClient.List(ctx, nodeClaimList); err != nil {
++		return reconcile.Result{}, err
+ 	}
+-
+ 	cloudProviderNodeClaims, err := c.cloudProvider.List(ctx)
+ 	if err != nil {
+-		log.FromContext(ctx).Error(err, "cloudprovider failed to list nodeclaims")
+ 		return reconcile.Result{}, err
+ 	}
+ 	cloudProviderNodeClaims = lo.Filter(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) bool {
+ 		return nc.DeletionTimestamp.IsZero()
+ 	})
+-	cloudProviderProviderIDs := sets.New[string](lo.FilterMap(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) (string, bool) {
+-		// skip leaked cloudporiver instances
+-		if len(nc.Status.ProviderID) == 0 {
+-			return "", false
+-		}
+-
+-		return nc.Status.ProviderID, true
++	cloudProviderProviderIDs := sets.New[string](lo.Map(cloudProviderNodeClaims, func(nc *v1.NodeClaim, _ int) string {
++		return nc.Status.ProviderID
+ 	})...)
+-
+ 	// Only consider NodeClaims that are Registered since we don't want to fully rely on the CloudProvider
+ 	// API to trigger deletion of the Node. Instead, we'll wait for our registration timeout to trigger
+-	nodeClaims := lo.Filter(lo.ToSlicePtr(currentNodeClaims), func(n *v1.NodeClaim, _ int) bool {
+-		if n.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() &&
++	nodeClaims := lo.Filter(lo.ToSlicePtr(nodeClaimList.Items), func(n *v1.NodeClaim, _ int) bool {
++		return n.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() &&
+ 			n.DeletionTimestamp.IsZero() &&
+-			!cloudProviderProviderIDs.Has(n.Status.ProviderID) {
+-			return true
+-		}
+-
+-		// If NodeClaim related node is not ready for more than 10min, we recognize the node crashed and
+-		// delete this NodeClaim for triggering to create a new node.
+-		readyCondition := n.StatusConditions().Root()
+-		if n.StatusConditions().Get(v1.ConditionTypeInitialized).IsTrue() &&
+-			readyCondition.IsFalse() &&
+-			c.clock.Since(readyCondition.LastTransitionTime.Time) > 10*time.Minute {
+-			return true
+-		}
+-
+-		return false
++			!cloudProviderProviderIDs.Has(n.Status.ProviderID)
+ 	})
+-	log.FromContext(ctx).Info("nodeclaim garbagecollection status", "garbaged nodeclaim count", len(nodeClaims))
+ 
+ 	errs := make([]error, len(nodeClaims))
+ 	workqueue.ParallelizeUntil(ctx, 20, len(nodeClaims), func(i int) {
+@@ -131,7 +106,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconcile.Result, error) {
+ 			"NodeClaim", klog.KRef("", nodeClaims[i].Name),
+ 			"provider-id", nodeClaims[i].Status.ProviderID,
+ 			"nodepool", nodeClaims[i].Labels[v1.NodePoolLabelKey],
+-		).Info("garbage collecting nodeclaim with no cloudprovider representation")
++		).V(1).Info("garbage collecting nodeclaim with no cloudprovider representation")
+ 		metrics.NodeClaimsDisruptedTotal.With(prometheus.Labels{
+ 			metrics.ReasonLabel:       "garbage_collected",
+ 			metrics.NodePoolLabel:     nodeClaims[i].Labels[v1.NodePoolLabelKey],
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/controller.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/controller.go
+index b12c80c..8f3335c 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/controller.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/controller.go
+@@ -28,20 +28,22 @@ import (
+ 	"k8s.io/apimachinery/pkg/api/errors"
+ 	"k8s.io/client-go/util/workqueue"
+ 	"k8s.io/utils/clock"
+-	controllerruntime "sigs.k8s.io/controller-runtime"
+ 	"sigs.k8s.io/controller-runtime/pkg/builder"
+-	"sigs.k8s.io/controller-runtime/pkg/client"
+-	"sigs.k8s.io/controller-runtime/pkg/controller"
+ 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+ 	"sigs.k8s.io/controller-runtime/pkg/event"
+-	"sigs.k8s.io/controller-runtime/pkg/manager"
+ 	"sigs.k8s.io/controller-runtime/pkg/predicate"
++
++	"sigs.k8s.io/karpenter/pkg/operator/injection"
++
++	controllerruntime "sigs.k8s.io/controller-runtime"
++	"sigs.k8s.io/controller-runtime/pkg/client"
++	"sigs.k8s.io/controller-runtime/pkg/controller"
++	"sigs.k8s.io/controller-runtime/pkg/manager"
+ 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+ 
+ 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+ 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+ 	"sigs.k8s.io/karpenter/pkg/events"
+-	"sigs.k8s.io/karpenter/pkg/operator/injection"
+ 	nodeclaimutil "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
+ 	"sigs.k8s.io/karpenter/pkg/utils/result"
+ )
+@@ -140,7 +142,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
+ 				DeleteFunc: func(e event.DeleteEvent) bool { return false },
+ 			},
+ 		)).
+-		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
+ 		Watches(
+ 			&corev1.Node{},
+ 			nodeclaimutil.NodeEventHandler(c.kubeClient),
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/initialization.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/initialization.go
+index 27c3bc9..8fbc2b8 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/initialization.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/initialization.go
+@@ -123,7 +123,7 @@ func RequestedResourcesRegistered(node *corev1.Node, nodeClaim *v1.NodeClaim) (c
+ 		// annotation says the resource should be there, but it's zero'd in both then the device plugin hasn't
+ 		// registered it yet.
+ 		// We wait on allocatable since this is the value that is used in scheduling
+-		if resourceName != corev1.ResourceStorage && resources.IsZero(node.Status.Allocatable[resourceName]) {
++		if resources.IsZero(node.Status.Allocatable[resourceName]) {
+ 			return resourceName, false
+ 		}
+ 	}
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/launch.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/launch.go
+index 549ce29..5587854 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/launch.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/launch.go
+@@ -76,7 +76,7 @@ func (l *Launch) launchNodeClaim(ctx context.Context, nodeClaim *v1.NodeClaim) (
+ 		switch {
+ 		case cloudprovider.IsInsufficientCapacityError(err):
+ 			l.recorder.Publish(InsufficientCapacityErrorEvent(nodeClaim, err))
+-			log.FromContext(ctx).Error(err, "failed launching nodeclaim. There is no need to launch this nodeclaim again because of can not recover from this error, so remove the nodeclaim directly.")
++			log.FromContext(ctx).Error(err, "failed launching nodeclaim")
+ 
+ 			if err = l.kubeClient.Delete(ctx, nodeClaim); err != nil {
+ 				return nil, client.IgnoreNotFound(err)
+@@ -129,8 +129,8 @@ func PopulateNodeClaimDetails(nodeClaim, retrieved *v1.NodeClaim) *v1.NodeClaim
+ }
+ 
+ func truncateMessage(msg string) string {
+-	if len(msg) < 800 {
++	if len(msg) < 300 {
+ 		return msg
+ 	}
+-	return msg[:800] + "..."
++	return msg[:300] + "..."
+ }
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/registration.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/registration.go
+index 0b7444c..77e0e22 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/registration.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle/registration.go
+@@ -45,12 +45,6 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
+ 	if !nodeClaim.StatusConditions().Get(v1.ConditionTypeRegistered).IsUnknown() {
+ 		return reconcile.Result{}, nil
+ 	}
+-
+-	if !nodeClaim.StatusConditions().Get(v1.ConditionTypeLaunched).IsTrue() {
+-		nodeClaim.StatusConditions().SetUnknownWithReason(v1.ConditionTypeRegistered, "NodeClaimNotLaunched", "node claim is not launched")
+-		return reconcile.Result{}, nil
+-	}
+-
+ 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("provider-id", nodeClaim.Status.ProviderID))
+ 	node, err := nodeclaimutil.NodeForNodeClaim(ctx, r.kubeClient, nodeClaim)
+ 	if err != nil {
+@@ -64,15 +58,15 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
+ 		}
+ 		return reconcile.Result{}, fmt.Errorf("getting node for nodeclaim, %w", err)
+ 	}
+-	// _, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
+-	// 	return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
+-	// })
++	_, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
++		return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
++	})
+ 	// check if sync succeeded but setting the registered status condition failed
+ 	// if sync succeeded, then the label will be present and the taint will be gone
+-	// if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
+-	// 	nodeClaim.StatusConditions().SetFalse(v1.ConditionTypeRegistered, "UnregisteredTaintNotFound", fmt.Sprintf("Invariant violated, %s taint must be present on Karpenter-managed nodes", v1.UnregisteredTaintKey))
+-	// 	return reconcile.Result{}, fmt.Errorf("missing required startup taint, %s", v1.UnregisteredTaintKey)
+-	// }
++	if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
++		nodeClaim.StatusConditions().SetFalse(v1.ConditionTypeRegistered, "UnregisteredTaintNotFound", fmt.Sprintf("Invariant violated, %s taint must be present on Karpenter-managed nodes", v1.UnregisteredTaintKey))
++		return reconcile.Result{}, fmt.Errorf("missing required startup taint, %s", v1.UnregisteredTaintKey)
++	}
+ 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("Node", klog.KRef("", node.Name)))
+ 	if err = r.syncNode(ctx, nodeClaim, node); err != nil {
+ 		if errors.IsConflict(err) {
+@@ -83,9 +77,6 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
+ 	log.FromContext(ctx).Info("registered nodeclaim")
+ 	nodeClaim.StatusConditions().SetTrue(v1.ConditionTypeRegistered)
+ 	nodeClaim.Status.NodeName = node.Name
+-	// gpu-provisioner: update allocatable and capactity from node as well
+-	nodeClaim.Status.Allocatable = node.Status.Allocatable
+-	nodeClaim.Status.Capacity = node.Status.Capacity
+ 
+ 	metrics.NodesCreatedTotal.With(prometheus.Labels{
+ 		metrics.NodePoolLabel: nodeClaim.Labels[v1.NodePoolLabelKey],
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination/controller.go b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination/controller.go
+index 9883957..6272e5c 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination/controller.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination/controller.go
+@@ -84,39 +84,33 @@ func (c *Controller) Reconcile(ctx context.Context, n *v1.NodeClaim) (reconcile.
+ //nolint:gocyclo
+ func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (reconcile.Result, error) {
+ 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("Node", klog.KRef("", nodeClaim.Status.NodeName), "provider-id", nodeClaim.Status.ProviderID))
+-	log.FromContext(ctx).Info("finalize nodeclaim", "nodeclaim", nodeClaim.Name)
+ 	if !controllerutil.ContainsFinalizer(nodeClaim, v1.TerminationFinalizer) {
+ 		return reconcile.Result{}, nil
+ 	}
+ 	if err := c.ensureTerminationGracePeriodTerminationTimeAnnotation(ctx, nodeClaim); err != nil {
+ 		return reconcile.Result{}, fmt.Errorf("adding nodeclaim terminationGracePeriod annotation, %w", err)
+ 	}
+-
+-	// only delete nodes if the NodeClaim has been registered.
+-	if nodeClaim.StatusConditions().Get(v1.ConditionTypeRegistered).IsTrue() {
+-		nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, nodeClaim)
+-		if err != nil {
+-			return reconcile.Result{}, err
+-		}
+-		for _, node := range nodes {
+-			// If we still get the Node, but it's already marked as terminating, we don't need to call Delete again
+-			if node.DeletionTimestamp.IsZero() {
+-				// We delete nodes to trigger the node finalization and deletion flow
+-				if err = c.kubeClient.Delete(ctx, node); client.IgnoreNotFound(err) != nil {
+-					return reconcile.Result{}, err
+-				}
++	nodes, err := nodeclaimutil.AllNodesForNodeClaim(ctx, c.kubeClient, nodeClaim)
++	if err != nil {
++		return reconcile.Result{}, err
++	}
++	for _, node := range nodes {
++		// If we still get the Node, but it's already marked as terminating, we don't need to call Delete again
++		if node.DeletionTimestamp.IsZero() {
++			// We delete nodes to trigger the node finalization and deletion flow
++			if err = c.kubeClient.Delete(ctx, node); client.IgnoreNotFound(err) != nil {
++				return reconcile.Result{}, err
+ 			}
+ 		}
+-		// We wait until all the nodes associated with this nodeClaim have completed their deletion before triggering the finalization of the nodeClaim
+-		if len(nodes) > 0 {
+-			log.FromContext(ctx).Info("wait nodes removed before terminating nodeclaims", "nodeclaim", nodeClaim.Name, "nodeCount", len(nodes))
+-			return reconcile.Result{}, nil
+-		}
+ 	}
+-
++	// We wait until all the nodes associated with this nodeClaim have completed their deletion before triggering the finalization of the nodeClaim
++	if len(nodes) > 0 {
++		return reconcile.Result{}, nil
++	}
++	var isInstanceTerminated bool
+ 	// We can expect ProviderID to be empty when there is a failure while launching the nodeClaim
+ 	if nodeClaim.Status.ProviderID != "" {
+-		isInstanceTerminated, err := termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
++		isInstanceTerminated, err = termination.EnsureTerminated(ctx, c.kubeClient, nodeClaim, c.cloudProvider)
+ 		if err != nil {
+ 			// 404 = the nodeClaim no longer exists
+ 			if errors.IsNotFound(err) {
+@@ -142,7 +136,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (rec
+ 		// can cause races due to the fact that it fully replaces the list on a change
+ 		// Here, we are updating the finalizer list
+ 		// https://github.com/kubernetes/kubernetes/issues/111643#issuecomment-2016489732
+-		if err := c.kubeClient.Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
++		if err = c.kubeClient.Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
+ 			if errors.IsConflict(err) {
+ 				return reconcile.Result{Requeue: true}, nil
+ 			}
+@@ -199,7 +193,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
+ 		Named("nodeclaim.termination").
+ 		For(&v1.NodeClaim{}).
+ 		WithEventFilter(predicate.GenerationChangedPredicate{}).
+-		WithEventFilter(nodeclaimutil.KaitoResourcePredicate).
+ 		Watches(
+ 			&corev1.Node{},
+ 			nodeclaimutil.NodeEventHandler(c.kubeClient),
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/operator/operator.go b/vendor/sigs.k8s.io/karpenter/pkg/operator/operator.go
+index 160f649..e238a3d 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/operator/operator.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/operator/operator.go
+@@ -152,7 +152,7 @@ func NewOperator() (context.Context, *Operator) {
+ 	mgrOpts := ctrl.Options{
+ 		Logger:                        logging.IgnoreDebugEvents(logger),
+ 		LeaderElection:                !options.FromContext(ctx).DisableLeaderElection,
+-		LeaderElectionID:              "gpu-provisioner-leader-election",
++		LeaderElectionID:              "karpenter-leader-election",
+ 		LeaderElectionResourceLock:    resourcelock.LeasesResourceLock,
+ 		LeaderElectionNamespace:       system.Namespace(),
+ 		LeaderElectionReleaseOnCancel: true,
+@@ -210,15 +210,15 @@ func NewOperator() (context.Context, *Operator) {
+ 	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.name", func(o client.Object) []string {
+ 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Name}
+ 	}), "failed to setup nodeclaim nodeclassref name indexer")
+-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
+-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
+-	// }), "failed to setup nodepool nodeclassref apiversion indexer")
+-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
+-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
+-	// }), "failed to setup nodepool nodeclassref kind indexer")
+-	// lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
+-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
+-	// }), "failed to setup nodepool nodeclassref name indexer")
++	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
++		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
++	}), "failed to setup nodepool nodeclassref apiversion indexer")
++	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
++		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
++	}), "failed to setup nodepool nodeclassref kind indexer")
++	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
++		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
++	}), "failed to setup nodepool nodeclassref name indexer")
+ 	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &storagev1.VolumeAttachment{}, "spec.nodeName", func(o client.Object) []string {
+ 		return []string{o.(*storagev1.VolumeAttachment).Spec.NodeName}
+ 	}), "failed to setup volumeattachment indexer")
+diff --git a/vendor/sigs.k8s.io/karpenter/pkg/utils/nodeclaim/nodeclaim.go b/vendor/sigs.k8s.io/karpenter/pkg/utils/nodeclaim/nodeclaim.go
+index 0385883..02d326d 100644
+--- a/vendor/sigs.k8s.io/karpenter/pkg/utils/nodeclaim/nodeclaim.go
++++ b/vendor/sigs.k8s.io/karpenter/pkg/utils/nodeclaim/nodeclaim.go
+@@ -28,33 +28,11 @@ import (
+ 	"k8s.io/apimachinery/pkg/types"
+ 	"sigs.k8s.io/controller-runtime/pkg/client"
+ 	"sigs.k8s.io/controller-runtime/pkg/handler"
+-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+ 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+ 
+ 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+ )
+ 
+-const (
+-	WorkspaceLabelKey = "kaito.sh/workspace"
+-	RagEngineLabelKey = "kaito.sh/ragengine"
+-)
+-
+-var (
+-	selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+-		MatchExpressions: []metav1.LabelSelectorRequirement{
+-			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
+-		},
+-	})
+-	selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+-		MatchExpressions: []metav1.LabelSelectorRequirement{
+-			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
+-		},
+-	})
+-	KaitoResourcePredicate = predicate.Or(selector1, selector2)
+-
+-	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
+-)
+-
+ // PodEventHandler is a watcher on corev1.Pods that maps Pods to NodeClaim based on the node names
+ // and enqueues reconcile.Requests for the NodeClaims
+ func PodEventHandler(c client.Client) handler.EventHandler {
+@@ -202,16 +180,8 @@ func NodeForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeCl
+ func AllNodesForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeClaim) ([]*corev1.Node, error) {
+ 	// NodeClaims that have no resolved providerID have no nodes mapped to them
+ 	if nodeClaim.Status.ProviderID == "" {
+-		// check common failures caused by bad input
+-		// cond := nodeClaim.StatusConditions().Get(v1.ConditionTypeLaunched)
+-		// if cond != nil && !cond.IsTrue() && (cond.Message == "all requested instance types were unavailable during launch" || strings.Contains(cond.Message, "is not allowed in your subscription in location")) {
+-		// 	return nil, nil // Not recoverable, does not consider as an error
+-		// } else {
+-		// 	return nil, fmt.Errorf("the nodeClaim(%s) has not been associated with any node yet, message: %s", nodeClaim.Name, cond.Message)
+-		// }
+ 		return nil, nil
+ 	}
+-
+ 	nodeList := corev1.NodeList{}
+ 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": nodeClaim.Status.ProviderID}); err != nil {
+ 		return nil, fmt.Errorf("listing nodes, %w", err)
+@@ -230,17 +200,3 @@ func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *core
+ 	})
+ 	return node
+ }
+-
+-func AllKaitoNodeClaims(ctx context.Context, c client.Client) ([]v1.NodeClaim, error) {
+-	kaitoNodeClaims := make([]v1.NodeClaim, 0)
+-
+-	for i := range KaitoNodeClaimLabels {
+-		nodeClaimList := &v1.NodeClaimList{}
+-		if err := c.List(ctx, nodeClaimList, client.HasLabels([]string{KaitoNodeClaimLabels[i]})); err != nil {
+-			return kaitoNodeClaims, err
+-		}
+-
+-		kaitoNodeClaims = append(kaitoNodeClaims, nodeClaimList.Items...)
+-	}
+-	return kaitoNodeClaims, nil
+-}
+-- 
+2.39.5 (Apple Git-154)
+

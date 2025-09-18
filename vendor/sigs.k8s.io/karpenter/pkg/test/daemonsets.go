@@ -22,7 +22,6 @@ import (
 	"github.com/imdario/mergo"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -42,22 +41,20 @@ func DaemonSet(overrides ...DaemonSetOptions) *appsv1.DaemonSet {
 			panic(fmt.Sprintf("Failed to merge daemonset options: %s", err))
 		}
 	}
-	if options.Name == "" {
-		options.Name = RandomName()
+	objectMeta := NamespacedObjectMeta(options.ObjectMeta)
+	if options.PodOptions.Labels == nil {
+		options.PodOptions.Labels = map[string]string{
+			"app": objectMeta.Name,
+		}
 	}
-	if options.Namespace == "" {
-		options.Namespace = "default"
-	}
-	if options.Selector == nil {
-		options.Selector = map[string]string{"app": options.Name}
-	}
+	pod := Pod(options.PodOptions)
 	return &appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{Name: options.Name, Namespace: options.Namespace},
+		ObjectMeta: objectMeta,
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: options.Selector},
+			Selector: &metav1.LabelSelector{MatchLabels: options.PodOptions.Labels},
 			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: options.Selector},
-				Spec:       Pod(options.PodOptions).Spec,
+				ObjectMeta: pod.ObjectMeta,
+				Spec:       pod.Spec,
 			},
 		},
 	}
