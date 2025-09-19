@@ -20,22 +20,15 @@ import (
 	"context"
 
 	"github.com/awslabs/operatorpkg/controller"
-	"github.com/awslabs/operatorpkg/object"
-	"github.com/awslabs/operatorpkg/status"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/samber/lo"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/node/health"
-	nodehydration "sigs.k8s.io/karpenter/pkg/controllers/node/hydration"
 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination"
 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator"
 	nodeclaimgarbagecollection "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection"
-	nodeclaimhydration "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/hydration"
 	nodeclaimlifecycle "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle"
 	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
@@ -82,35 +75,35 @@ func NewControllers(
 		nodeclaimlifecycle.NewController(clock, kubeClient, cloudProvider, recorder),
 		nodeclaimgarbagecollection.NewController(clock, kubeClient, cloudProvider),
 		// nodeclaimdisruption.NewController(clock, kubeClient, cloudProvider),
-		nodeclaimhydration.NewController(kubeClient, cloudProvider),
-		nodehydration.NewController(kubeClient, cloudProvider),
+		// nodeclaimhydration.NewController(kubeClient, cloudProvider),
+		// nodehydration.NewController(kubeClient, cloudProvider),
 	}
 
-	if !options.FromContext(ctx).DisableClusterStateObservability {
-		controllers = append(controllers,
-			// metricspod.NewController(kubeClient, cluster),
-			// metricsnodepool.NewController(kubeClient, cloudProvider),
-			// metricsnode.NewController(cluster),
-			status.NewController[*v1.NodeClaim](
-				kubeClient,
-				mgr.GetEventRecorderFor("karpenter"),
-				status.EmitDeprecatedMetrics,
-				status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
-				status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey)...),
-			),
-			// status.NewController[*v1.NodePool](
-			// 	kubeClient,
-			// 	mgr.GetEventRecorderFor("karpenter"),
-			// 	status.EmitDeprecatedMetrics,
-			// 	status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
-			// ),
-			// status.NewGenericObjectController[*corev1.Node](
-			// 	kubeClient,
-			// 	mgr.GetEventRecorderFor("karpenter"),
-			// 	status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
-			// 	status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey, v1.NodeInitializedLabelKey)...)),
-		)
-	}
+	// if !options.FromContext(ctx).DisableClusterStateObservability {
+	// 	controllers = append(controllers,
+	// 		metricspod.NewController(kubeClient, cluster),
+	// 		metricsnodepool.NewController(kubeClient, cloudProvider),
+	// 		metricsnode.NewController(cluster),
+	// 		status.NewController[*v1.NodeClaim](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.EmitDeprecatedMetrics,
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 			status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey)...),
+	// 		),
+	// 		status.NewController[*v1.NodePool](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.EmitDeprecatedMetrics,
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 		),
+	// 		status.NewGenericObjectController[*corev1.Node](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 			status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey, v1.NodeInitializedLabelKey)...)),
+	// 	)
+	// }
 
 	// The cloud provider must define status conditions for the node repair controller to use to detect unhealthy nodes
 	if len(cloudProvider.RepairPolicies()) != 0 && options.FromContext(ctx).FeatureGates.NodeRepair {

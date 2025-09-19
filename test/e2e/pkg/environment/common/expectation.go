@@ -343,6 +343,18 @@ func (env *Environment) EventuallyExpectNodeClaimsReady(objects ...client.Object
 	}).Should(Succeed())
 }
 
+func (env *Environment) ExpectNodeClaimNoFinalizer(objects ...client.Object) {
+	// Verify that the NodeClaim objects consistently have no finalizers for 30 seconds.
+	Consistently(func(g Gomega) {
+		for _, object := range objects {
+			temp := &karpenterv1.NodeClaim{}
+			g.Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(object), temp)).Should(Succeed())
+			g.Expect(temp.Finalizers).To(BeEmpty())
+		}
+	}).WithTimeout(30 * time.Second).Should(Succeed())
+
+}
+
 func (env *Environment) GetNode(nodeName string) v1.Node {
 	var node v1.Node
 	ExpectWithOffset(1, env.Client.Get(env.Context, types.NamespacedName{Name: nodeName}, &node)).To(Succeed())

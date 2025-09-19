@@ -128,28 +128,28 @@ func (c *Controller) Reconcile(ctx context.Context, node *corev1.Node) (reconcil
 	// If a nodeclaim does have a nodepool label, validate the nodeclaims inside the nodepool are healthy (i.e bellow the allowed threshold)
 	// In the case of standalone nodeclaim, validate the nodes inside the cluster are healthy before proceeding
 	// to repair the nodes
-	nodePoolName, found := nodeClaim.Labels[v1.NodePoolLabelKey]
-	if found {
-		nodePoolHealthy, err := c.isNodePoolHealthy(ctx, nodePoolName)
-		if err != nil {
-			return reconcile.Result{}, client.IgnoreNotFound(err)
-		}
-		if !nodePoolHealthy {
-			if err := c.publishNodePoolHealthEvent(ctx, node, nodeClaim, nodePoolName); err != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
-		}
-	} else {
-		clusterHealthy, err := c.isClusterHealthy(ctx)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		if !clusterHealthy {
-			c.recorder.Publish(NodeRepairBlockedUnmanagedNodeClaim(node, nodeClaim, fmt.Sprintf("more then %s nodes are unhealthy in the cluster", allowedUnhealthyPercent.String()))...)
-			return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
-		}
-	}
+	// nodePoolName, found := nodeClaim.Labels[v1.NodePoolLabelKey]
+	// if found {
+	// 	nodePoolHealthy, err := c.isNodePoolHealthy(ctx, nodePoolName)
+	// 	if err != nil {
+	// 		return reconcile.Result{}, client.IgnoreNotFound(err)
+	// 	}
+	// 	if !nodePoolHealthy {
+	// 		if err := c.publishNodePoolHealthEvent(ctx, node, nodeClaim, nodePoolName); err != nil {
+	// 			return reconcile.Result{}, err
+	// 		}
+	// 		return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
+	// 	}
+	// } else {
+	// 	clusterHealthy, err := c.isClusterHealthy(ctx)
+	// 	if err != nil {
+	// 		return reconcile.Result{}, err
+	// 	}
+	// 	if !clusterHealthy {
+	// 		c.recorder.Publish(NodeRepairBlockedUnmanagedNodeClaim(node, nodeClaim, fmt.Sprintf("more then %s nodes are unhealthy in the cluster", allowedUnhealthyPercent.String()))...)
+	// 		return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
+	// 	}
+	// }
 	// For unhealthy past the tolerationDisruption window we can forcefully terminate the node
 	if err := c.annotateTerminationGracePeriod(ctx, nodeClaim); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
