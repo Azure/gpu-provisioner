@@ -29,6 +29,7 @@ var defaultHTTPClient *http.Client
 func init() {
 	defaultHTTPClient = &http.Client{
 		// For Now using the defaults recommended by Track 2
+		// nolint:typecheck
 		Transport: armbalancer.New(armbalancer.Options{
 			PoolSize: 100,
 			Transport: &http.Transport{

@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
@@ -37,7 +37,7 @@ type MockClient struct {
 
 	ObjectMap  map[reflect.Type]map[k8sClient.ObjectKey]k8sClient.Object
 	StatusMock *MockStatusClient
-	UpdateCb   func(key types.NamespacedName)
+	UpdateCb   func(key apitypes.NamespacedName)
 }
 
 var _ k8sClient.Client = &MockClient{}
@@ -72,7 +72,7 @@ func (m *MockClient) CreateOrUpdateObjectInMap(obj k8sClient.Object) {
 	relevantMap[objKey] = obj
 }
 
-func (m *MockClient) GetObjectFromMap(obj k8sClient.Object, key types.NamespacedName) {
+func (m *MockClient) GetObjectFromMap(obj k8sClient.Object, key apitypes.NamespacedName) {
 	t := reflect.TypeOf(obj)
 	relevantMap := m.ensureMapForType(t)
 
@@ -83,7 +83,7 @@ func (m *MockClient) GetObjectFromMap(obj k8sClient.Object, key types.Namespaced
 }
 
 // k8s Client interface
-func (m *MockClient) Get(ctx context.Context, key types.NamespacedName, obj k8sClient.Object, opts ...k8sClient.GetOption) error {
+func (m *MockClient) Get(ctx context.Context, key apitypes.NamespacedName, obj k8sClient.Object, opts ...k8sClient.GetOption) error {
 	//make any necessary changes to the object
 	if m.UpdateCb != nil {
 		m.UpdateCb(key)

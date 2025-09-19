@@ -23,13 +23,13 @@ package fake
 
 import (
 	"context"
-	"reflect"
 	"fmt"
+	"reflect"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
+	"github.com/samber/lo"
 	"go.uber.org/mock/gomock"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	karpenterv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
@@ -118,13 +118,13 @@ func (mr *MockAgentPoolsAPIMockRecorder) NewListPager(resourceGroupName, resourc
 func CreateAgentPoolObjWithNodeClaim(nc *karpenterv1.NodeClaim) armcontainerservice.AgentPool {
 	return armcontainerservice.AgentPool{
 		Name: &nc.Name,
-		ID:   to.Ptr(fmt.Sprintf("azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-%s-20562481-vmss/virtualMachines/0", nc.Name)),
+		ID:   lo.ToPtr(fmt.Sprintf("azure:///subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-%s-20562481-vmss/virtualMachines/0", nc.Name)),
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
-			VMSize: to.Ptr(nc.Spec.Requirements[0].Values[0]),
+			VMSize: lo.ToPtr(nc.Spec.Requirements[0].Values[0]),
 			NodeLabels: map[string]*string{
-				"test":               to.Ptr("test"),
-				"kaito.sh/workspace": to.Ptr("none"),
-				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
+				"test":                       lo.ToPtr("test"),
+				"kaito.sh/workspace":         lo.ToPtr("none"),
+				karpenterv1.NodePoolLabelKey: lo.ToPtr("kaito"),
 			},
 		},
 	}

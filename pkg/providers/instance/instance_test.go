@@ -24,7 +24,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/fake"
 	"github.com/samber/lo"
@@ -55,7 +54,7 @@ func TestNewAgentPoolObject(t *testing.T) {
 				},
 			}, []v1.NodeSelectorRequirement{}),
 			expected: GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
-				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
+				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": lo.ToPtr("test")},
 				[]*string{}, 30, "Standard_NC6s_v3"),
 			expectedErr: false,
 		},
@@ -818,12 +817,12 @@ func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armc
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:       labels,
 			NodeTaints:       taints,
-			Type:             to.Ptr(apType),
-			VMSize:           to.Ptr(vmSize),
-			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
-			Count:            to.Ptr(int32(1)),
-			ScaleSetPriority: to.Ptr(capacityType),
-			OSDiskSizeGB:     to.Ptr(diskSizeGB),
+			Type:             lo.ToPtr(apType),
+			VMSize:           lo.ToPtr(vmSize),
+			OSType:           lo.ToPtr(armcontainerservice.OSTypeLinux),
+			Count:            lo.ToPtr(int32(1)),
+			ScaleSetPriority: lo.ToPtr(capacityType),
+			OSDiskSizeGB:     lo.ToPtr(diskSizeGB),
 		},
 	}
 }
@@ -835,9 +834,9 @@ func GetAgentPoolObjWithName(apName string, apId string, vmSize string) armconta
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			VMSize: &vmSize,
 			NodeLabels: map[string]*string{
-				"test":                       to.Ptr("test"),
-				"kaito.sh/workspace":         to.Ptr("none"),
-				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
+				"test":                       lo.ToPtr("test"),
+				"kaito.sh/workspace":         lo.ToPtr("none"),
+				karpenterv1.NodePoolLabelKey: lo.ToPtr("kaito"),
 			},
 		},
 	}

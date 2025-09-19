@@ -18,7 +18,6 @@ package fake
 import (
 	"fmt"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +32,7 @@ func GetNodeClaimObj(name string, labels map[string]string, taints []v1.Taint, r
 				Operator: v1Requirements.Operator,
 				Values:   v1Requirements.Values,
 			},
-			MinValues: to.Ptr(int(1)),
+			MinValues: lo.ToPtr(int(1)),
 		}
 	})
 
@@ -65,7 +64,7 @@ func GetNodeClaimObjWithoutProviderID(name string, labels map[string]string, tai
 				Operator: v1Requirements.Operator,
 				Values:   v1Requirements.Values,
 			},
-			MinValues: to.Ptr(int(1)),
+			MinValues: lo.ToPtr(int(1)),
 		}
 	})
 	return &karpenterv1.NodeClaim{
