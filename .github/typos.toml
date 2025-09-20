@@ -1,0 +1,11 @@
+[default.extend-words]
+Ded = "Ded"
+rsource = "rsource"
+AKS = "AKS"
+stopp = "stopp"
+
+[default.extend-identifiers]
+ObjectCreater = "ObjectCreater"
+
+[files]
+extend-exclude = ["vendor/", "go.mod"]

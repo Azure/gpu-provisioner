@@ -213,3 +213,12 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 manifests: controller-gen ## Generate CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:artifacts:config=charts/gpu-provisioner/crds
 
+.PHONY: verify-mod
+verify-mod:
+	@echo "verifying go.mod and go.sum"
+	go mod tidy
+	@if [ -n "$$(git status --porcelain go.mod go.sum)" ]; then \
+		echo "Error: go.mod/go.sum is not up-to-date. please run `go mod tidy` and commit the changes."; \
+		git diff go.mod go.sum; \
+		exit 1; \
+	fi
