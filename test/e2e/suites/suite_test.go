@@ -246,7 +246,7 @@ var _ = Describe("GPU NodeClaim", func() {
 		env.EventuallyExpectNodeCount("==", 1)
 		_ = env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 
-		// delete nc for triggering terminate all resrouces like node, CloudProvider Instance
+		// delete nc for triggering terminate all resources like node, CloudProvider Instance
 		env.ExpectDeleted(nc)
 	})
 	It("terminate all resources by deleting node", func() {
@@ -315,7 +315,7 @@ var _ = Describe("GPU NodeClaim", func() {
 		env.EventuallyExpectNodeCount("==", 1)
 		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
 
-		// delete node for triggering terminate all resrouces like NodeClaim, CloudProvider Instance
+		// delete node for triggering terminate all resources like NodeClaim, CloudProvider Instance
 		env.ExpectDeleted(node)
 	})
 	It("should provision one GPU node for v1.NodeClaim with kaito nodeclass", func() {
