@@ -123,7 +123,7 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 	if instance == nil && err == nil {
 		// means the node object has not been found yet, we wait until the node is created
 		b := wait.Backoff{
-			Steps:    15,
+			Steps:    30,
 			Duration: 1 * time.Second,
 			Factor:   1.0,
 			Jitter:   0.1,
@@ -167,7 +167,7 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
-		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
+		return nil, err
 	}
 
 	instances, err := p.fromAPListToInstances(ctx, apList)

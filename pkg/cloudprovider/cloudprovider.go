@@ -107,6 +107,11 @@ func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
 			ConditionStatus:    corev1.ConditionFalse,
 			TolerationDuration: 10 * time.Minute,
 		},
+		{
+			ConditionType:      corev1.NodeReady,
+			ConditionStatus:    corev1.ConditionUnknown,
+			TolerationDuration: 10 * time.Minute,
+		},
 	}
 }
 
