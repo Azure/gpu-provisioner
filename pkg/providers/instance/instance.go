@@ -156,11 +156,8 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 	}
 	apObj, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
 	if err != nil {
-		if strings.Contains(err.Error(), "Agent Pool not found") {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-		}
 		logging.FromContext(ctx).Errorf("Get agentpool %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
+		return nil, err
 	}
 
 	return p.convertAgentPoolToInstance(ctx, apObj, id)
@@ -183,7 +180,7 @@ func (p *Provider) Delete(ctx context.Context, apName string) error {
 	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
-		return fmt.Errorf("agentPool.Delete for %q failed: %w", apName, err)
+		return err
 	}
 	return nil
 }
