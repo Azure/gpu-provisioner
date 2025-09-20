@@ -151,7 +151,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (re
 		c.launch,
 		c.registration,
 		c.initialization,
-		c.liveness,
+		// c.liveness,
 	} {
 		res, err := reconciler.Reconcile(ctx, nodeClaim)
 		errs = multierr.Append(errs, err)
