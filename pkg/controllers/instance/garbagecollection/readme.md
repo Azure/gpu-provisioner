@@ -8,8 +8,8 @@ When agentpool is in the Creating process, if user starts to delete NodeClaim su
 
 A new garbage collection controller named [instance garbage collection] is used for garbaging leaked agentpool and node.
 
-  1. if agentpool releated NodeClaim is removed in the cluster, and agentpool is created more than 30s, [instance garbage collection] controller will delete the agentpool resource.
-  2. if the leaked agentpool has related nodes, [instance garbage collection] controller will aslo delete node resource.
+  1. if agentpool related NodeClaim is removed in the cluster, and agentpool is created more than 30s, [instance garbage collection] controller will delete the agentpool resource.
+  2. if the leaked agentpool has related nodes, [instance garbage collection] controller will also delete node resource.
 
 ## others
 

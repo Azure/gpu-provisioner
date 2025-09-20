@@ -17,12 +17,11 @@ limitations under the License.
 package v1
 
 import (
-	"context"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 
+	"github.com/awslabs/operatorpkg/serrors"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/robfig/cron/v3"
 	"github.com/samber/lo"
@@ -63,7 +62,7 @@ type Disruption struct {
 	// ConsolidateAfter is the duration the controller will wait
 	// before attempting to terminate nodes that are underutilized.
 	// Refer to ConsolidationPolicy for how underutilization is considered.
-	// +kubebuilder:validation:Pattern=`^(([0-9]+(s|m|h))+)|(Never)$`
+	// +kubebuilder:validation:Pattern=`^(([0-9]+(s|m|h))+|Never)$`
 	// +kubebuilder:validation:Type="string"
 	// +kubebuilder:validation:Schemaless
 	// +required
@@ -139,11 +138,6 @@ const (
 	DisruptionReasonDrifted       DisruptionReason = "Drifted"
 )
 
-var (
-	// WellKnownDisruptionReasons is a list of all valid reasons for disruption budgets.
-	WellKnownDisruptionReasons = []DisruptionReason{DisruptionReasonUnderutilized, DisruptionReasonEmpty, DisruptionReasonDrifted}
-)
-
 type Limits v1.ResourceList
 
 func (l Limits) ExceededBy(resources v1.ResourceList) error {
@@ -153,7 +147,7 @@ func (l Limits) ExceededBy(resources v1.ResourceList) error {
 	for resourceName, usage := range resources {
 		if limit, ok := l[resourceName]; ok {
 			if usage.Cmp(limit) > 0 {
-				return fmt.Errorf("%s resource usage of %v exceeds limit of %v", resourceName, usage.AsDec(), limit.AsDec())
+				return serrors.Wrap(fmt.Errorf("resource usage exceeds limit"), "resource-name", resourceName, "usage", usage.AsDec(), "limit", limit.AsDec())
 			}
 		}
 	}
@@ -187,6 +181,8 @@ type NodeClaimTemplateSpec struct {
 	// +required
 	Requirements []NodeSelectorRequirementWithMinValues `json:"requirements" hash:"ignore"`
 	// NodeClassRef is a reference to an object that defines provider specific configuration
+	// +kubebuilder:validation:XValidation:rule="self.group == oldSelf.group",message="nodeClassRef.group is immutable"
+	// +kubebuilder:validation:XValidation:rule="self.kind == oldSelf.kind",message="nodeClassRef.kind is immutable"
 	// +required
 	NodeClassRef *NodeClassReference `json:"nodeClassRef"`
 	// TerminationGracePeriod is the maximum duration the controller will wait before forcefully deleting the pods on a node, measured from when deletion is first initiated.
@@ -211,7 +207,7 @@ type NodeClaimTemplateSpec struct {
 	// is useful to implement features like eventually consistent node upgrade,
 	// memory leak protection, and disruption testing.
 	// +kubebuilder:default:="720h"
-	// +kubebuilder:validation:Pattern=`^(([0-9]+(s|m|h))+)|(Never)$`
+	// +kubebuilder:validation:Pattern=`^(([0-9]+(s|m|h))+|Never)$`
 	// +kubebuilder:validation:Type="string"
 	// +kubebuilder:validation:Schemaless
 	// +optional
@@ -222,8 +218,8 @@ type NodeClaimTemplateSpec struct {
 func (in *NodeClaimTemplate) ToNodeClaim() *NodeClaim {
 	return &NodeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      in.ObjectMeta.Labels,
-			Annotations: in.ObjectMeta.Annotations,
+			Labels:      in.Labels,
+			Annotations: in.Annotations,
 		},
 		Spec: NodeClaimSpec{
 			Taints:                 in.Spec.Taints,
@@ -295,54 +291,31 @@ type NodePoolList struct {
 	Items           []NodePool `json:"items"`
 }
 
-// OrderByWeight orders the NodePools in the NodePoolList by their priority weight in-place.
-// This priority evaluates the following things in precedence order:
-//  1. NodePools that have a larger weight are ordered first
-//  2. If two NodePools have the same weight, then the NodePool with the name later in the alphabet will come first
-func (nl *NodePoolList) OrderByWeight() {
-	sort.Slice(nl.Items, func(a, b int) bool {
-		weightA := lo.FromPtr(nl.Items[a].Spec.Weight)
-		weightB := lo.FromPtr(nl.Items[b].Spec.Weight)
-
-		if weightA == weightB {
-			// Order NodePools by name for a consistent ordering when sorting equal weight
-			return nl.Items[a].Name > nl.Items[b].Name
-		}
-		return weightA > weightB
-	})
-}
-
 // MustGetAllowedDisruptions calls GetAllowedDisruptionsByReason if the error is not nil. This reduces the
 // amount of state that the disruption controller must reconcile, while allowing the GetAllowedDisruptionsByReason()
 // to bubble up any errors in validation.
-func (in *NodePool) MustGetAllowedDisruptions(ctx context.Context, c clock.Clock, numNodes int) map[DisruptionReason]int {
-	allowedDisruptions, err := in.GetAllowedDisruptionsByReason(ctx, c, numNodes)
+func (in *NodePool) MustGetAllowedDisruptions(c clock.Clock, numNodes int, reason DisruptionReason) int {
+	allowedDisruptions, err := in.GetAllowedDisruptionsByReason(c, numNodes, reason)
 	if err != nil {
-		return map[DisruptionReason]int{}
+		return 0
 	}
 	return allowedDisruptions
 }
 
 // GetAllowedDisruptionsByReason returns the minimum allowed disruptions across all disruption budgets, for all disruption methods for a given nodepool
-func (in *NodePool) GetAllowedDisruptionsByReason(ctx context.Context, c clock.Clock, numNodes int) (map[DisruptionReason]int, error) {
+func (in *NodePool) GetAllowedDisruptionsByReason(c clock.Clock, numNodes int, reason DisruptionReason) (int, error) {
+	allowedNodes := math.MaxInt32
 	var multiErr error
-	allowedDisruptions := map[DisruptionReason]int{}
-	for _, reason := range WellKnownDisruptionReasons {
-		allowedDisruptions[reason] = math.MaxInt32
-	}
-
 	for _, budget := range in.Spec.Disruption.Budgets {
 		val, err := budget.GetAllowedDisruptions(c, numNodes)
 		if err != nil {
 			multiErr = multierr.Append(multiErr, err)
 		}
-		// If reasons is nil, it applies to all well known disruption reasons
-		for _, reason := range lo.Ternary(budget.Reasons == nil, WellKnownDisruptionReasons, budget.Reasons) {
-			allowedDisruptions[reason] = lo.Min([]int{allowedDisruptions[reason], val})
+		if budget.Reasons == nil || lo.Contains(budget.Reasons, reason) {
+			allowedNodes = lo.Min([]int{allowedNodes, val})
 		}
 	}
-
-	return allowedDisruptions, multiErr
+	return allowedNodes, multiErr
 }
 
 // GetAllowedDisruptions returns an intstr.IntOrString that can be used a comparison
@@ -386,7 +359,7 @@ func (in *Budget) IsActive(c clock.Clock) (bool, error) {
 	if err != nil {
 		// Should only occur if there's a discrepancy
 		// with the validation regex and the cron package.
-		return false, fmt.Errorf("invariant violated, invalid cron %s", schedule)
+		return false, serrors.Wrap(fmt.Errorf("invariant violated, invalid cron, %w", err), "cron", schedule)
 	}
 	// Walk back in time for the duration associated with the schedule
 	checkPoint := c.Now().UTC().Add(-lo.FromPtr(in.Duration).Duration)

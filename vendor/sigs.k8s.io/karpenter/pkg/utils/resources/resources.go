@@ -24,6 +24,8 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/pretty"
 )
 
+var Node = v1.ResourceName("nodes")
+
 // RequestsForPods returns the total resources of a variadic list of podspecs.
 func RequestsForPods(pods ...*v1.Pod) v1.ResourceList {
 	var resources []v1.ResourceList
@@ -67,10 +69,7 @@ func Merge(resources ...v1.ResourceList) v1.ResourceList {
 // constructing a new one for each sum like Merge
 func MergeInto(dest v1.ResourceList, src v1.ResourceList) v1.ResourceList {
 	if dest == nil {
-		sz := len(dest)
-		if len(src) > sz {
-			sz = len(src)
-		}
+		sz := len(src)
 		dest = make(v1.ResourceList, sz)
 	}
 	for resourceName, quantity := range src {
@@ -94,6 +93,19 @@ func Subtract(lhs, rhs v1.ResourceList) v1.ResourceList {
 		result[resourceName] = current
 	}
 	return result
+}
+
+// SubtractFrom subtracts the src v1.ResourceList from the dest v1.ResourceList in-place
+func SubtractFrom(dest v1.ResourceList, src v1.ResourceList) {
+	if dest == nil {
+		sz := len(src)
+		dest = make(v1.ResourceList, sz)
+	}
+	for resourceName, quantity := range src {
+		current := dest[resourceName]
+		current.Sub(quantity)
+		dest[resourceName] = current
+	}
 }
 
 // podRequests calculates the max between the sum of container resources and max of initContainers along with sidecar feature consideration
@@ -186,19 +198,18 @@ func MaxResources(resources ...v1.ResourceList) v1.ResourceList {
 
 // MergeResourceLimitsIntoRequests merges resource limits into requests if no request exists for the given resource
 func MergeResourceLimitsIntoRequests(container v1.Container) v1.ResourceList {
-	resources := container.Resources.DeepCopy()
-	if resources.Requests == nil {
-		resources.Requests = v1.ResourceList{}
+	ret := v1.ResourceList{}
+	for resourceName, quantity := range container.Resources.Requests {
+		ret[resourceName] = quantity
 	}
-
-	if resources.Limits != nil {
-		for resourceName, quantity := range resources.Limits {
-			if _, ok := resources.Requests[resourceName]; !ok {
-				resources.Requests[resourceName] = quantity
+	if container.Resources.Limits != nil {
+		for resourceName, quantity := range container.Resources.Limits {
+			if _, ok := container.Resources.Requests[resourceName]; !ok {
+				ret[resourceName] = quantity
 			}
 		}
 	}
-	return resources.Requests
+	return ret
 }
 
 // Quantity parses the string value into a *Quantity

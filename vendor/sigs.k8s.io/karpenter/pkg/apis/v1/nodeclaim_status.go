@@ -26,11 +26,13 @@ const (
 	ConditionTypeLaunched             = "Launched"
 	ConditionTypeRegistered           = "Registered"
 	ConditionTypeInitialized          = "Initialized"
-	ConditionTypeNodeReady            = "NodeReady"
 	ConditionTypeConsolidatable       = "Consolidatable"
 	ConditionTypeDrifted              = "Drifted"
+	ConditionTypeDrained              = "Drained"
+	ConditionTypeVolumesDetached      = "VolumesDetached"
 	ConditionTypeInstanceTerminating  = "InstanceTerminating"
 	ConditionTypeConsistentStateFound = "ConsistentStateFound"
+	ConditionTypeDisruptionReason     = "DisruptionReason"
 )
 
 // NodeClaimStatus defines the observed state of NodeClaim
@@ -65,7 +67,6 @@ func (in *NodeClaim) StatusConditions() status.ConditionSet {
 		ConditionTypeLaunched,
 		ConditionTypeRegistered,
 		ConditionTypeInitialized,
-		ConditionTypeNodeReady,
 	).For(in)
 }
 

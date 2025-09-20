@@ -17,10 +17,12 @@ package instance
 
 import (
 	"context"
+	"strings"
 
 	sdkerrors "github.com/Azure/azure-sdk-for-go-extensions/pkg/errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
 func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clusterName string, ap armcontainerservice.AgentPool) (*armcontainerservice.AgentPool, error) {
@@ -39,11 +41,27 @@ func createAgentPool(ctx context.Context, client AgentPoolsAPI, rg, apName, clus
 
 func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName, apName string) error {
 	klog.InfoS("deleteAgentPool", "agentpool", apName)
+	ap, err := getAgentPool(ctx, client, rg, clusterName, apName)
+	if err != nil {
+		return err
+	}
+	klog.InfoS("deleting agentpool", "agentpool", apName, "provisioningState", *ap.Properties.ProvisioningState, "powerState", func() string {
+		if ap.Properties.PowerState != nil && ap.Properties.PowerState.Code != nil {
+			return string(*ap.Properties.PowerState.Code)
+		}
+		return "unknown"
+	}())
+
+	if *ap.Properties.ProvisioningState == "Deleting" {
+		klog.InfoS("agentpool is already deleting, skip delete", "agentpool", apName)
+		return nil
+	}
+
 	poller, err := client.BeginDelete(ctx, rg, clusterName, apName, nil)
 	if err != nil {
 		azErr := sdkerrors.IsResponseError(err)
 		if azErr != nil && azErr.ErrorCode == "NotFound" {
-			return nil
+			return cloudprovider.NewNodeClaimNotFoundError(err)
 		}
 		return err
 	}
@@ -51,7 +69,7 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName,
 	if err != nil {
 		azErr := sdkerrors.IsResponseError(err)
 		if azErr != nil && azErr.ErrorCode == "NotFound" {
-			return nil
+			return cloudprovider.NewNodeClaimNotFoundError(err)
 		}
 	}
 	return err
@@ -60,6 +78,9 @@ func deleteAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName,
 func getAgentPool(ctx context.Context, client AgentPoolsAPI, rg, clusterName, apName string) (*armcontainerservice.AgentPool, error) {
 	resp, err := client.Get(ctx, rg, clusterName, apName, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "Agent Pool not found") {
+			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
+		}
 		return nil, err
 	}
 

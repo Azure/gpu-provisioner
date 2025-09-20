@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/azure/gpu-provisioner/pkg/apis/v1alpha1"
 	"github.com/azure/gpu-provisioner/pkg/providers/instance"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
@@ -99,13 +100,28 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpente
 	return []*cloudprovider.InstanceType{}, nil
 }
 
+func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
+	return []cloudprovider.RepairPolicy{
+		{
+			ConditionType:      corev1.NodeReady,
+			ConditionStatus:    corev1.ConditionFalse,
+			TolerationDuration: 10 * time.Minute,
+		},
+		{
+			ConditionType:      corev1.NodeReady,
+			ConditionStatus:    corev1.ConditionUnknown,
+			TolerationDuration: 10 * time.Minute,
+		},
+	}
+}
+
 // Name returns the CloudProvider implementation name.
 func (c *CloudProvider) Name() string {
 	return "azure"
 }
 
 func (c *CloudProvider) GetSupportedNodeClasses() []status.Object {
-	return []status.Object{}
+	return []status.Object{&v1alpha1.KaitoNodeClass{}}
 }
 
 func (c *CloudProvider) instanceToNodeClaim(ctx context.Context, instanceObj *instance.Instance) *karpenterv1.NodeClaim {

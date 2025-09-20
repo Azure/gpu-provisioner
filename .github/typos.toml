@@ -1,0 +1,18 @@
+[default.extend-words]
+Ded = "Ded"
+rsource = "rsource"
+AKS = "AKS"
+stopp = "stopp"
+regxp="regxp"
+
+[default.extend-identifiers]
+ObjectCreater = "ObjectCreater"
+
+[default]
+extend-ignore-identifiers-re = [
+    "Standard_ND.*",
+]
+
+
+[files]
+extend-exclude = ["vendor/", "go.mod"]

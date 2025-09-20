@@ -20,27 +20,20 @@ import (
 	"context"
 
 	"github.com/awslabs/operatorpkg/controller"
-	"github.com/awslabs/operatorpkg/status"
 	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	"sigs.k8s.io/karpenter/pkg/operator/options"
-
-	migration "sigs.k8s.io/karpenter/pkg/controllers/migration/resource"
-
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-	"sigs.k8s.io/karpenter/pkg/controllers/leasegarbagecollection"
+	"sigs.k8s.io/karpenter/pkg/controllers/node/health"
 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination"
 	"sigs.k8s.io/karpenter/pkg/controllers/node/termination/terminator"
-	nodeclaimdisruption "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/disruption"
-	"sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/expiration"
 	nodeclaimgarbagecollection "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/garbagecollection"
 	nodeclaimlifecycle "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/lifecycle"
-	podevents "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/podevents"
-	nodeclaimtermination "sigs.k8s.io/karpenter/pkg/controllers/nodeclaim/termination"
+	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
+	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
+	"sigs.k8s.io/karpenter/pkg/operator/options"
 )
 
 func NewControllers(
@@ -50,50 +43,76 @@ func NewControllers(
 	kubeClient client.Client,
 	recorder events.Recorder,
 	cloudProvider cloudprovider.CloudProvider,
+	overlayUndecoratedCloudProvider cloudprovider.CloudProvider,
+	cluster *state.Cluster,
+	instanceTypeStore *nodeoverlay.InstanceTypeStore,
 ) []controller.Controller {
-
-	// cluster := state.NewCluster(clock, kubeClient)
-	// p := provisioning.NewProvisioner(kubeClient, recorder, cloudProvider, cluster)
+	// p := provisioning.NewProvisioner(kubeClient, recorder, cloudProvider, cluster, clock)
 	evictionQueue := terminator.NewQueue(kubeClient, recorder)
-	// disruptionQueue := orchestration.NewQueue(kubeClient, recorder, cluster, clock, p)
+	// disruptionQueue := disruption.NewQueue(kubeClient, recorder, cluster, clock, p)
 
 	controllers := []controller.Controller{
 		// p,
 		evictionQueue,
 		// disruptionQueue,
 		// disruption.NewController(clock, kubeClient, p, cloudProvider, recorder, cluster, disruptionQueue),
-		// provisioning.NewPodController(kubeClient, p),
+		// provisioning.NewPodController(kubeClient, p, cluster),
 		// provisioning.NewNodeController(kubeClient, p),
-		// nodepoolhash.NewController(kubeClient),
-		expiration.NewController(clock, kubeClient),
+		// nodepoolhash.NewController(kubeClient, cloudProvider),
+		// expiration.NewController(clock, kubeClient, cloudProvider),
 		// informer.NewDaemonSetController(kubeClient, cluster),
 		// informer.NewNodeController(kubeClient, cluster),
 		// informer.NewPodController(kubeClient, cluster),
-		// informer.NewNodePoolController(kubeClient, cluster),
-		// informer.NewNodeClaimController(kubeClient, cluster),
+		// informer.NewNodePoolController(kubeClient, cloudProvider, cluster),
+		// informer.NewNodeClaimController(kubeClient, cloudProvider, cluster),
 		termination.NewController(clock, kubeClient, cloudProvider, terminator.NewTerminator(clock, kubeClient, evictionQueue, recorder), recorder),
-		// metricspod.NewController(kubeClient),
-		// metricsnodepool.NewController(kubeClient),
-		// metricsnode.NewController(cluster),
 		// nodepoolreadiness.NewController(kubeClient, cloudProvider),
-		// nodepoolcounter.NewController(kubeClient, cluster),
-		// nodepoolvalidation.NewController(kubeClient),
-		podevents.NewController(clock, kubeClient),
-		// nodeclaimconsistency.NewController(clock, kubeClient, recorder),
+		// nodepoolregistrationhealth.NewController(kubeClient, cloudProvider),
+		// nodepoolcounter.NewController(kubeClient, cloudProvider, cluster),
+		// nodepoolvalidation.NewController(kubeClient, cloudProvider),
+		// podevents.NewController(clock, kubeClient, cloudProvider),
+		// nodeclaimconsistency.NewController(clock, kubeClient, cloudProvider, recorder),
 		nodeclaimlifecycle.NewController(clock, kubeClient, cloudProvider, recorder),
 		nodeclaimgarbagecollection.NewController(clock, kubeClient, cloudProvider),
-		nodeclaimtermination.NewController(kubeClient, cloudProvider, recorder),
-		nodeclaimdisruption.NewController(clock, kubeClient, cloudProvider),
-		leasegarbagecollection.NewController(kubeClient),
-		status.NewController[*v1.NodeClaim](kubeClient, mgr.GetEventRecorderFor("karpenter")),
-		// status.NewController[*v1.NodePool](kubeClient, mgr.GetEventRecorderFor("karpenter")),
+		// nodeclaimdisruption.NewController(clock, kubeClient, cloudProvider),
+		// nodeclaimhydration.NewController(kubeClient, cloudProvider),
+		// nodehydration.NewController(kubeClient, cloudProvider),
 	}
 
-	if !options.FromContext(ctx).DisableWebhook {
-		controllers = append(controllers, migration.NewController[*v1.NodeClaim](kubeClient))
-		// controllers = append(controllers, migration.NewController[*v1.NodePool](kubeClient))
-		// controllers = append(controllers, migrationcrd.NewController(kubeClient, cloudProvider))
+	// if !options.FromContext(ctx).DisableClusterStateObservability {
+	// 	controllers = append(controllers,
+	// 		metricspod.NewController(kubeClient, cluster),
+	// 		metricsnodepool.NewController(kubeClient, cloudProvider),
+	// 		metricsnode.NewController(cluster),
+	// 		status.NewController[*v1.NodeClaim](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.EmitDeprecatedMetrics,
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 			status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey)...),
+	// 		),
+	// 		status.NewController[*v1.NodePool](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.EmitDeprecatedMetrics,
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 		),
+	// 		status.NewGenericObjectController[*corev1.Node](
+	// 			kubeClient,
+	// 			mgr.GetEventRecorderFor("karpenter"),
+	// 			status.WithHistogramBuckets(prometheus.ExponentialBuckets(0.5, 2, 15)), // 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192
+	// 			status.WithLabels(append(lo.Map(cloudProvider.GetSupportedNodeClasses(), func(obj status.Object, _ int) string { return v1.NodeClassLabelKey(object.GVK(obj).GroupKind()) }), v1.NodePoolLabelKey, v1.NodeInitializedLabelKey)...)),
+	// 	)
+	// }
+
+	// The cloud provider must define status conditions for the node repair controller to use to detect unhealthy nodes
+	if len(cloudProvider.RepairPolicies()) != 0 && options.FromContext(ctx).FeatureGates.NodeRepair {
+		controllers = append(controllers, health.NewController(kubeClient, cloudProvider, clock, recorder))
 	}
+
+	// if options.FromContext(ctx).FeatureGates.NodeOverlay {
+	// 	controllers = append(controllers, nodeoverlay.NewController(kubeClient, overlayUndecoratedCloudProvider, instanceTypeStore, cluster))
+	// }
 
 	return controllers
 }

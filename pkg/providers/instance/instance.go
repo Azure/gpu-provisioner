@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/utils"
 	"github.com/samber/lo"
@@ -124,7 +123,7 @@ func (p *Provider) Create(ctx context.Context, nodeClaim *karpenterv1.NodeClaim)
 	if instance == nil && err == nil {
 		// means the node object has not been found yet, we wait until the node is created
 		b := wait.Backoff{
-			Steps:    15,
+			Steps:    30,
 			Duration: 1 * time.Second,
 			Factor:   1.0,
 			Jitter:   0.1,
@@ -157,11 +156,8 @@ func (p *Provider) Get(ctx context.Context, id string) (*Instance, error) {
 	}
 	apObj, err := getAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
 	if err != nil {
-		if strings.Contains(err.Error(), "Agent Pool not found") {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-		}
 		logging.FromContext(ctx).Errorf("Get agentpool %q failed: %v", apName, err)
-		return nil, fmt.Errorf("agentPool.Get for %s failed: %w", apName, err)
+		return nil, err
 	}
 
 	return p.convertAgentPoolToInstance(ctx, apObj, id)
@@ -171,7 +167,7 @@ func (p *Provider) List(ctx context.Context) ([]*Instance, error) {
 	apList, err := listAgentPools(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Listing agentpools failed: %v", err)
-		return nil, fmt.Errorf("agentPool.NewListPager failed: %w", err)
+		return nil, err
 	}
 
 	instances, err := p.fromAPListToInstances(ctx, apList)
@@ -184,7 +180,7 @@ func (p *Provider) Delete(ctx context.Context, apName string) error {
 	err := deleteAgentPool(ctx, p.azClient.agentPoolsClient, p.resourceGroup, p.clusterName, apName)
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Deleting agentpool %q failed: %v", apName, err)
-		return fmt.Errorf("agentPool.Delete for %q failed: %w", apName, err)
+		return err
 	}
 	return nil
 }
@@ -200,7 +196,7 @@ func (p *Provider) convertAgentPoolToInstance(ctx context.Context, apObj *armcon
 
 	return &Instance{
 		Name:     apObj.Name,
-		ID:       to.Ptr(id),
+		ID:       lo.ToPtr(id),
 		Type:     apObj.Properties.VMSize,
 		SubnetID: apObj.Properties.VnetSubnetID,
 		Tags:     apObj.Properties.Tags,
@@ -248,8 +244,8 @@ func (p *Provider) fromRegisteredAgentPoolToInstance(ctx context.Context, apObj 
 	})
 	return &Instance{
 		Name: apObj.Name,
-		// ID:       to.Ptr(fmt.Sprint("azure://", p.getVMSSNodeProviderID(lo.FromPtr(subID), tokens[0]))),
-		ID:       to.Ptr(nodes[0].Spec.ProviderID),
+		// ID:      lo.ToPtr(fmt.Sprint("azure://", p.getVMSSNodeProviderID(lo.FromPtr(subID), tokens[0]))),
+		ID:       lo.ToPtr(nodes[0].Spec.ProviderID),
 		Type:     apObj.Properties.VMSize,
 		SubnetID: apObj.Properties.VnetSubnetID,
 		Tags:     apObj.Properties.Tags,
@@ -283,7 +279,7 @@ func (p *Provider) fromKaitoAgentPoolToInstance(ctx context.Context, apObj *armc
 	}
 
 	if len(nodes) == 1 && len(nodes[0].Spec.ProviderID) != 0 {
-		ins.ID = to.Ptr(nodes[0].Spec.ProviderID)
+		ins.ID = lo.ToPtr(nodes[0].Spec.ProviderID)
 	}
 
 	return ins, nil
@@ -325,24 +321,24 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 	taints := nodeClaim.Spec.Taints
 	taintsStr := []*string{}
 	for _, t := range taints {
-		taintsStr = append(taintsStr, to.Ptr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
+		taintsStr = append(taintsStr, lo.ToPtr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
 	}
 
 	scaleSetsType := armcontainerservice.AgentPoolTypeVirtualMachineScaleSets
 	// todo: why nodepool label is used here
-	labels := map[string]*string{karpenterv1.NodePoolLabelKey: to.Ptr("kaito")}
+	labels := map[string]*string{karpenterv1.NodePoolLabelKey: lo.ToPtr("kaito")}
 	for k, v := range nodeClaim.Labels {
-		labels[k] = to.Ptr(v)
+		labels[k] = lo.ToPtr(v)
 	}
 
 	if strings.Contains(vmSize, "Standard_N") {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("gpu")})
+		labels = lo.Assign(labels, map[string]*string{LabelMachineType: lo.ToPtr("gpu")})
 	} else {
-		labels = lo.Assign(labels, map[string]*string{LabelMachineType: to.Ptr("cpu")})
+		labels = lo.Assign(labels, map[string]*string{LabelMachineType: lo.ToPtr("cpu")})
 	}
 	// NodeClaimCreationLabel is used for recording the create timestamp of agentPool resource.
 	// then used by garbage collection controller to cleanup orphan agentpool which lived more than 10min
-	labels[NodeClaimCreationLabel] = to.Ptr(nodeClaim.CreationTimestamp.UTC().Format(CreationTimestampLayout))
+	labels[NodeClaimCreationLabel] = lo.ToPtr(nodeClaim.CreationTimestamp.UTC().Format(CreationTimestampLayout))
 
 	storage := &resource.Quantity{}
 	if nodeClaim.Spec.Resources.Requests != nil {
@@ -358,12 +354,12 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:   labels,
-			NodeTaints:   taintsStr, //[]*string{to.Ptr("sku=gpu:NoSchedule")},
-			Type:         to.Ptr(scaleSetsType),
-			VMSize:       to.Ptr(vmSize),
-			OSType:       to.Ptr(armcontainerservice.OSTypeLinux),
-			Count:        to.Ptr(int32(1)),
-			OSDiskSizeGB: to.Ptr(diskSizeGB),
+			NodeTaints:   taintsStr, //[]*string{lo.ToPtr("sku=gpu:NoSchedule")},
+			Type:         lo.ToPtr(scaleSetsType),
+			VMSize:       lo.ToPtr(vmSize),
+			OSType:       lo.ToPtr(armcontainerservice.OSTypeLinux),
+			Count:        lo.ToPtr(int32(1)),
+			OSDiskSizeGB: lo.ToPtr(diskSizeGB),
 		},
 	}, nil
 }

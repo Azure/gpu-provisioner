@@ -22,9 +22,11 @@ import (
 	"fmt"
 
 	"github.com/awslabs/operatorpkg/object"
+	"github.com/awslabs/operatorpkg/status"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -32,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
 const (
@@ -40,73 +43,121 @@ const (
 )
 
 var (
-	selector1, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	WorkspaceSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
 		},
 	})
-	selector2, _ = predicate.LabelSelectorPredicate(metav1.LabelSelector{
+
+	RagEngineSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
 		},
 	})
-	KaitoResourcePredicate = predicate.Or(selector1, selector2)
-
-	KaitoNodeClaimLabels = []string{WorkspaceLabelKey, RagEngineLabelKey}
 )
+
+func IsManaged(nodeClaim *v1.NodeClaim, cp cloudprovider.CloudProvider) bool {
+	if hasSupportedNodeClass := lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
+		return object.GVK(nodeClass).GroupKind() == nodeClaim.Spec.NodeClassRef.GroupKind()
+	}); hasSupportedNodeClass {
+		return true
+	}
+
+	if WorkspaceSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
+		return true
+	}
+
+	if RagEngineSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
+		return true
+	}
+	return false
+}
+
+// IsManagedPredicateFuncs is used to filter controller-runtime NodeClaim watches to NodeClaims managed by the given cloudprovider.
+func IsManagedPredicateFuncs(cp cloudprovider.CloudProvider) predicate.Funcs {
+	return predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return IsManaged(o.(*v1.NodeClaim), cp)
+	})
+}
+
+func ForProviderID(providerID string) client.ListOption {
+	return client.MatchingFields{"status.providerID": providerID}
+}
+
+func ForNodePool(nodePoolName string) client.ListOption {
+	return client.MatchingLabels(map[string]string{v1.NodePoolLabelKey: nodePoolName})
+}
+
+func ForNodeClass(nodeClass status.Object) client.ListOption {
+	return client.MatchingFields{
+		"spec.nodeClassRef.group": object.GVK(nodeClass).Group,
+		"spec.nodeClassRef.kind":  object.GVK(nodeClass).Kind,
+		"spec.nodeClassRef.name":  nodeClass.GetName(),
+	}
+}
+
+func ListManaged(ctx context.Context, c client.Client, cloudProvider cloudprovider.CloudProvider, opts ...client.ListOption) ([]*v1.NodeClaim, error) {
+	nodeClaimList := &v1.NodeClaimList{}
+	if err := c.List(ctx, nodeClaimList, opts...); err != nil {
+		return nil, err
+	}
+	return lo.FilterMap(nodeClaimList.Items, func(nc v1.NodeClaim, _ int) (*v1.NodeClaim, bool) {
+		return &nc, IsManaged(&nc, cloudProvider)
+	}), nil
+}
 
 // PodEventHandler is a watcher on corev1.Pods that maps Pods to NodeClaim based on the node names
 // and enqueues reconcile.Requests for the NodeClaims
-func PodEventHandler(c client.Client) handler.EventHandler {
-	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) (requests []reconcile.Request) {
-		if name := o.(*corev1.Pod).Spec.NodeName; name != "" {
-			node := &corev1.Node{}
-			if err := c.Get(ctx, types.NamespacedName{Name: name}, node); err != nil {
-				return []reconcile.Request{}
-			}
-			nodeClaimList := &v1.NodeClaimList{}
-			if err := c.List(ctx, nodeClaimList, client.MatchingFields{"status.providerID": node.Spec.ProviderID}); err != nil {
-				return []reconcile.Request{}
-			}
-			return lo.Map(nodeClaimList.Items, func(n v1.NodeClaim, _ int) reconcile.Request {
-				return reconcile.Request{
-					NamespacedName: client.ObjectKeyFromObject(&n),
-				}
-			})
+func PodEventHandler(c client.Client, cloudProvider cloudprovider.CloudProvider) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		nodeName := o.(*corev1.Pod).Spec.NodeName
+		if nodeName == "" {
+			return nil
 		}
-		return requests
+		node := &corev1.Node{}
+		if err := c.Get(ctx, types.NamespacedName{Name: nodeName}, node); err != nil {
+			return nil
+		}
+		// Because we get so many NodeClaims from this response, we are not DeepCopying the cached data here
+		// DO NOT MUTATE NodeClaims in this function as this will affect the underlying cached NodeClaim
+		ncs, err := ListManaged(ctx, c, cloudProvider, ForProviderID(node.Spec.ProviderID), client.UnsafeDisableDeepCopy)
+		if err != nil {
+			return nil
+		}
+		return lo.Map(ncs, func(nc *v1.NodeClaim, _ int) reconcile.Request {
+			return reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nc)}
+		})
 	})
 }
 
 // NodeEventHandler is a watcher on corev1.Node that maps Nodes to NodeClaims based on provider ids
 // and enqueues reconcile.Requests for the NodeClaims
-func NodeEventHandler(c client.Client) handler.EventHandler {
+func NodeEventHandler(c client.Client, cloudProvider cloudprovider.CloudProvider) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-		node := o.(*corev1.Node)
-		nodeClaimList := &v1.NodeClaimList{}
-		if err := c.List(ctx, nodeClaimList, client.MatchingFields{"status.providerID": node.Spec.ProviderID}); err != nil {
-			return []reconcile.Request{}
+		// Because we get so many NodeClaims from this response, we are not DeepCopying the cached data here
+		// DO NOT MUTATE NodeClaims in this function as this will affect the underlying cached NodeClaim
+		ncs, err := ListManaged(ctx, c, cloudProvider, ForProviderID(o.(*corev1.Node).Spec.ProviderID), client.UnsafeDisableDeepCopy)
+		if err != nil {
+			return nil
 		}
-		return lo.Map(nodeClaimList.Items, func(n v1.NodeClaim, _ int) reconcile.Request {
-			return reconcile.Request{
-				NamespacedName: client.ObjectKeyFromObject(&n),
-			}
+		return lo.Map(ncs, func(nc *v1.NodeClaim, _ int) reconcile.Request {
+			return reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nc)}
 		})
 	})
 }
 
 // NodePoolEventHandler is a watcher on v1.NodeClaim that maps NodePool to NodeClaims based
 // on the v1.NodePoolLabelKey and enqueues reconcile.Requests for the NodeClaim
-func NodePoolEventHandler(c client.Client) handler.EventHandler {
+func NodePoolEventHandler(c client.Client, cloudProvider cloudprovider.CloudProvider) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) (requests []reconcile.Request) {
-		nodeClaimList := &v1.NodeClaimList{}
-		if err := c.List(ctx, nodeClaimList, client.MatchingLabels(map[string]string{v1.NodePoolLabelKey: o.GetName()})); err != nil {
-			return requests
+		// Because we get so many NodeClaims from this response, we are not DeepCopying the cached data here
+		// DO NOT MUTATE NodeClaims in this function as this will affect the underlying cached NodeClaim
+		ncs, err := ListManaged(ctx, c, cloudProvider, ForNodePool(o.GetName()), client.UnsafeDisableDeepCopy)
+		if err != nil {
+			return nil
 		}
-		return lo.Map(nodeClaimList.Items, func(n v1.NodeClaim, _ int) reconcile.Request {
-			return reconcile.Request{
-				NamespacedName: client.ObjectKeyFromObject(&n),
-			}
+		return lo.Map(ncs, func(nc *v1.NodeClaim, _ int) reconcile.Request {
+			return reconcile.Request{NamespacedName: client.ObjectKeyFromObject(nc)}
 		})
 	})
 }
@@ -120,7 +171,9 @@ func NodeClassEventHandler(c client.Client) handler.EventHandler {
 			"spec.nodeClassRef.group": object.GVK(o).Group,
 			"spec.nodeClassRef.kind":  object.GVK(o).Kind,
 			"spec.nodeClassRef.name":  o.GetName(),
-		}); err != nil {
+			// Because we get so many NodeClaims from this response, we are not DeepCopying the cached data here
+			// DO NOT MUTATE NodeClaims in this function as this will affect the underlying cached NodeClaim
+		}, client.UnsafeDisableDeepCopy); err != nil {
 			return requests
 		}
 		return lo.Map(nodeClaimList.Items, func(n v1.NodeClaim, _ int) reconcile.Request {
@@ -202,16 +255,8 @@ func NodeForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeCl
 func AllNodesForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.NodeClaim) ([]*corev1.Node, error) {
 	// NodeClaims that have no resolved providerID have no nodes mapped to them
 	if nodeClaim.Status.ProviderID == "" {
-		// check common failures caused by bad input
-		// cond := nodeClaim.StatusConditions().Get(v1.ConditionTypeLaunched)
-		// if cond != nil && !cond.IsTrue() && (cond.Message == "all requested instance types were unavailable during launch" || strings.Contains(cond.Message, "is not allowed in your subscription in location")) {
-		// 	return nil, nil // Not recoverable, does not consider as an error
-		// } else {
-		// 	return nil, fmt.Errorf("the nodeClaim(%s) has not been associated with any node yet, message: %s", nodeClaim.Name, cond.Message)
-		// }
 		return nil, nil
 	}
-
 	nodeList := corev1.NodeList{}
 	if err := c.List(ctx, &nodeList, client.MatchingFields{"spec.providerID": nodeClaim.Status.ProviderID}); err != nil {
 		return nil, fmt.Errorf("listing nodes, %w", err)
@@ -221,6 +266,11 @@ func AllNodesForNodeClaim(ctx context.Context, c client.Client, nodeClaim *v1.No
 
 func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *corev1.Node {
 	gvk := object.GVK(nodeClaim)
+	if lo.ContainsBy(node.OwnerReferences, func(o metav1.OwnerReference) bool {
+		return o.APIVersion == gvk.GroupVersion().String() && o.Kind == gvk.Kind && o.UID == nodeClaim.UID
+	}) {
+		return node
+	}
 	node.OwnerReferences = append(node.OwnerReferences, metav1.OwnerReference{
 		APIVersion:         gvk.GroupVersion().String(),
 		Kind:               gvk.Kind,
@@ -229,18 +279,4 @@ func UpdateNodeOwnerReferences(nodeClaim *v1.NodeClaim, node *corev1.Node) *core
 		BlockOwnerDeletion: lo.ToPtr(true),
 	})
 	return node
-}
-
-func AllKaitoNodeClaims(ctx context.Context, c client.Client) ([]v1.NodeClaim, error) {
-	kaitoNodeClaims := make([]v1.NodeClaim, 0)
-
-	for i := range KaitoNodeClaimLabels {
-		nodeClaimList := &v1.NodeClaimList{}
-		if err := c.List(ctx, nodeClaimList, client.HasLabels([]string{KaitoNodeClaimLabels[i]})); err != nil {
-			return kaitoNodeClaims, err
-		}
-
-		kaitoNodeClaims = append(kaitoNodeClaims, nodeClaimList.Items...)
-	}
-	return kaitoNodeClaims, nil
 }

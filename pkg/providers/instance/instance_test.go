@@ -24,7 +24,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/azure/gpu-provisioner/pkg/fake"
 	"github.com/samber/lo"
@@ -55,7 +54,7 @@ func TestNewAgentPoolObject(t *testing.T) {
 				},
 			}, []v1.NodeSelectorRequirement{}),
 			expected: GetAgentPoolObj(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets,
-				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": to.Ptr("test")},
+				armcontainerservice.ScaleSetPriorityRegular, map[string]*string{"test": lo.ToPtr("test")},
 				[]*string{}, 30, "Standard_NC6s_v3"),
 			expectedErr: false,
 		},
@@ -239,12 +238,18 @@ func TestDelete(t *testing.T) {
 	testCases := []struct {
 		name              string
 		apName            string
+		mockAgentPoolGet  func() (armcontainerservice.AgentPoolsClientGetResponse, error)
 		mockAgentPoolResp func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error)
 		expectedError     error
 	}{
 		{
 			name:   "Successfully delete instance",
 			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
 				resp := http.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: http.NoBody}
@@ -264,6 +269,11 @@ func TestDelete(t *testing.T) {
 		{
 			name:   "Successfully deletes instance because poller returns a 404 not found error",
 			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
 				resp := http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody}
@@ -279,10 +289,16 @@ func TestDelete(t *testing.T) {
 				p, err := runtime.NewPoller(&resp, runtime.NewPipeline("", "", runtime.PipelineOptions{}, nil), pollingOptions)
 				return p, err
 			},
+			expectedError: errors.New("nodeclaim not found"),
 		},
 		{
 			name:   "Fail to delete instance because poller returns error",
 			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
 				resp := http.Response{StatusCode: http.StatusBadRequest, Body: http.NoBody}
@@ -303,17 +319,45 @@ func TestDelete(t *testing.T) {
 		{
 			name:   "Successfully delete instance because agentPool.Delete returns a NotFound error",
 			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				return nil, NotFoundAzError()
 			},
+			expectedError: errors.New("nodeclaim not found"),
 		},
 		{
 			name:   "Fail to delete instance because agentPool.Delete returns a failure",
 			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				return nil, errors.New("Failed to delete agent pool")
 			},
 			expectedError: errors.New("Failed to delete agent pool"),
+		},
+		{
+			name:   "Successfully delete instance when agent pool is already deleting",
+			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool0", "/subscriptions/00000000-0000-0000-0000-000000000000/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool0-20562481-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Deleting")
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
+		},
+		{
+			name:   "Successfully delete instance when agent pool get returns NotFound error",
+			apName: "agentpool0",
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				return armcontainerservice.AgentPoolsClientGetResponse{}, errors.New("Agent Pool not found")
+			},
+			expectedError: errors.New("nodeclaim not found"),
 		},
 	}
 
@@ -323,11 +367,19 @@ func TestDelete(t *testing.T) {
 			defer mockCtrl.Finish()
 
 			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+
+			// Mock Get call if specified
+			if tc.mockAgentPoolGet != nil {
+				getResp, getErr := tc.mockAgentPoolGet()
+				agentPoolMocks.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any()).Return(getResp, getErr).MaxTimes(1)
+			}
+
+			// Mock Delete call if specified
 			if tc.mockAgentPoolResp != nil {
 				mockHandler := fake.NewMockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse](mockCtrl)
 
 				p, err := tc.mockAgentPoolResp(mockHandler)
-				agentPoolMocks.EXPECT().BeginDelete(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any()).Return(p, err)
+				agentPoolMocks.EXPECT().BeginDelete(gomock.Any(), gomock.Any(), gomock.Any(), "agentpool0", gomock.Any()).Return(p, err).MaxTimes(1)
 			}
 
 			mockK8sClient := fake.NewClient()
@@ -338,7 +390,8 @@ func TestDelete(t *testing.T) {
 			if tc.expectedError == nil {
 				assert.NoError(t, err, "Not expected to return error")
 			} else {
-				assert.Contains(t, err.Error(), tc.expectedError.Error())
+				assert.Error(t, err, "Expected to return error")
+				assert.Contains(t, err.Error(), tc.expectedError.Error(), "Error message should contain expected text")
 			}
 		})
 	}
@@ -405,7 +458,7 @@ func TestList(t *testing.T) {
 					},
 				})
 			},
-			expectedError: errors.New("agentPool.NewListPager failed: Failed to fetch page"),
+			expectedError: errors.New("Failed to fetch page"),
 		},
 	}
 
@@ -818,12 +871,12 @@ func GetAgentPoolObj(apType armcontainerservice.AgentPoolType, capacityType armc
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:       labels,
 			NodeTaints:       taints,
-			Type:             to.Ptr(apType),
-			VMSize:           to.Ptr(vmSize),
-			OSType:           to.Ptr(armcontainerservice.OSTypeLinux),
-			Count:            to.Ptr(int32(1)),
-			ScaleSetPriority: to.Ptr(capacityType),
-			OSDiskSizeGB:     to.Ptr(diskSizeGB),
+			Type:             lo.ToPtr(apType),
+			VMSize:           lo.ToPtr(vmSize),
+			OSType:           lo.ToPtr(armcontainerservice.OSTypeLinux),
+			Count:            lo.ToPtr(int32(1)),
+			ScaleSetPriority: lo.ToPtr(capacityType),
+			OSDiskSizeGB:     lo.ToPtr(diskSizeGB),
 		},
 	}
 }
@@ -835,9 +888,13 @@ func GetAgentPoolObjWithName(apName string, apId string, vmSize string) armconta
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			VMSize: &vmSize,
 			NodeLabels: map[string]*string{
-				"test":                       to.Ptr("test"),
-				"kaito.sh/workspace":         to.Ptr("none"),
-				karpenterv1.NodePoolLabelKey: to.Ptr("kaito"),
+				"test":                       lo.ToPtr("test"),
+				"kaito.sh/workspace":         lo.ToPtr("none"),
+				karpenterv1.NodePoolLabelKey: lo.ToPtr("kaito"),
+			},
+			ProvisioningState: lo.ToPtr("Succeeded"),
+			PowerState: &armcontainerservice.PowerState{
+				Code: lo.ToPtr(armcontainerservice.CodeRunning),
 			},
 		},
 	}

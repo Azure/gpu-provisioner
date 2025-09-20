@@ -319,6 +319,7 @@ func TestGet(t *testing.T) {
 func TestDelete(t *testing.T) {
 	testcases := map[string]struct {
 		nodeClaim         *karpenterv1.NodeClaim
+		mockAgentPoolGet  func() (armcontainerservice.AgentPoolsClientGetResponse, error)
 		mockAgentPoolResp func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error)
 		expectedError     error
 	}{
@@ -330,6 +331,14 @@ func TestDelete(t *testing.T) {
 					Values:   []string{"Standard_NC6s_v3"},
 				},
 			}),
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool1", "/subscriptions/test/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool1-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				ap.Properties.PowerState = &armcontainerservice.PowerState{
+					Code: lo.ToPtr(armcontainerservice.CodeRunning),
+				}
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				delResp := armcontainerservice.AgentPoolsClientDeleteResponse{}
 				resp := http.Response{Status: "200 OK", StatusCode: http.StatusOK, Body: http.NoBody}
@@ -355,6 +364,14 @@ func TestDelete(t *testing.T) {
 					Values:   []string{"Standard_NC6s_v3"},
 				},
 			}),
+			mockAgentPoolGet: func() (armcontainerservice.AgentPoolsClientGetResponse, error) {
+				ap := GetAgentPoolObjWithName("agentpool1", "/subscriptions/test/resourcegroups/nodeRG/providers/Microsoft.Compute/virtualMachineScaleSets/aks-agentpool1-vmss", "Standard_NC6s_v3")
+				ap.Properties.ProvisioningState = lo.ToPtr("Succeeded")
+				ap.Properties.PowerState = &armcontainerservice.PowerState{
+					Code: lo.ToPtr(armcontainerservice.CodeRunning),
+				}
+				return armcontainerservice.AgentPoolsClientGetResponse{AgentPool: ap}, nil
+			},
 			mockAgentPoolResp: func(mockHandler *fake.MockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse]) (*runtime.Poller[armcontainerservice.AgentPoolsClientDeleteResponse], error) {
 				return nil, errors.New("internal server error")
 			},
@@ -369,6 +386,13 @@ func TestDelete(t *testing.T) {
 
 			// prepare agentPoolClient with poller
 			agentPoolMocks := fake.NewMockAgentPoolsAPI(mockCtrl)
+
+			// Mock Get call if specified
+			if tc.mockAgentPoolGet != nil {
+				getResp, getErr := tc.mockAgentPoolGet()
+				agentPoolMocks.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any(), tc.nodeClaim.Name, gomock.Any()).Return(getResp, getErr)
+			}
+
 			if tc.mockAgentPoolResp != nil {
 				mockHandler := fake.NewMockPollingHandler[armcontainerservice.AgentPoolsClientDeleteResponse](mockCtrl)
 				resp, err := tc.mockAgentPoolResp(mockHandler)
@@ -389,5 +413,25 @@ func TestDelete(t *testing.T) {
 				assert.NoError(t, err, "expect no error but got one")
 			}
 		})
+	}
+}
+
+// GetAgentPoolObjWithName creates a mock AgentPool object for testing
+func GetAgentPoolObjWithName(apName string, apId string, vmSize string) armcontainerservice.AgentPool {
+	return armcontainerservice.AgentPool{
+		Name: &apName,
+		ID:   &apId,
+		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
+			VMSize: &vmSize,
+			NodeLabels: map[string]*string{
+				"test":                       lo.ToPtr("test"),
+				"kaito.sh/workspace":         lo.ToPtr("none"),
+				karpenterv1.NodePoolLabelKey: lo.ToPtr("kaito"),
+			},
+			ProvisioningState: lo.ToPtr("Succeeded"),
+			PowerState: &armcontainerservice.PowerState{
+				Code: lo.ToPtr(armcontainerservice.CodeRunning),
+			},
+		},
 	}
 }
