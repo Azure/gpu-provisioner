@@ -59,8 +59,9 @@ var _ = Describe("GPU NodeClaim", func() {
 			},
 			Spec: karpenterv1.NodeClaimSpec{
 				NodeClassRef: &karpenterv1.NodeClassReference{
-					Name: "default",
-					Kind: "AKSNodeClass",
+					Name:  "default",
+					Kind:  "AKSNodeClass",
+					Group: "karpenter.azure.com",
 				},
 				Resources: karpenterv1.ResourceRequirements{
 					Requests: v1.ResourceList{

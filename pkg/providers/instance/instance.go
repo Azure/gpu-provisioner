@@ -322,7 +322,6 @@ func (p *Provider) fromAPListToInstances(ctx context.Context, apList []*armconta
 
 func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcontainerservice.AgentPool, error) {
 	taints := nodeClaim.Spec.Taints
-	taints = append(taints, karpenterv1.UnregisteredNoExecuteTaint)
 	taintsStr := []*string{}
 	for _, t := range taints {
 		taintsStr = append(taintsStr, lo.ToPtr(fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect)))
