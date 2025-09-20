@@ -2,8 +2,8 @@ apiVersion: v2
 name: gpu-provisioner
 description: A Helm chart for gpu-provisioner
 type: application
-version: 0.3.5
-appVersion: 0.3.5
+version: 0.3.6
+appVersion: 0.3.6
 sources:
   - https://github.com/Azure/gpu-provisioner
 maintainers:
