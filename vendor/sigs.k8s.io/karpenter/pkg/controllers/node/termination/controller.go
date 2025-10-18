@@ -89,6 +89,7 @@ func (c *Controller) Reconcile(ctx context.Context, n *corev1.Node) (reconcile.R
 
 //nolint:gocyclo
 func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile.Result, error) {
+	log.FromContext(ctx).Info("finalize node")
 	if !controllerutil.ContainsFinalizer(node, v1.TerminationFinalizer) {
 		return reconcile.Result{}, nil
 	}
@@ -157,12 +158,12 @@ func (c *Controller) finalize(ctx context.Context, node *corev1.Node) (reconcile
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
 		// Here, we are updating the status condition list
-		if err = c.kubeClient.Status().Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
-			if errors.IsConflict(err) {
-				return reconcile.Result{Requeue: true}, nil
-			}
-			return reconcile.Result{}, fmt.Errorf("updating nodeclaim, %w", err)
-		}
+		// if err = c.kubeClient.Status().Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
+		// 	if errors.IsConflict(err) {
+		// 		return reconcile.Result{Requeue: true}, nil
+		// 	}
+		// 	return reconcile.Result{}, fmt.Errorf("updating nodeclaim, %w", err)
+		// }
 		// We only increment the drained metric after we have ensured that we have patched the status condition onto the NodeClaim
 		if !stored.StatusConditions().IsTrue(v1.ConditionTypeDrained) && nodeClaim.StatusConditions().IsTrue(v1.ConditionTypeDrained) {
 			// We'll only increment this metric if there is a NodeClaim present for the node, but this prevents us from double
