@@ -179,6 +179,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (re
 
 //nolint:gocyclo
 func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (reconcile.Result, error) {
+	log.FromContext(ctx).Info("finalize nodeclaim")
 	if !controllerutil.ContainsFinalizer(nodeClaim, v1.TerminationFinalizer) {
 		return reconcile.Result{}, nil
 	}
@@ -225,15 +226,16 @@ func (c *Controller) finalize(ctx context.Context, nodeClaim *v1.NodeClaim) (rec
 			// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 			// can cause races due to the fact that it fully replaces the list on a change
 			// Here, we are updating the status condition list
-			if err := c.kubeClient.Status().Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
-				if errors.IsNotFound(err) {
-					return reconcile.Result{}, nil
-				}
-				if errors.IsConflict(err) {
-					return reconcile.Result{Requeue: true}, nil
-				}
-				return reconcile.Result{}, err
-			}
+			// if err := c.kubeClient.Status().Patch(ctx, nodeClaim, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
+			// 	if errors.IsNotFound(err) {
+			// 		return reconcile.Result{}, nil
+			// 	}
+			// 	if errors.IsConflict(err) {
+			// 		return reconcile.Result{Requeue: true}, nil
+			// 	}
+			// 	log.FromContext(ctx).Error(err, "failed to patch nodeclaim status")
+			// 	return reconcile.Result{}, err
+			// }
 		}
 		if !cloudprovider.IsNodeClaimNotFoundError(deleteErr) {
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
