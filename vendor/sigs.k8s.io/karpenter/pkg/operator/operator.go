@@ -206,8 +206,7 @@ func NewOperator(o ...option.Function[Options]) (context.Context, *Operator) {
 		return lo.Ternary(mgr.GetCache().WaitForCacheSync(req.Context()), nil, fmt.Errorf("failed to sync caches"))
 	}))
 	lo.Must0(mgr.AddReadyzCheck("crd", func(_ *http.Request) error {
-		// objects := []client.Object{&v1.NodePool{}, &v1.NodeClaim{}}
-		objects := []client.Object{&v1.NodeClaim{}}
+		objects := []client.Object{&v1.NodePool{}, &v1.NodeClaim{}}
 		for _, obj := range objects {
 			gvk, err := apiutil.GVKForObject(obj, scheme.Scheme)
 			if err != nil {
@@ -283,13 +282,13 @@ func setupIndexers(ctx context.Context, mgr manager.Manager) {
 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Name}
 	}), "failed to setup nodeclaim nodeclassref name indexer")
 
-	// handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
-	// }), "failed to setup nodepool nodeclassref apiversion indexer")
-	// handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
-	// }), "failed to setup nodepool nodeclassref kind indexer")
-	// handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
-	// 	return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
-	// }), "failed to setup nodepool nodeclassref name indexer")
+	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.group", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Group}
+	}), "failed to setup nodepool nodeclassref apiversion indexer")
+	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.kind", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Kind}
+	}), "failed to setup nodepool nodeclassref kind indexer")
+	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodePool{}, "spec.template.spec.nodeClassRef.name", func(o client.Object) []string {
+		return []string{o.(*v1.NodePool).Spec.Template.Spec.NodeClassRef.Name}
+	}), "failed to setup nodepool nodeclassref name indexer")
 }

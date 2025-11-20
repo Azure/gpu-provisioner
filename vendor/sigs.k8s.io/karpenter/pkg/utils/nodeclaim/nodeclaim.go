@@ -26,7 +26,6 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -37,40 +36,10 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
-const (
-	WorkspaceLabelKey = "kaito.sh/workspace"
-	RagEngineLabelKey = "kaito.sh/ragengine"
-)
-
-var (
-	WorkspaceSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{Key: WorkspaceLabelKey, Operator: metav1.LabelSelectorOpExists},
-		},
-	})
-
-	RagEngineSelector, _ = metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{Key: RagEngineLabelKey, Operator: metav1.LabelSelectorOpExists},
-		},
-	})
-)
-
 func IsManaged(nodeClaim *v1.NodeClaim, cp cloudprovider.CloudProvider) bool {
-	if hasSupportedNodeClass := lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
+	return lo.ContainsBy(cp.GetSupportedNodeClasses(), func(nodeClass status.Object) bool {
 		return object.GVK(nodeClass).GroupKind() == nodeClaim.Spec.NodeClassRef.GroupKind()
-	}); hasSupportedNodeClass {
-		return true
-	}
-
-	if WorkspaceSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
-		return true
-	}
-
-	if RagEngineSelector.Matches(labels.Set(nodeClaim.GetLabels())) {
-		return true
-	}
-	return false
+	})
 }
 
 // IsManagedPredicateFuncs is used to filter controller-runtime NodeClaim watches to NodeClaims managed by the given cloudprovider.

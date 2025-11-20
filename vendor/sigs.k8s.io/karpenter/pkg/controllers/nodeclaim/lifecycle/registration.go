@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -60,15 +61,15 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
 		}
 		return reconcile.Result{}, fmt.Errorf("getting node for nodeclaim, %w", err)
 	}
-	// _, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
-	// 	return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
-	// })
+	_, hasStartupTaint := lo.Find(node.Spec.Taints, func(t corev1.Taint) bool {
+		return t.MatchTaint(&v1.UnregisteredNoExecuteTaint)
+	})
 	// if the sync hasn't happened yet and the race protecting startup taint isn't present then log it as missing and proceed
 	// if the sync has happened then the startup taint has been removed if it was present
-	// if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
-	// 	log.FromContext(ctx).WithValues("taint", v1.UnregisteredTaintKey).Error(fmt.Errorf("missing taint prevents registration-related race conditions on Karpenter-managed nodes"), "node claim registration error")
-	// 	r.recorder.Publish(UnregisteredTaintMissingEvent(nodeClaim))
-	// }
+	if _, ok := node.Labels[v1.NodeRegisteredLabelKey]; !ok && !hasStartupTaint {
+		log.FromContext(ctx).WithValues("taint", v1.UnregisteredTaintKey).Error(fmt.Errorf("missing taint prevents registration-related race conditions on Karpenter-managed nodes"), "node claim registration error")
+		r.recorder.Publish(UnregisteredTaintMissingEvent(nodeClaim))
+	}
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("Node", klog.KObj(node)))
 	if err = r.syncNode(ctx, nodeClaim, node); err != nil {
 		if errors.IsConflict(err) {
@@ -83,36 +84,36 @@ func (r *Registration) Reconcile(ctx context.Context, nodeClaim *v1.NodeClaim) (
 	metrics.NodesCreatedTotal.Inc(map[string]string{
 		metrics.NodePoolLabel: nodeClaim.Labels[v1.NodePoolLabelKey],
 	})
-	// if err := r.updateNodePoolRegistrationHealth(ctx, nodeClaim); client.IgnoreNotFound(err) != nil {
-	// 	if errors.IsConflict(err) {
-	// 		return reconcile.Result{Requeue: true}, nil
-	// 	}
-	// 	return reconcile.Result{}, err
-	// }
+	if err := r.updateNodePoolRegistrationHealth(ctx, nodeClaim); client.IgnoreNotFound(err) != nil {
+		if errors.IsConflict(err) {
+			return reconcile.Result{Requeue: true}, nil
+		}
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }
 
 // updateNodePoolRegistrationHealth sets the NodeRegistrationHealthy=True
 // on the NodePool if the nodeClaim that registered is owned by a NodePool
-// func (r *Registration) updateNodePoolRegistrationHealth(ctx context.Context, nodeClaim *v1.NodeClaim) error {
-// 	nodePoolName := nodeClaim.Labels[v1.NodePoolLabelKey]
-// 	if nodePoolName != "" {
-// 		nodePool := &v1.NodePool{}
-// 		if err := r.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
-// 			return err
-// 		}
-// 		stored := nodePool.DeepCopy()
-// 		if nodePool.StatusConditions().SetTrue(v1.ConditionTypeNodeRegistrationHealthy) {
-// 			// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
-// 			// can cause races due to the fact that it fully replaces the list on a change
-// 			// Here, we are updating the status condition list
-// 			if err := r.kubeClient.Status().Patch(ctx, nodePool, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
-// 				return err
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
+func (r *Registration) updateNodePoolRegistrationHealth(ctx context.Context, nodeClaim *v1.NodeClaim) error {
+	nodePoolName := nodeClaim.Labels[v1.NodePoolLabelKey]
+	if nodePoolName != "" {
+		nodePool := &v1.NodePool{}
+		if err := r.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+			return err
+		}
+		stored := nodePool.DeepCopy()
+		if nodePool.StatusConditions().SetTrue(v1.ConditionTypeNodeRegistrationHealthy) {
+			// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
+			// can cause races due to the fact that it fully replaces the list on a change
+			// Here, we are updating the status condition list
+			if err := r.kubeClient.Status().Patch(ctx, nodePool, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 func (r *Registration) syncNode(ctx context.Context, nodeClaim *v1.NodeClaim, node *corev1.Node) error {
 	stored := node.DeepCopy()
