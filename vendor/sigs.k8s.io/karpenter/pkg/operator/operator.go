@@ -18,7 +18,6 @@ package operator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -36,7 +35,6 @@ import (
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -261,25 +259,25 @@ func setupIndexers(ctx context.Context, mgr manager.Manager) {
 	}), "failed to setup volumeattachment indexer")
 
 	// If the CRD does not exist, we should fail open when setting up indexers. This ensures controllers that aren't reliant on those CRDs may continue to function
-	handleCRDIndexerError := func(err error, msg string) {
-		noKindMatchError := &meta.NoKindMatchError{}
-		if errors.As(err, &noKindMatchError) {
-			log.FromContext(ctx).Error(err, msg)
-		} else if err != nil {
-			// lo.Must0 also does a panic
-			panic(fmt.Sprintf("%s, %s", err, msg))
-		}
-	}
-	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "status.providerID", func(o client.Object) []string {
+	// handleCRDIndexerError := func(err error, msg string) {
+	// 	noKindMatchError := &meta.NoKindMatchError{}
+	// 	if errors.As(err, &noKindMatchError) {
+	// 		log.FromContext(ctx).Error(err, msg)
+	// 	} else if err != nil {
+	// 		// lo.Must0 also does a panic
+	// 		panic(fmt.Sprintf("%s, %s", err, msg))
+	// 	}
+	// }
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "status.providerID", func(o client.Object) []string {
 		return []string{o.(*v1.NodeClaim).Status.ProviderID}
 	}), "failed to setup nodeclaim provider id indexer")
-	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.group", func(o client.Object) []string {
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.group", func(o client.Object) []string {
 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Group}
 	}), "failed to setup nodeclaim nodeclassref apiversion indexer")
-	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.kind", func(o client.Object) []string {
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.kind", func(o client.Object) []string {
 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Kind}
 	}), "failed to setup nodeclaim nodeclassref kind indexer")
-	handleCRDIndexerError(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.name", func(o client.Object) []string {
+	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &v1.NodeClaim{}, "spec.nodeClassRef.name", func(o client.Object) []string {
 		return []string{o.(*v1.NodeClaim).Spec.NodeClassRef.Name}
 	}), "failed to setup nodeclaim nodeclassref name indexer")
 
