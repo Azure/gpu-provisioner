@@ -22,7 +22,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Check spelling with custom config file
-        uses: crate-ci/typos@v1.38.1
+        uses: crate-ci/typos@v1.40.0
         with:
           config: ./.github/typos.toml
       - name: Verify Mod
