@@ -1,0 +1,44 @@
+apiVersion: karpenter.sh/v1
+kind: NodeClaim
+metadata:
+  name: azlv2
+  labels:
+    kaito.sh/workspace: "mistral-azure-linux"
+  annotations:
+    # Alternative method: using annotation instead of label
+    kaito.sh/node-image-family: "AzureLinux"
+    description: "NodeClaim using Azure Linux via annotation"
+spec:
+  nodeClassRef:
+    name: gpuonly1
+    kind: AKSNodeClass
+    group: karpenter.azure.com
+  requirements:
+    # Larger GPU instance for more demanding models
+    - key: node.kubernetes.io/instance-type
+      operator: In
+      values: ["Standard_NC24ads_A100_v4"]
+    # Allow both spot and on-demand
+    - key: karpenter.sh/capacity-type
+      operator: In
+      values: ["spot", "on-demand"]
+    # OS requirement
+    - key: kubernetes.io/os
+      operator: In
+      values: ["linux"]
+    # NodePool label
+    - key: karpenter.sh/nodepool
+      operator: In
+      values: ["kaito"]
+  resources:
+    requests:
+      storage: "200Gi"
+  taints:
+    # GPU taint
+    - key: "sku"
+      value: "gpu"
+      effect: NoSchedule
+    # Additional taint for high-end GPU workloads
+    - key: "workload-type"
+      value: "ai-inference"
+      effect: NoSchedule

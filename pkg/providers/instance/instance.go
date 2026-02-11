@@ -39,6 +39,7 @@ import (
 
 const (
 	LabelMachineType       = "kaito.sh/machine-type"
+	LabelNodeImageFamily   = "kaito.sh/node-image-family"
 	NodeClaimCreationLabel = "kaito.sh/creation-timestamp"
 	// use self-defined layout in order to satisfy node label syntax
 	CreationTimestampLayout = "2006-01-02T15-04-05Z"
@@ -351,6 +352,8 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 		diskSizeGB = int32(storage.Value() >> 30)
 	}
 
+	// Determine OSSKU from NodeClaim labels or annotations, default to Ubuntu
+
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
 			NodeLabels:   labels,
@@ -358,6 +361,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 			Type:         lo.ToPtr(scaleSetsType),
 			VMSize:       lo.ToPtr(vmSize),
 			OSType:       lo.ToPtr(armcontainerservice.OSTypeLinux),
+			OSSKU:        determineOSSKU(nodeClaim),
 			Count:        lo.ToPtr(int32(1)),
 			OSDiskSizeGB: lo.ToPtr(diskSizeGB),
 		},
@@ -406,4 +410,36 @@ func agentPoolIsCreatedFromNodeClaim(ap *armcontainerservice.AgentPool) bool {
 	}
 
 	return false
+}
+
+// determineOSSKU determines the OS SKU from NodeClaim labels or annotations, defaulting to Ubuntu
+func determineOSSKU(nodeClaim *karpenterv1.NodeClaim) *armcontainerservice.OSSKU {
+	if nodeClaim == nil {
+		return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
+	}
+
+	// First check for a direct label on the NodeClaim
+	if imageFamily, ok := nodeClaim.Labels[LabelNodeImageFamily]; ok {
+		return imageFamilyToOSSKU(imageFamily)
+	}
+	// Check annotations as fallback
+	if imageFamily, ok := nodeClaim.Annotations[LabelNodeImageFamily]; ok {
+		return imageFamilyToOSSKU(imageFamily)
+	}
+
+	// Default to Ubuntu if no image family is specified
+	return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
+}
+
+// imageFamilyToOSSKU converts an image family string to an OSSKU
+func imageFamilyToOSSKU(imageFamily string) *armcontainerservice.OSSKU {
+	switch strings.ToLower(imageFamily) {
+	case "azurelinux":
+		return lo.ToPtr(armcontainerservice.OSSKUAzureLinux)
+	case "ubuntu", "ubuntu2204":
+		return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
+	default:
+		klog.Warningf("Unknown imageFamily %q, defaulting to Ubuntu", imageFamily)
+		return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
+	}
 }
