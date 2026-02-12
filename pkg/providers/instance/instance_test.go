@@ -953,6 +953,26 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
 		},
 		{
+			name:   "NodeClaim with case-insensitive AzureLinux image family label",
+			vmSize: "Standard_NC6s_v3",
+			nodeClaim: &karpenterv1.NodeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-nodeclaim",
+					Labels: map[string]string{
+						"kaito.sh/node-image-family": "azurelinux",
+					},
+				},
+				Spec: karpenterv1.NodeClaimSpec{
+					Resources: karpenterv1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
+		},
+		{
 			name:   "NodeClaim with unknown image family defaults to Ubuntu",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
