@@ -448,4 +448,226 @@ var _ = Describe("GPU NodeClaim", func() {
 		env.ExpectNodeClaimNoFinalizer(nc)
 		env.EventuallyExpectNodeCount("==", 0)
 	})
+
+	It("should provision one GPU node with Azure Linux via label", func() {
+		nodeClaimLabels := map[string]string{
+			"karpenter.sh/provisioner-name": "default",
+			"kaito.sh/workspace":            "azure-linux-test",
+			"kaito.sh/node-image-family":    "AzureLinux",
+		}
+
+		nc := test.NodeClaim(karpenterv1.NodeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "azlinuxnc",
+				Labels: nodeClaimLabels,
+			},
+			Spec: karpenterv1.NodeClaimSpec{
+				NodeClassRef: &karpenterv1.NodeClassReference{
+					Name:  "default",
+					Kind:  "AKSNodeClass",
+					Group: "karpenter.azure.com",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
+				},
+				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelInstanceTypeStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"Standard_NC12s_v3"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      karpenterv1.NodePoolLabelKey,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"kaito"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelOSStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"linux"},
+						},
+					},
+				},
+				Taints: []v1.Taint{
+					{
+						Key:    "sku",
+						Value:  "gpu",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		})
+
+		DeferCleanup(func() {
+			env.ExpectDeleted(nc)
+			env.EventuallyExpectCreatedNodeClaimCount("==", 0)
+			env.EventuallyExpectNodeCount("==", 0)
+		})
+
+		env.ExpectCreated(nc)
+		env.EventuallyExpectCreatedNodeClaimCount("==", 1)
+		env.EventuallyExpectNodeClaimsReady(nc)
+		env.EventuallyExpectNodeCount("==", 1)
+		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
+
+		// Verify the node is running Azure Linux
+		Expect(node.Status.NodeInfo.OSImage).To(Or(ContainSubstring("Azure"), ContainSubstring("Mariner")),
+			"Node should be running Azure Linux, got OS: %s", node.Status.NodeInfo.OSImage)
+	})
+
+	It("should provision one GPU node with Azure Linux via annotation", func() {
+		nodeClaimLabels := map[string]string{
+			"karpenter.sh/provisioner-name": "default",
+			"kaito.sh/workspace":            "azure-linux-annotation-test",
+		}
+
+		nodeClaimAnnotations := map[string]string{
+			"kaito.sh/node-image-family": "AzureLinux",
+		}
+
+		nc := test.NodeClaim(karpenterv1.NodeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "azlinuxannot",
+				Labels:      nodeClaimLabels,
+				Annotations: nodeClaimAnnotations,
+			},
+			Spec: karpenterv1.NodeClaimSpec{
+				NodeClassRef: &karpenterv1.NodeClassReference{
+					Name:  "default",
+					Kind:  "AKSNodeClass",
+					Group: "karpenter.azure.com",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
+				},
+				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelInstanceTypeStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"Standard_NC12s_v3"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      karpenterv1.NodePoolLabelKey,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"kaito"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelOSStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"linux"},
+						},
+					},
+				},
+				Taints: []v1.Taint{
+					{
+						Key:    "sku",
+						Value:  "gpu",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		})
+
+		DeferCleanup(func() {
+			env.ExpectDeleted(nc)
+			env.EventuallyExpectCreatedNodeClaimCount("==", 0)
+			env.EventuallyExpectNodeCount("==", 0)
+		})
+
+		env.ExpectCreated(nc)
+		env.EventuallyExpectCreatedNodeClaimCount("==", 1)
+		env.EventuallyExpectNodeClaimsReady(nc)
+		env.EventuallyExpectNodeCount("==", 1)
+		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
+
+		// Verify the node is running Azure Linux
+		Expect(node.Status.NodeInfo.OSImage).To(Or(ContainSubstring("Azure"), ContainSubstring("Mariner")),
+			"Node should be running Azure Linux, got OS: %s", node.Status.NodeInfo.OSImage)
+	})
+
+	It("should terminate node when delete triggered", func() {
+		nodeClaimLabels := map[string]string{
+			"karpenter.sh/provisioner-name": "default",
+			"kaito.sh/workspace":            "none",
+		}
+
+		nc := test.NodeClaim(karpenterv1.NodeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "wctestnc5",
+				Labels: nodeClaimLabels,
+			},
+			Spec: karpenterv1.NodeClaimSpec{
+				NodeClassRef: &karpenterv1.NodeClassReference{
+					Name:  "default",
+					Kind:  "AKSNodeClass",
+					Group: "karpenter.azure.com",
+				},
+				Resources: karpenterv1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceStorage: lo.FromPtr(resource.NewQuantity(120*1024*1024*1024, resource.DecimalSI)),
+					},
+				},
+				Requirements: []karpenterv1.NodeSelectorRequirementWithMinValues{
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelInstanceTypeStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"Standard_NC12s_v3"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      karpenterv1.NodePoolLabelKey,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"kaito"},
+						},
+					},
+					{
+						NodeSelectorRequirement: v1.NodeSelectorRequirement{
+							Key:      v1.LabelOSStable,
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"linux"},
+						},
+					},
+				},
+				Taints: []v1.Taint{
+					{
+						Key:    "sku",
+						Value:  "gpu",
+						Effect: v1.TaintEffectNoSchedule,
+					},
+				},
+			},
+		})
+
+		DeferCleanup(func() {
+			env.ExpectDeleted(nc)
+			env.EventuallyExpectCreatedNodeClaimCount("==", 0)
+			env.EventuallyExpectNodeCount("==", 0)
+		})
+
+		env.ExpectCreated(nc)
+		env.EventuallyExpectCreatedNodeClaimCount("==", 1)
+		env.EventuallyExpectNodeClaimsReady(nc)
+		env.EventuallyExpectNodeCount("==", 1)
+		node := env.EventuallyExpectInitializedNodeCount("==", 1)[0]
+
+		// delete node for triggering terminate all resources like NodeClaim, CloudProvider Instance
+		env.ExpectDeleted(node)
+	})
+
 })
