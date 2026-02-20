@@ -12,7 +12,7 @@ permissions:
   packages: write
 
 env:
-  GO_VERSION: '1.24.11'
+  GO_VERSION: '1.24.13'
   IMAGE_NAME: 'gpu-provisioner'
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
         run: echo "tag=$(echo ${{ github.event.inputs.release_version }})" >> $GITHUB_OUTPUT
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -71,7 +71,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION  }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: true
@@ -99,7 +99,7 @@ jobs:
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 'Dispatch tag to e2e test'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: release-tag
