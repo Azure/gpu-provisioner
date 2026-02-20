@@ -12,7 +12,7 @@ permissions:
   packages: write
 
 env:
-  GO_VERSION: '1.24.11'
+  GO_VERSION: '1.24.13'
   IMAGE_NAME: 'gpu-provisioner'
   REGISTRY: ghcr.io
 
@@ -74,7 +74,7 @@ jobs:
         run: |
           echo "IMG_TAG=$(echo ${{ needs.check-tag.outputs.tag }} | tr -d v)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           submodules: true
           fetch-depth: 0
@@ -114,7 +114,7 @@ jobs:
     environment: e2e-test  
     steps:
       - name: 'Dispatch release tag to publish helm chart'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: publish-helm-chart
