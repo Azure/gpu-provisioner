@@ -352,7 +352,7 @@ func newAgentPoolObject(vmSize string, nodeClaim *karpenterv1.NodeClaim) (armcon
 		diskSizeGB = int32(storage.Value() >> 30)
 	}
 
-	// Determine OSSKU from NodeClaim labels or annotations, default to Ubuntu
+	// Determine OSSKU from NodeClaim annotations, default to Ubuntu
 
 	return armcontainerservice.AgentPool{
 		Properties: &armcontainerservice.ManagedClusterAgentPoolProfileProperties{
@@ -412,17 +412,13 @@ func agentPoolIsCreatedFromNodeClaim(ap *armcontainerservice.AgentPool) bool {
 	return false
 }
 
-// determineOSSKU determines the OS SKU from NodeClaim labels or annotations, defaulting to Ubuntu
+// determineOSSKU determines the OS SKU from NodeClaim annotations, defaulting to Ubuntu
 func determineOSSKU(nodeClaim *karpenterv1.NodeClaim) *armcontainerservice.OSSKU {
 	if nodeClaim == nil {
 		return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
 	}
 
-	// First check for a direct label on the NodeClaim
-	if imageFamily, ok := nodeClaim.Labels[LabelNodeImageFamily]; ok {
-		return imageFamilyToOSSKU(imageFamily)
-	}
-	// Check annotations as fallback
+	// Check annotations on the NodeClaim
 	if imageFamily, ok := nodeClaim.Annotations[LabelNodeImageFamily]; ok {
 		return imageFamilyToOSSKU(imageFamily)
 	}
@@ -436,7 +432,7 @@ func imageFamilyToOSSKU(imageFamily string) *armcontainerservice.OSSKU {
 	switch strings.ToLower(imageFamily) {
 	case "azurelinux":
 		return lo.ToPtr(armcontainerservice.OSSKUAzureLinux)
-	case "ubuntu", "ubuntu2204":
+	case "ubuntu":
 		return lo.ToPtr(armcontainerservice.OSSKUUbuntu)
 	default:
 		klog.Warningf("Unknown imageFamily %q, defaulting to Ubuntu", imageFamily)
