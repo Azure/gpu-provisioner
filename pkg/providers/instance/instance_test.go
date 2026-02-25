@@ -873,66 +873,6 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 		expectedOSSKU armcontainerservice.OSSKU
 	}{
 		{
-			name:   "NodeClaim with AzureLinux image family label",
-			vmSize: "Standard_NC6s_v3",
-			nodeClaim: &karpenterv1.NodeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-nodeclaim",
-					Labels: map[string]string{
-						"kaito.sh/node-image-family": "AzureLinux",
-					},
-				},
-				Spec: karpenterv1.NodeClaimSpec{
-					Resources: karpenterv1.ResourceRequirements{
-						Requests: v1.ResourceList{
-							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
-						},
-					},
-				},
-			},
-			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
-		},
-		{
-			name:   "NodeClaim with Ubuntu image family label",
-			vmSize: "Standard_NC6s_v3",
-			nodeClaim: &karpenterv1.NodeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-nodeclaim",
-					Labels: map[string]string{
-						"kaito.sh/node-image-family": "Ubuntu",
-					},
-				},
-				Spec: karpenterv1.NodeClaimSpec{
-					Resources: karpenterv1.ResourceRequirements{
-						Requests: v1.ResourceList{
-							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
-						},
-					},
-				},
-			},
-			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
-		},
-		{
-			name:   "NodeClaim with Ubuntu2204 image family label",
-			vmSize: "Standard_NC6s_v3",
-			nodeClaim: &karpenterv1.NodeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-nodeclaim",
-					Labels: map[string]string{
-						"kaito.sh/node-image-family": "Ubuntu2204",
-					},
-				},
-				Spec: karpenterv1.NodeClaimSpec{
-					Resources: karpenterv1.ResourceRequirements{
-						Requests: v1.ResourceList{
-							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
-						},
-					},
-				},
-			},
-			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
-		},
-		{
 			name:   "NodeClaim with AzureLinux image family annotation",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
@@ -953,12 +893,32 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
 		},
 		{
-			name:   "NodeClaim with case-insensitive AzureLinux image family label",
+			name:   "NodeClaim with Ubuntu image family annotation",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-nodeclaim",
-					Labels: map[string]string{
+					Annotations: map[string]string{
+						"kaito.sh/node-image-family": "Ubuntu",
+					},
+				},
+				Spec: karpenterv1.NodeClaimSpec{
+					Resources: karpenterv1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
+		},
+		{
+			name:   "NodeClaim with case-insensitive AzureLinux image family annotation",
+			vmSize: "Standard_NC6s_v3",
+			nodeClaim: &karpenterv1.NodeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-nodeclaim",
+					Annotations: map[string]string{
 						"kaito.sh/node-image-family": "azurelinux",
 					},
 				},
@@ -973,12 +933,12 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
 		},
 		{
-			name:   "NodeClaim with unknown image family defaults to Ubuntu",
+			name:   "NodeClaim with unknown image family annotation defaults to Ubuntu",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-nodeclaim",
-					Labels: map[string]string{
+					Annotations: map[string]string{
 						"kaito.sh/node-image-family": "Unknown",
 					},
 				},
@@ -993,7 +953,7 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
 		},
 		{
-			name:   "NodeClaim without image family label defaults to Ubuntu",
+			name:   "NodeClaim without image family annotation defaults to Ubuntu",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1010,7 +970,27 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
 		},
 		{
-			name:   "Label takes precedence over annotation",
+			name:   "NodeClaim with image family label only should be ignored",
+			vmSize: "Standard_NC6s_v3",
+			nodeClaim: &karpenterv1.NodeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-nodeclaim",
+					Labels: map[string]string{
+						"kaito.sh/node-image-family": "AzureLinux",
+					},
+				},
+				Spec: karpenterv1.NodeClaimSpec{
+					Resources: karpenterv1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceStorage: *resource.NewQuantity(30*1024*1024*1024, resource.DecimalSI),
+						},
+					},
+				},
+			},
+			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
+		},
+		{
+			name:   "Annotation takes precedence since labels are ignored",
 			vmSize: "Standard_NC6s_v3",
 			nodeClaim: &karpenterv1.NodeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1030,7 +1010,7 @@ func TestNewAgentPoolObjectWithImageFamily(t *testing.T) {
 					},
 				},
 			},
-			expectedOSSKU: armcontainerservice.OSSKUAzureLinux,
+			expectedOSSKU: armcontainerservice.OSSKUUbuntu,
 		},
 	}
 

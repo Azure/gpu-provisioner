@@ -4,7 +4,7 @@ This document provides examples of how to use Azure Linux nodes with the GPU Pro
 
 ## Overview
 
-The GPU Provisioner supports Azure Linux nodes through the `kaito.sh/node-image-family` label or annotation on NodeClaim resources. When this is set to `AzureLinux`, the provisioner will create AKS agent pools with the Azure Linux OS SKU.
+The GPU Provisioner supports Azure Linux nodes through the `kaito.sh/node-image-family` annotation on NodeClaim resources. When this is set to `AzureLinux`, the provisioner will create AKS agent pools with the Azure Linux OS SKU.
 
 ## Supported Image Families
 
@@ -12,48 +12,16 @@ The GPU Provisioner supports Azure Linux nodes through the `kaito.sh/node-image-
 |-------------|--------|-------------|
 | `AzureLinux` | AzureLinux | Container-optimized Linux distribution by Microsoft |
 | `Ubuntu` | Ubuntu | Standard Ubuntu distribution (default) |
-| `Ubuntu2204` | Ubuntu | Ubuntu 22.04 LTS |
 
 ## Configuration Methods
 
-### Method 1: Using Labels (Recommended)
+### Method 1: Using Annotations (Required)
 
 ```yaml
 apiVersion: karpenter.sh/v1
 kind: NodeClaim
 metadata:
   name: azure-linux-gpu-node
-  labels:
-    kaito.sh/workspace: "my-workspace"
-    kaito.sh/node-image-family: "AzureLinux"
-spec:
-  nodeClassRef:
-    group: karpenter.azure.com
-    kind: AKSNodeClass
-    name: default
-  requirements:
-    - key: node.kubernetes.io/instance-type
-      operator: In
-      values: ["Standard_NC12s_v3"]
-    - key: karpenter.sh/capacity-type
-      operator: In
-      values: ["on-demand"]
-  resources:
-    requests:
-      storage: "120Gi"
-  taints:
-    - key: "sku"
-      value: "gpu"
-      effect: NoSchedule
-```
-
-### Method 2: Using Annotations
-
-```yaml
-apiVersion: karpenter.sh/v1
-kind: NodeClaim
-metadata:
-  name: azure-linux-gpu-node-annotation
   labels:
     kaito.sh/workspace: "my-workspace"
   annotations:
@@ -81,26 +49,6 @@ spec:
 
 ## KAITO Workspace Examples
 
-### Basic Azure Linux Workspace
-
-```yaml
-apiVersion: kaito.sh/v1beta1
-kind: Workspace
-metadata:
-  name: phi-2-azure-linux
-spec:
-  resource:
-    instanceType: "Standard_NC12s_v3"
-    count: 1
-    labelSelector:
-      matchLabels:
-        kaito.sh/node-image-family: "AzureLinux"
-        workload: "phi-2"
-  inference:
-    preset:
-      name: "phi-2"
-```
-
 ### Azure Linux Workspace with Annotation
 
 ```yaml
@@ -126,28 +74,14 @@ spec:
 
 The GPU Provisioner determines the OS SKU based on the following logic in `instance.go`:
 
-1. **Check for label first** (takes precedence):
+1. **Check annotation on NodeClaim**:
    ```go
-   if imageFamily, ok := nodeClaim.Labels["kaito.sh/node-image-family"]; ok {
-       switch strings.ToLower(imageFamily) {
-       case "azurelinux":
-           ossku = armcontainerservice.OSSKUAzureLinux
-       case "ubuntu", "ubuntu2204":
-           ossku = armcontainerservice.OSSKUUbuntu
-       default:
-           klog.Warningf("Unknown imageFamily %s, defaulting to Ubuntu", imageFamily)
-       }
+   if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
+     // map image family to OSSKU
    }
    ```
 
-2. **Fall back to annotation**:
-   ```go
-   } else if imageFamily, ok := nodeClaim.Annotations["kaito.sh/node-image-family"]; ok {
-       // Same logic as above
-   }
-   ```
-
-3. **Default to Ubuntu** if neither label nor annotation is present
+2. **Default to Ubuntu** if annotation is not present
 
 ## Case Sensitivity
 
@@ -197,15 +131,15 @@ az aks agentpool show \
 
 1. **Unknown image family warning**:
    ```
-   Unknown imageFamily InvalidFamily in NodeClaim label, defaulting to Ubuntu
+   Unknown imageFamily InvalidFamily in NodeClaim annotation, defaulting to Ubuntu
    ```
-   **Solution**: Ensure the image family name is one of: `AzureLinux`, `Ubuntu`, `Ubuntu2204`
+  **Solution**: Ensure the image family name is one of: `AzureLinux`, `Ubuntu`
 
 2. **Case sensitivity confusion**:
    **Solution**: Remember that values are case-insensitive, so `azurelinux` works the same as `AzureLinux`
 
-3. **Labels vs annotations precedence**:
-   **Solution**: Labels take precedence over annotations. If both are specified, the label value will be used
+3. **Missing annotation**:
+  **Solution**: Add `kaito.sh/node-image-family` in NodeClaim annotations when you need a non-default image family
 
 ### Debug Commands
 
@@ -226,8 +160,10 @@ kubectl describe node <node-name>
 
 1. **Update your NodeClaim or Workspace**:
    ```yaml
-   # Add this label to your NodeClaim or Workspace labelSelector
-   kaito.sh/node-image-family: "AzureLinux"
+   # Add this annotation to your NodeClaim
+   metadata:
+     annotations:
+       kaito.sh/node-image-family: "AzureLinux"
    ```
 
 2. **Verify the change**:
@@ -242,7 +178,7 @@ kubectl describe node <node-name>
 
 ## Best Practices
 
-1. **Use labels instead of annotations** for better visibility and tooling support
+1. **Use NodeClaim annotations** to set image family
 2. **Test thoroughly** when migrating existing workloads to Azure Linux
 3. **Monitor resource usage** as Azure Linux may have different resource characteristics
 4. **Keep GPU drivers updated** to ensure compatibility with Azure Linux
