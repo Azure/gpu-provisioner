@@ -1,4 +1,4 @@
-VERSION ?= v0.4.0
+VERSION ?= v0.4.1
 # Image URL to use all building/pushing image targets
 REGISTRY ?= ghcr.io/azure/gpu-provisioner
 IMG_NAME ?= gpu-provisioner
