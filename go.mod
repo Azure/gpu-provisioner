@@ -1,6 +1,6 @@
 module github.com/azure/gpu-provisioner
 
-go 1.24.13
+go 1.26.4
 
 require (
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible
