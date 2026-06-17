@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4 as builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.26.4 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG KARPENTERVER
@@ -28,7 +28,7 @@ COPY vendor/ vendor/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN --mount=type=cache,target=${GOCACHE} \
     --mount=type=cache,id=gpu-provisioner-controller,sharing=locked,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go build -a -o manager -ldflags "-X sigs.k8s.io/karpenter/pkg/operator.Version=${KARPENTERVER}" cmd/main.go
+    GOEXPERIMENT=nosystemcrypto CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go build -a -o manager -ldflags "-X sigs.k8s.io/karpenter/pkg/operator.Version=${KARPENTERVER}" cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
