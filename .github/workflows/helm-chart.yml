@@ -24,7 +24,7 @@ jobs:
           ref: ${{ github.event.client_payload.tag }}
 
       - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@v1.7.0
+        uses: stefanprodan/helm-gh-pages@0ad2bb377311d61ac04ad9eb6f252fb68e207260 # v1.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: charts
@@ -37,7 +37,7 @@ jobs:
     environment: e2e-test
     steps:
       - name: 'Dispatch release tag to create release'
-        uses: peter-evans/repository-dispatch@v4
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           event-type: create-release

@@ -71,7 +71,7 @@ jobs:
           echo "VERSION=$(echo ${{ inputs.tag }} | tr -d v)" >> $GITHUB_ENV
 
       - name: Set up Go ${{ env.GO_VERSION }}
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION  }}
 
@@ -83,7 +83,7 @@ jobs:
           subscription-id: ${{ secrets.E2E_SUBSCRIPTION_ID }}
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
         id: install
@@ -97,7 +97,7 @@ jobs:
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
 
       - name: Create Azure Identity
-        uses: azure/CLI@v2.2.0
+        uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
         with:
           inlineScript: |
             az identity create --name gpuIdentity --resource-group  ${{ env.CLUSTER_NAME }}
@@ -143,14 +143,14 @@ jobs:
           subscription-id: ${{ secrets.E2E_SUBSCRIPTION_ID }}
 
       - name: Create Role Assignment
-        uses: azure/CLI@v2.2.0
+        uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
         with:
           inlineScript: |
             IDENTITY_PRINCIPAL_ID="$(az identity show --name gpuIdentity --resource-group ${{ env.CLUSTER_NAME }} --query 'principalId' -otsv)"
             az role assignment create --assignee ${IDENTITY_PRINCIPAL_ID} --scope "/subscriptions/${{ secrets.E2E_SUBSCRIPTION_ID }}/resourceGroups/${{ env.CLUSTER_NAME }}"  --role "Contributor"
 
       - name: Create Azure Federated Identity
-        uses: azure/CLI@v2.2.0
+        uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
         with:
           inlineScript: |
             AKS_OIDC_ISSUER="$(az aks show -n "${{ env.CLUSTER_NAME }}" -g "${{ env.CLUSTER_NAME }}" --query 'oidcIssuerProfile.issuerUrl' -otsv)"
@@ -163,7 +163,7 @@ jobs:
 
       - name: Cleanup e2e resources
         if: ${{ always() }}
-        uses: azure/CLI@v2.2.0
+        uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
         with:
           inlineScript: |
             set +e
