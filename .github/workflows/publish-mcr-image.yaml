@@ -85,7 +85,7 @@ jobs:
           REGISTRY: ${{ secrets.KAITO_MCR_REGISTRY }}/public/aks/kaito
 
       - name: Scan ${{ secrets.KAITO_MCR_REGISTRY }}/public/aks/kaito/${{ env.IMAGE_NAME }}:${{ env.IMG_TAG }}
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ secrets.KAITO_MCR_REGISTRY }}/public/aks/kaito/${{ env.IMAGE_NAME }}:${{ env.IMG_TAG }}
           format: 'table'
