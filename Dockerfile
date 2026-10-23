@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.26.6 AS builder
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang:1.26.10 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG KARPENTERVER
@@ -30,9 +30,9 @@ RUN --mount=type=cache,target=${GOCACHE} \
     --mount=type=cache,id=gpu-provisioner-controller,sharing=locked,target=/go/pkg/mod \
     GOEXPERIMENT=nosystemcrypto CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go build -a -o manager -ldflags "-X sigs.k8s.io/karpenter/pkg/operator.Version=${KARPENTERVER}" cmd/main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM --platform=$BUILDPLATFORM gcr.io/distroless/static:nonroot
+# Use Azure Linux distroless as minimal base image to package the manager binary.
+# Pinned by digest so the CA trust store in the image is reproducible.
+FROM mcr.microsoft.com/azurelinux/distroless/minimal:3.0@sha256:c91e907c537ad861cb90bc18aece90479b0754b090afd4eb8722dd15477dc9e8
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
