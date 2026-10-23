@@ -16,10 +16,10 @@ on:
       region:
         type: string
         description: "the azure location to run the e2e test in"
-        default: "eastus"
+        default: "swedencentral"
       k8s_version:
         type: string
-        default: "1.30"
+        default: "1.34"
     secrets:
       E2E_CLIENT_ID:
         required: true
@@ -133,6 +133,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ env.CLUSTER_NAME }}
           AZURE_ACR_NAME: ${{ env.CLUSTER_NAME }}
           AZURE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          AZURE_LOCATION: ${{ inputs.region }}
           REGISTRY: ${{ env.REGISTRY }}
           VERSION: ${{ env.VERSION }}
 

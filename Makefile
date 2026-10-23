@@ -23,7 +23,7 @@ GO_INSTALL := ./hack/go-install.sh
 
 # TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" or "make test" against
 TEST_SUITE ?= "..."
-TEST_TIMEOUT ?= "1h"
+TEST_TIMEOUT ?= "2h"
 
 REPO_ROOT ?= $(shell pwd)
 LOCALBIN ?= $(REPO_ROOT)/bin
@@ -52,8 +52,8 @@ LDFLAGS ?= "-X $(BUILD_DATE_VAR)=$(BUILD_DATE) -X $(BUILD_VERSION_VAR)=$(IMAGE_V
 
 # AKS INT/Staging Test
 AZURE_SUBSCRIPTION_ID ?= ff05f55d-22b5-44a7-b704-f9a8efd493ed
-AZURE_LOCATION=eastus
-AKS_K8S_VERSION ?= 1.30.5
+AZURE_LOCATION ?= swedencentral
+AKS_K8S_VERSION ?= 1.34
 AZURE_RESOURCE_GROUP ?= <YOUR RG>
 AZURE_ACR_NAME ?= <YOUR ACR>
 AZURE_CLUSTER_NAME ?= <YOUR CLUSTER>
@@ -129,6 +129,10 @@ BUILDX_BUILDER_NAME ?= img-builder
 OUTPUT_TYPE ?= type=registry
 QEMU_VERSION ?= 5.2.0-2
 ARCH ?= amd64,arm64
+comma := ,
+empty :=
+space := $(empty) $(empty)
+PLATFORMS := $(subst $(space),$(comma),$(addprefix linux/,$(subst $(comma),$(space),$(ARCH))))
 BUILDKIT_VERSION ?= v0.18.1
 
 .PHONY: docker-buildx
@@ -144,7 +148,7 @@ docker-build: docker-buildx
 	docker buildx build \
 		--file ./Dockerfile \
 		--output=$(OUTPUT_TYPE) \
-		--platform="linux/$(ARCH)" \
+		--platform="$(PLATFORMS)" \
 		--pull \
 		--build-arg="KARPENTERVER=$(KARPENTER_VERSION_VAL)" \
 		--tag $(REGISTRY)/$(IMG_NAME):$(IMG_TAG) .
