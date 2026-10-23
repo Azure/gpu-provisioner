@@ -29,6 +29,10 @@ import (
 	"sigs.k8s.io/karpenter/pkg/test"
 )
 
+// gpuInstanceType is the GPU VM size used by the e2e tests. Standard_NC12s_v3
+// (NCv3) is retired and no longer available in the e2e subscription.
+const gpuInstanceType = "Standard_NC4as_T4_v3"
+
 var env *common.Environment
 
 func TestGPUNodeClaim(t *testing.T) {
@@ -73,7 +77,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -141,7 +145,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -207,7 +211,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -276,7 +280,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -344,7 +348,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -410,7 +414,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -481,7 +485,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
@@ -553,7 +557,7 @@ var _ = Describe("GPU NodeClaim", func() {
 						NodeSelectorRequirement: v1.NodeSelectorRequirement{
 							Key:      v1.LabelInstanceTypeStable,
 							Operator: v1.NodeSelectorOpIn,
-							Values:   []string{"Standard_NC12s_v3"},
+							Values:   []string{gpuInstanceType},
 						},
 					},
 					{
