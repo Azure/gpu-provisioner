@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=${GOCACHE} \
 
 # Use Azure Linux distroless as minimal base image to package the manager binary.
 # Pinned by digest so the CA trust store in the image is reproducible.
-FROM mcr.microsoft.com/azurelinux/distroless/minimal:3.0@sha256:c91e907c537ad861cb90bc18aece90479b0754b090afd4eb8722dd15477dc9e8
+FROM mcr.microsoft.com/azurelinux/distroless/minimal:3.0@sha256:ca4f1b9b5d4bb21445fbf5cf7288063ea477a9fa88affa4b13757245e3214914
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
